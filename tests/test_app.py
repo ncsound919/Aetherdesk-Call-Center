@@ -1,0 +1,124 @@
+import asyncio
+import base64
+import unittest
+from unittest.mock import AsyncMock, patch
+
+from fastapi.testclient import TestClient
+
+from apps.api.main import app
+
+
+class VoiceGatewayTests(unittest.TestCase):
+    def setUp(self):
+        self.client = TestClient(app)
+
+    @patch("apps.api.routers.voice.asr_service.transcribe", new_callable=AsyncMock)
+    def test_transcribe_endpoint_returns_text(self, mock_transcribe):
+        mock_transcribe.return_value = "hello world"
+        response = self.client.post(
+            "/api/v1/voice/transcribe",
+            content=b"dummy-audio",
+            headers={"content-type": "application/octet-stream"}
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"text": "hello world"})
+        mock_transcribe.assert_called_once()
+
+    @patch("apps.api.routers.voice.tts_service.synthesize", new_callable=AsyncMock)
+    def test_synthesize_endpoint_returns_base64_audio(self, mock_synthesize):
+        mock_synthesize.return_value = b"test-audio"
+        response = self.client.post("/api/v1/voice/synthesize", json={"text": "hello"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("audio", payload)
+        self.assertEqual(base64.b64decode(payload["audio"]), b"test-audio")
+        mock_synthesize.assert_called_once_with("hello")
+
+    @patch("apps.api.routers.voice.classifier.classify_with_fallback", new_callable=AsyncMock)
+    def test_intent_endpoint_returns_classification(self, mock_classify):
+        mock_classify.return_value = type("R", (), {
+            "intent": "billing_invoice",
+            "entities": {"invoice_id": "INV123"},
+            "confidence": 0.85,
+            "reasoning": "Matched billing invoice intent"
+        })()
+
+        response = self.client.post("/api/v1/voice/intent", json={"text": "I need my invoice status"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            "intent": "billing_invoice",
+            "entities": {"invoice_id": "INV123"},
+            "confidence": 0.85,
+            "reasoning": "Matched billing invoice intent"
+        })
+        mock_classify.assert_awaited_once_with("I need my invoice status")
+
+
+class EngineTests(unittest.TestCase):
+    def test_get_prompt_renders_template_fields(self):
+        from apps.api.services.actions import Actions
+        from apps.api.services.engine import ProtocolVM, VMState
+        from apps.api.services.loader import FileLoader as ProtocolLoader
+        from apps.api.services.validators import Validators
+
+        vm = ProtocolVM(ProtocolLoader(base_path="config/protocols"), Validators(), Actions(redis_client=None))
+        state = VMState(
+            protocol_id="billing_invoice_v1",
+            node="show_summary",
+            fields={"invoice_id": "INV123", "zip": "90210"},
+            transcript=[]
+        )
+
+        prompt = vm.get_prompt(state)
+        self.assertIn("INV123", prompt)
+        self.assertIn("90210", prompt)
+
+
+class TTSTests(unittest.TestCase):
+    def test_fallback_synthesize_returns_audio_bytes(self):
+        from apps.api.services.tts import TTSService
+
+        service = TTSService()
+
+        with patch("gtts.gTTS") as mock_gtts:
+            mocked_instance = mock_gtts.return_value
+
+            def fake_write_to_fp(io_obj):
+                io_obj.write(b"fallback-audio")
+
+            mocked_instance.write_to_fp.side_effect = fake_write_to_fp
+
+            result = asyncio.run(service._fallback_synthesize("test"))
+
+        self.assertEqual(result, b"fallback-audio")
+
+
+class IntentClassifierTests(unittest.TestCase):
+    def test_classify_with_keyword_fallback(self):
+        from apps.api.services.intent_classifier import IntentClassifier
+
+        classifier = IntentClassifier()
+
+        result = asyncio.run(classifier._keyword_fallback("I need a refund for my invoice"))
+
+        self.assertEqual(result.intent, "billing_refund")
+        self.assertEqual(result.confidence, 0.5)
+        self.assertIn("Keyword fallback matched", result.reasoning)
+
+    def test_classify_with_ollama_failure_uses_fallback(self):
+        from apps.api.services.intent_classifier import IntentClassifier
+
+        classifier = IntentClassifier()
+
+        async def failing_execute(func, *args, **kwargs):
+            raise RuntimeError("service unavailable")
+
+        with patch("apps.api.services.intent_classifier.retry_ollama.execute", new_callable=AsyncMock, side_effect=failing_execute):
+            result = asyncio.run(classifier.classify("I need help with my order"))
+
+        self.assertEqual(result.intent, "generalInquiry")
+        self.assertEqual(result.confidence, 0.5)
+        self.assertIn("Keyword fallback matched", result.reasoning)

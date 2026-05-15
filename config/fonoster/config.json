@@ -1,0 +1,147 @@
+{
+  "name": "aetherdesk-fonoster",
+  "version": "1.0.0",
+  "network": {
+    "bindAddr": "0.0.0.0",
+    "port": 50061
+  },
+  "api": {
+    "port": 50062,
+    "cors": {
+      "origin": "*",
+      "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      "credentials": true
+    }
+  },
+  "providers": {
+    "sip": {
+      "type": "default",
+      "host": "aetherdesk-freeswitch",
+      "port": 5060,
+      "transport": "udp",
+      "expireSeconds": 3600,
+      "retry": {
+        "attempts": 5,
+        "delay": 3000
+      }
+    }
+  },
+  "voice": {
+    "defaultLanguage": "en-US",
+    "defaultSampleRate": 16000,
+    "recordings": {
+      "enabled": true,
+      "format": "wav",
+      "sampleRate": 16000,
+      "channels": 1,
+      "path": "/var/freeswitch/recordings"
+    },
+    "gather": {
+      "timeout": 10000,
+      "finishOnKey": "#",
+      "maxDigits": 10,
+      "languageCode": "en-US"
+    },
+    "say": {
+      "voice": "alice",
+      "language": "en-US",
+      "speed": 1.0
+    }
+  },
+  "speechToText": {
+    "provider": "deepgram",
+    "config": {
+      "model": "nova-2",
+      "languageCode": "en-US",
+      "enablePunctuations": true,
+      "enableProfanityFilter": true
+    }
+  },
+  "textToSpeech": {
+    "provider": "chatterbox",
+    "config": {
+      "voiceId": "default",
+      "emotion": "neutral"
+    }
+  },
+  "intelligence": {
+    "provider": "groq",
+    "config": {
+      "model": "llama-3.1-70b-versatile",
+      "temperature": 0.7,
+      "maxTokens": 1024
+    }
+  },
+  "cdr": {
+    "enabled": true,
+    "database": {
+      "host": "aetherdesk-db",
+      "port": 5432,
+      "database": "aetherdesk",
+      "username": "aetherdesk_admin",
+      "password": "${DB_PASSWORD}"
+    }
+  },
+  "redis": {
+    "host": "aetherdesk-redis",
+    "port": 6379,
+    "password": "${REDIS_PASSWORD}",
+    "db": 0
+  },
+  "auth": {
+    "jwt": {
+      "secret": "${JWT_SECRET}",
+      "algorithm": "HS256",
+      "expiresIn": "24h"
+    },
+    "apiKeys": {
+      "enabled": true,
+      "requireAuthHeader": true
+    }
+  },
+  "plugins": [
+    {
+      "name": "redis-plugin",
+      "enabled": true,
+      "config": {
+        "host": "aetherdesk-redis",
+        "port": 6379
+      }
+    },
+    {
+      "name": "cdr-plugin",
+      "enabled": true,
+      "config": {
+        "provider": "postgresql",
+        "connectionString": "postgresql://aetherdesk_admin:${DB_PASSWORD}@aetherdesk-db:5432/aetherdesk"
+      }
+    }
+  ],
+  "logging": {
+    "level": "info",
+    "format": "json",
+    "redact": ["password", "apiKey", "secret", "token"],
+    "hipaaCompliant": true
+  },
+  "limits": {
+    "maxConcurrentCalls": 100,
+    "maxCallDuration": 3600,
+    "maxRecordingsSizeMB": 1000,
+    "rateLimitPerSecond": 100
+  },
+  "webhooks": {
+    "enabled": true,
+    "events": [
+      "call.initiated",
+      "call.answered",
+      "call.completed",
+      "call.failed",
+      "call.transcription.ready",
+      "recording.ready"
+    ],
+    "retryPolicy": {
+      "maxRetries": 3,
+      "backoffMs": 1000
+    }
+  }
+}

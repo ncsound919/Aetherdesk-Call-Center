@@ -1,0 +1,24 @@
+{
+  "nodes": {
+    "greeting": {
+      "prompt": "Hello! How can I help?",
+      "field": "intent",
+      "validate": "required",
+      "next": "route"
+    },
+    "route": {
+      "prompt": "Based on your {intent}...",
+      "next": "menu",
+      "action": "menu",
+      "on_ok": "Refill",
+      "on_fail": "Billing",
+      "options": [
+        "Support"
+      ]
+    },
+    "menu": {
+      "prompt": "Thanks! Let me handle that.",
+      "next": "end"
+    }
+  }
+}

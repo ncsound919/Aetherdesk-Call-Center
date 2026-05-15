@@ -1,0 +1,22 @@
+{
+  "nodes": {
+    "start": {
+      "prompt": "How can I help you today?",
+      "next": "classify_intent"
+    },
+    "classify_intent": {
+      "action": "classify_intent",
+      "on_ok": "route_to_protocol",
+      "on_fail": "agent_handoff"
+    },
+    "route_to_protocol": {
+      "action": "route_protocol"
+    },
+    "agent_handoff": {
+      "action": "handoff"
+    },
+    "end": {
+      "action": "complete"
+    }
+  }
+}

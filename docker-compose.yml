@@ -1,0 +1,202 @@
+version: '3.8'
+
+# Fonoster Call Center Infrastructure
+# Privacy-focused, HIPAA/GDPR compliant deployment on GKE
+
+services:
+  # Chatterbox TTS (self-hosted, free)
+  chatterbox:
+    image: ghcr.io/resembleai/chatterbox:latest
+    container_name: aetherdesk-chatterbox
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    networks:
+      - aetherdesk-net
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # Qwen3-TTS (fallback, 1.7B params)
+  qwen3-tts:
+    image: qwen3-tts:latest
+    container_name: aetherdesk-qwen3-tts
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      - aetherdesk-net
+    environment:
+      - MODEL_ID=Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 8G
+          # NVIDIA GPU required for real-time synthesis
+
+  # PostgreSQL Database - Tenant-isolated
+  db:
+    image: postgres:15
+    container_name: aetherdesk-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: aetherdesk
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./config/postgresql.conf:/etc/postgresql/postgresql.conf
+      - ./config/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - aetherdesk-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d aetherdesk"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  # Redis Cache - Session management
+  redis:
+    image: redis:7-alpine
+    container_name: aetherdesk-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - aetherdesk-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Fonoster Voice Server (FreeSWITCH backend)
+  fonoster:
+    image: fonoster/fonoster:latest
+    container_name: aetherdesk-fonoster
+    restart: unless-stopped
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_NAME: aetherdesk
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      API_KEY: ${FONOSTER_API_KEY}
+      API_SECRET: ${FONOSTER_API_SECRET}
+      # Speech-to-text configuration
+      STT_ENGINE: deepgram
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
+      # Text-to-speech configuration
+      TTS_ENGINE: "chatterbox,qwen3"
+      CHATTERBOX_API_URL: "http://chatterbox:5001"
+      QWEN_API_URL: "http://qwen3-tts:8000"
+      QWEN_MODEL: "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+      # AI/Language Model configuration
+      LLM_PROVIDER: groq
+      GROQ_API_KEY: ${GROQ_API_KEY}
+    ports:
+      - "50061:50061"  # Voice Server
+      - "50062:50062"  # API Server
+    networks:
+      - aetherdesk-net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./config/fonoster:/etc/fonoster
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # FreeSWITCH Media Server
+  freeswitch:
+    image: fonoster/freeswitch:latest
+    container_name: aetherdesk-freeswitch
+    restart: unless-stopped
+    environment:
+      FONOSTER_HOST: fonoster
+      FONOSTER_PORT: 50061
+    ports:
+      - "5060:5060/udp"  # SIP
+      - "5061:5061/tcp"  # SIP TLS
+      - "8021:8021/tcp"  # ESL (Event Socket Layer)
+      - "7443:7443/tcp"  # WSS (WebSockets)
+    networks:
+      - aetherdesk-net
+    depends_on:
+      - fonoster
+    volumes:
+      - ./config/freeswitch:/etc/freeswitch
+      - recordings:/var/freeswitch/recordings
+    cap_add:
+      - NET_ADMIN
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # API Gateway / SaaS Platform
+  api-gateway:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: aetherdesk-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/aetherdesk
+      REDIS_URL: redis://redis:6379
+      FONOSTER_API_KEY: ${FONOSTER_API_KEY}
+      FONOSTER_API_SECRET: ${FONOSTER_API_SECRET}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "3000:3000"
+    networks:
+      - aetherdesk-net
+    depends_on:
+      - db
+      - redis
+      - fonoster
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+
+volumes:
+  db-data:
+    driver: local
+  redis-data:
+    driver: local
+  recordings:
+    driver: local
+
+networks:
+  aetherdesk-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

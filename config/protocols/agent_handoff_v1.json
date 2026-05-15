@@ -1,0 +1,7 @@
+{
+  "nodes": {
+    "start": {
+      "action": "handoff"
+    }
+  }
+}

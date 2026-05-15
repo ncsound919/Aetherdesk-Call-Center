@@ -1,0 +1,39 @@
+# AetherDesk Knowledge Base
+
+## Billing FAQ
+
+### Invoice Questions
+- To check your invoice status, please provide your invoice ID (format: ABC-12345)
+- Invoices are typically sent within 24 hours of purchase
+- You can view all your invoices on our customer portal
+
+### Refund Policy
+- Refunds are processed within 5-7 business days
+- Original payment method determines refund timeline
+- Contact billing for disputes over $500
+
+## Pharmacy FAQ
+
+### Prescription Refills
+- Prescription refills require your prescription number (Rx number)
+- Refills are ready for pickup in 2-4 hours
+- We can mail prescriptions to your address on file
+
+### Doctor Callback
+- Doctor callbacks are available for medication questions
+- Expect a call within 24 business hours
+- Have your prescription number ready
+
+## Order Status
+
+### Tracking
+- Order status requires your order ID and shipping ZIP code
+- Orders ship within 1-2 business days
+- Tracking info sent via email
+
+## Technical Support
+
+### Password Reset
+- Password reset requires customer ID verification
+- Temporary password sent to registered email
+- Change password within 24 hours

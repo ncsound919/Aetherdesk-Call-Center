@@ -1,0 +1,7 @@
+node,prompt,field,validate,next,options,action,on_ok,on_fail
+start,Enter your order ID,order_id,"^[A-Z0-9-]{6,18}$",ask_zip,,,,
+ask_zip,ZIP code,zip,^[0-9]{5}$,fetch,,,,
+fetch,,,,,,lookup_invoice,show,agent_handoff
+show,Order {{order_id}} in ZIP {{zip}} is {{status}}.,,,,,,end,agent_handoff
+agent_handoff,,,,,,handoff,,
+end,,,,,,complete,,

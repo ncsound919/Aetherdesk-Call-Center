@@ -1,0 +1,26 @@
+{
+  "nodes": {
+    "start": {
+      "prompt": "I can help with password reset. What's your customer ID?",
+      "field": "customer_id",
+      "next": "verify"
+    },
+    "verify": {
+      "action": "verify_customer",
+      "on_ok": "reset_password",
+      "on_fail": "agent_handoff"
+    },
+    "reset_password": {
+      "action": "send_reset",
+      "on_ok": "end",
+      "on_fail": "agent_handoff"
+    },
+    "end": {
+      "prompt": "A reset link has been sent to your email. Thank you!",
+      "action": "complete"
+    },
+    "agent_handoff": {
+      "action": "handoff"
+    }
+  }
+}

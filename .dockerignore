@@ -1,0 +1,67 @@
+# Dockerignore for optimized builds
+
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Node/UI (agent-ui)
+agent-ui/node_modules/
+agent-ui/dist/
+agent-ui/.npm
+agent-ui/.yarn
+
+# Local data
+chroma_db/
+*.db
+*.sqlite3
+
+# Temp files
+*.tmp
+*.temp
+
+# Documentation
+docs/_build/
+
+# Large data files
+data/raw/
+data/processed/
+*.zip
+*.tar
+*.gz
