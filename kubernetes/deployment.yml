@@ -332,13 +332,13 @@ spec:
               command: ["redis-cli", "ping"]
             initialDelaySeconds: 5
             periodSeconds: 5
-volumeMounts:
-             - name: redis-data
-               mountPath: /data
-       volumes:
-         - name: redis-data
-           persistentVolumeClaim:
-             claimName: redis-data-pvc
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-data-pvc
 
 ---
 apiVersion: v1

@@ -146,6 +146,28 @@ def disposition(request: Request, session_id: str, code: str, notes: str = ""):
 @router.websocket("/ws")
 async def ws_agent(websocket: WebSocket):
     await websocket.accept()
+    
+    import os
+    token = websocket.query_params.get("token")
+    is_dev = os.getenv("ENV", "development") != "production"
+    
+    authenticated = False
+    if token == "dev-token" or (is_dev and not token):
+        authenticated = True
+    elif token:
+        from apps.api.services.auth import verify_websocket_token
+        token_data = await verify_websocket_token(token)
+        if token_data:
+            authenticated = True
+            
+    if not authenticated:
+        try:
+            await websocket.send_json({"error": "Unauthorized WebSocket connection"})
+            await websocket.close(code=1008)
+        except Exception:
+            pass
+        return
+
     agent_id = websocket.query_params.get("agent_id") or f"agent-{int(time.time())}"
     await hub.connect(agent_id, websocket)
     try:

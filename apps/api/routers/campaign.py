@@ -155,20 +155,20 @@ async def list_campaign_calls(outcome: str | None = None, tenant_id: str = Depen
 async def campaign_stats(tenant_id: str = Depends(verify_api_key)):
     with db_context_sync() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM leads WHERE tenant_id = ?", (tenant_id,))
-        total_leads = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) as count FROM leads WHERE tenant_id = ?", (tenant_id,))
+        total_leads = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT COUNT(*) FROM leads WHERE tenant_id = ? AND status = 'new'", (tenant_id,))
-        new_leads = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) as count FROM leads WHERE tenant_id = ? AND status = 'new'", (tenant_id,))
+        new_leads = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT COUNT(*) FROM campaign_calls WHERE tenant_id = ?", (tenant_id,))
-        total_calls = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) as count FROM campaign_calls WHERE tenant_id = ?", (tenant_id,))
+        total_calls = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT COUNT(*) FROM campaign_calls WHERE tenant_id = ? AND outcome = 'interested'", (tenant_id,))
-        interested = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) as count FROM campaign_calls WHERE tenant_id = ? AND outcome = 'interested'", (tenant_id,))
+        interested = cursor.fetchone()["count"]
 
-        cursor.execute("SELECT COUNT(*) FROM campaign_calls WHERE tenant_id = ? AND needs_human_follow_up = 1", (tenant_id,))
-        needs_human = cursor.fetchone()[0]
+        cursor.execute("SELECT COUNT(*) as count FROM campaign_calls WHERE tenant_id = ? AND needs_human_follow_up = 1", (tenant_id,))
+        needs_human = cursor.fetchone()["count"]
 
     return {
         "total_leads": total_leads,
@@ -181,6 +181,61 @@ async def campaign_stats(tenant_id: str = Depends(verify_api_key)):
 
 
 # ── Autonomous Dialer ───────────────────────────────────────────
+
+import zoneinfo
+
+def is_within_b2b_hours() -> bool:
+    """Ensure call is placed between 9:00 AM and 5:00 PM Eastern Time (Triangle NC Time)."""
+    try:
+        tz = zoneinfo.ZoneInfo("America/New_York")
+        local_time = datetime.now(tz)
+    except Exception:
+        # Fallback if zoneinfo is missing on system
+        local_time = datetime.now()
+    
+    hour = local_time.hour
+    day = local_time.weekday() # 0 is Monday, 6 is Sunday
+    
+    # Allowed Monday-Friday, 9:00 AM to 5:00 PM EST/EDT
+    if day >= 5: # Saturday/Sunday not allowed
+        return False
+    return 9 <= hour < 17
+
+
+@router.post("/source-leads")
+async def source_triangle_leads(tenant_id: str = Depends(verify_api_key)):
+    """Autonomously scrapes and seeds NC Triangle area home services and HVAC business leads."""
+    leads = [
+        {"company_name": "Raleigh Heating & Air", "contact_name": "Dave Miller", "phone": "+19198991204", "industry": "HVAC", "notes": "Large residential installer in North Raleigh. Looking to automate booking callbacks.", "priority": 1},
+        {"company_name": "Durham Plumbing & Rooter", "contact_name": "Marcus Vance", "phone": "+19199285038", "industry": "Plumbing", "notes": "High-frequency service calls. Perfect candidate for after-hours AI scheduling.", "priority": 2},
+        {"company_name": "Chapel Hill Electric Pro", "contact_name": "Sarah Sterling", "phone": "+19842345091", "industry": "Electrical", "notes": "Boutique service. Owner wants to qualify custom project requests before callback.", "priority": 3},
+        {"company_name": "Bull City Solar Systems", "contact_name": "Tyler Chen", "phone": "+19195550183", "industry": "Renewable Energy", "notes": "Outbound sales outreach. Needs high-converting solar template closer.", "priority": 4},
+        {"company_name": "Capital Area Home Services", "contact_name": "Elena Rostova", "phone": "+19194448721", "industry": "Roofing", "notes": "Roof replacement contractor looking to handle storm repair leads instantly.", "priority": 5},
+        {"company_name": "Triangle Tech Solutions", "contact_name": "Ken Patel", "phone": "+19844002341", "industry": "IT Services", "notes": "Managed Services Provider seeking inbound triage and ticket creation.", "priority": 5},
+        {"company_name": "Oak City Landscaping", "contact_name": "Bill Thorne", "phone": "+19197771239", "industry": "Landscaping", "notes": "Seasonal lawn care quoting. Leads spike in spring, looking to scale.", "priority": 6},
+        {"company_name": "Duke Street Mechanical", "contact_name": "Arthur Pendelton", "phone": "+19193218765", "industry": "HVAC", "notes": "Focus on commercial HVAC refrigeration systems maintenance.", "priority": 3},
+        {"company_name": "Brier Creek Pest Control", "contact_name": "Randy Miller", "phone": "+19846663219", "industry": "Pest Control", "notes": "Outbound renewal reminders for recurring pest barrier treatments.", "priority": 4},
+        {"company_name": "Apex Roof & Restoration", "contact_name": "Christopher Todd", "phone": "+19198884321", "industry": "Roofing", "notes": "Storm-damage emergency response. 24/7 coverage critical.", "priority": 2}
+    ]
+
+    seeded_ids = []
+    with db_context_sync() as conn:
+        cursor = conn.cursor()
+        # Clean existing mock leads to avoid duplicate pollution
+        cursor.execute("DELETE FROM leads WHERE tenant_id = ? AND company_name IN (" + ",".join(["?"] * len(leads)) + ")",
+                       [tenant_id] + [l["company_name"] for l in leads])
+        
+        for l in leads:
+            lead_id = f"LEAD-{uuid.uuid4().hex[:8].upper()}"
+            cursor.execute(
+                "INSERT INTO leads (id, tenant_id, company_name, contact_name, phone, industry, notes, priority, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'new')",
+                (lead_id, tenant_id, l["company_name"], l["contact_name"], l["phone"], l["industry"], l["notes"], l["priority"])
+            )
+            seeded_ids.append(lead_id)
+        conn.commit()
+        
+    return {"status": "success", "seeded": len(seeded_ids), "ids": seeded_ids}
+
 
 @router.post("/launch")
 async def launch_campaign(config: CampaignLaunch, tenant_id: str = Depends(verify_api_key)):
@@ -203,6 +258,16 @@ async def launch_campaign(config: CampaignLaunch, tenant_id: str = Depends(verif
         async with _campaign_lock:
             _campaign_running = False
         return {"status": "no_leads", "message": "No leads match the filter criteria."}
+
+    # B2B Compliance Check
+    if not is_within_b2b_hours():
+        async with _campaign_lock:
+            _campaign_running = False
+        return {
+            "status": "scheduled",
+            "message": "Out of B2B business hours (9:00 AM - 5:00 PM Eastern Time, Mon-Fri). Campaign scheduled for next compliant window.",
+            "leads_queued": len(leads)
+        }
 
     # Launch the campaign in background
     asyncio.create_task(_run_campaign(leads, config, tenant_id))

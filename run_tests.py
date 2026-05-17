@@ -16,6 +16,7 @@ import sys
 import subprocess
 import argparse
 import os
+import json
 
 def run_tests(args):
     """Run pytest with specified filters."""

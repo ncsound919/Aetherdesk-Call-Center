@@ -44,8 +44,11 @@ class FonosterHTTPClient:
             data = resp.json()
             logger.info(f"Fonoster app created: {data.get('ref', 'unknown')}")
             return data
-        except httpx.HTTPStatusError as e:
-            logger.error(f"Fonoster create app error {e.response.status_code}: {e.response.text}")
+        except (httpx.HTTPStatusError, httpx.RequestError) as e:
+            if isinstance(e, httpx.HTTPStatusError):
+                logger.error(f"Fonoster create app error {e.response.status_code}: {e.response.text}")
+            else:
+                logger.error(f"Fonoster create app connection error: {e}")
             # Fallback mock for dev without Fonoster running
             return {
                 "ref": f"app-{uuid.uuid4().hex[:8]}",

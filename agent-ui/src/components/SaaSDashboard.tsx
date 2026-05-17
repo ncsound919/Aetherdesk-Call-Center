@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { CallDetail } from './CallDetail';
+import VoiceCloning from '../pages/VoiceCloning';
 import { 
   LayoutDashboard, 
   Activity, 
@@ -11,7 +12,8 @@ import {
   Share2,
   ChevronRight,
   Phone,
-  AlertTriangle
+  AlertTriangle,
+  Mic
 } from 'lucide-react';
 
 interface Rental { id: string; profile_id: string; duration_type: string; end_time: string; status: string; }
@@ -77,10 +79,72 @@ export const SaasDashboard: React.FC = () => {
   const [leads, setLeads] = useState<any[]>([]);
   const [campaignCalls, setCampaignCalls] = useState<any[]>([]);
   const [escalations, setEscalations] = useState<any[]>([]);
+  const [dailyBriefing, setDailyBriefing] = useState<any>(null);
   const [newLeadPhone, setNewLeadPhone] = useState('');
   const [newLeadCompany, setNewLeadCompany] = useState('');
   const [newLeadContact, setNewLeadContact] = useState('');
   const [newLeadIndustry, setNewLeadIndustry] = useState('');
+
+  // WebSocket Live Supervision States
+  const [ws, setWs] = useState<WebSocket | null>(null);
+  const [activeCallTranscripts, setActiveCallTranscripts] = useState<Record<string, any[]>>({});
+  const [whisperTexts, setWhisperTexts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    let socket: WebSocket;
+    let reconnectTimeout: any;
+
+    const connectWS = () => {
+      socket = new WebSocket("ws://localhost:8000/api/v1/realtime/agent/default?token=dev-token");
+      
+      socket.onopen = () => {
+        console.log("WebSocket Supervision Connected");
+        setWs(socket);
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          
+          if (msg.type === "escalation_alert") {
+            setEscalations(prev => {
+              if (prev.some(e => e.call_sid === msg.call_sid)) return prev;
+              return [msg, ...prev];
+            });
+            alert(`⚠️ ESCALATION: Agent "${msg.agent}" requires help! Reason: ${msg.reason}`);
+          }
+          
+          if (msg.type === "transcript") {
+            const callSid = msg.call_sid;
+            const entry = msg.data || msg;
+            setActiveCallTranscripts(prev => ({
+              ...prev,
+              [callSid]: [...(prev[callSid] || []), entry]
+            }));
+          }
+
+          if (msg.type === "takeover_active") {
+            console.log("Takeover active for call:", msg.call_sid);
+          }
+        } catch (err) {
+          console.error("Failed to parse WebSocket message:", err);
+        }
+      };
+
+      socket.onclose = () => {
+        console.log("WebSocket Supervision Disconnected. Reconnecting...");
+        setWs(null);
+        reconnectTimeout = setTimeout(connectWS, 3000);
+      };
+    };
+
+    connectWS();
+
+    return () => {
+      if (socket) socket.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    };
+  }, []);
 
   // Form states
   const [profileName, setProfileName] = useState("");
@@ -123,55 +187,103 @@ export const SaasDashboard: React.FC = () => {
   };
 
   const handleTakeover = (callSid: string) => {
-    // This would typically send a WS message to the server
+    if (!ws) return alert("Supervision connection offline. Reconnecting...");
     console.log("Taking over call:", callSid);
-    alert(`Initiating takeover for call ${callSid}...`);
-    // Example: ws.send(JSON.stringify({type: 'takeover_call', call_sid: callSid}));
+    ws.send(JSON.stringify({ type: "takeover_call", call_sid: callSid }));
+    alert(`📢 Takeover initiated! The AI Agent has been silenced. You are now in full voice control of Call: ${callSid}`);
   };
 
-  const fetchData = async () => {
+  const handleWhisper = (callSid: string, text: string) => {
+    if (!ws) return alert("Supervision connection offline.");
+    if (!text.trim()) return;
+    console.log("Sending whisper to agent on call:", callSid, text);
+    ws.send(JSON.stringify({ type: "send_message", call_sid: callSid, text: text }));
+    // Clear whisper text
+    setWhisperTexts(prev => ({ ...prev, [callSid]: "" }));
+  };
+
+  const abortRef = useRef<AbortController | null>(null);
+
+  const fetchData = useCallback(async () => {
+    // Cancel any in-flight request
+    if (abortRef.current) abortRef.current.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const signal = controller.signal;
+
     try {
-      const dRes = await fetch("http://localhost:8000/api/v1/saas/dashboard");
+      const dRes = await fetch("http://localhost:8000/api/v1/saas/dashboard", { signal });
+      if (!dRes.ok) throw new Error(`Dashboard API returned ${dRes.status}`);
       const dJson = await dRes.json();
+      if (signal.aborted) return;
       setData(dJson);
-      if (dJson.rentals.length === 0) setShowOnboarding(true);
+      if (dJson.rentals?.length === 0) setShowOnboarding(true);
 
-      const aRes = await fetch("http://localhost:8000/api/v1/saas/approvals");
-      setApprovals(await aRes.json());
+      const aRes = await fetch("http://localhost:8000/api/v1/saas/approvals", { signal });
+      if (signal.aborted) return;
+      if (aRes.ok) setApprovals(await aRes.json());
 
-      const rRes = await fetch("http://localhost:8000/api/v1/saas/recordings");
-      setRecordings(await rRes.json());
+      const rRes = await fetch("http://localhost:8000/api/v1/saas/recordings", { signal });
+      if (signal.aborted) return;
+      if (rRes.ok) setRecordings(await rRes.json());
 
-      const sRes = await fetch("http://localhost:8000/api/v1/saas/settings");
-      setSettings(await sRes.json());
+      const sRes = await fetch("http://localhost:8000/api/v1/saas/settings", { signal });
+      if (signal.aborted) return;
+      if (sRes.ok) setSettings(await sRes.json());
+
+      try {
+        const bRes = await fetch("http://localhost:8000/api/v1/saas/daily-briefing", { signal });
+        if (!signal.aborted && bRes.ok) {
+          setDailyBriefing(await bRes.json());
+        }
+      } catch (e) {
+        console.warn("Briefing fetch skipped", e);
+      }
 
       // Campaign data
       try {
-        const csRes = await fetch("http://localhost:8000/api/v1/campaign/stats", {headers: {'X-API-Key': 'dev-api-key'}});
-        setCampaignStats(await csRes.json());
-        const lRes = await fetch("http://localhost:8000/api/v1/campaign/leads", {headers: {'X-API-Key': 'dev-api-key'}});
-        setLeads(await lRes.json());
-        const ccRes = await fetch("http://localhost:8000/api/v1/campaign/calls", {headers: {'X-API-Key': 'dev-api-key'}});
-        setCampaignCalls(await ccRes.json());
-      } catch(e) { console.warn('Campaign data fetch skipped', e); }
-    } catch (e) {
-      console.error("Fetch failed", e);
-    } finally {
-      setLoading(false);
-    }
-  };
+        const csRes = await fetch("http://localhost:8000/api/v1/campaign/stats", { signal, headers: {'X-API-Key': 'dev-api-key'} });
+        if (signal.aborted) return;
+        if (csRes.ok) setCampaignStats(await csRes.json());
 
-  useEffect(() => { fetchData(); }, []);
+        const lRes = await fetch("http://localhost:8000/api/v1/campaign/leads", { signal, headers: {'X-API-Key': 'dev-api-key'} });
+        if (signal.aborted) return;
+        if (lRes.ok) setLeads(await lRes.json());
+
+        const ccRes = await fetch("http://localhost:8000/api/v1/campaign/calls", { signal, headers: {'X-API-Key': 'dev-api-key'} });
+        if (signal.aborted) return;
+        if (ccRes.ok) setCampaignCalls(await ccRes.json());
+      } catch(e: any) {
+        if (e.name !== 'AbortError') console.warn('Campaign data fetch skipped', e);
+      }
+    } catch (e: any) {
+      if (e.name !== 'AbortError') console.error("Fetch failed", e);
+    } finally {
+      if (!signal.aborted) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchData();
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, [fetchData]);
 
   const handleCreateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch(`http://localhost:8000/api/v1/saas/profile?name=${profileName}&prompt=${profilePrompt}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tools: ["lookup_invoice", "search_knowledge_base"] })
-    });
-    setProfileName(""); setProfilePrompt("");
-    fetchData();
+    try {
+      const params = new URLSearchParams({ name: profileName, prompt: profilePrompt });
+      await fetch(`http://localhost:8000/api/v1/saas/profile?${params.toString()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tools: ["lookup_invoice", "search_knowledge_base"] })
+      });
+      setProfileName(""); setProfilePrompt("");
+      fetchData();
+    } catch (e) {
+      console.error("Failed to create profile", e);
+    }
   };
 
   const handleGenerateScript = async () => {
@@ -210,27 +322,30 @@ export const SaasDashboard: React.FC = () => {
           AETHERDESK
         </div>
         <div className={`sidebar-item ${activeTab === "dashboard" ? "active" : ""}`} onClick={() => setActiveTab("dashboard")}>
-          <LayoutDashboard size={18}/> Fleet Stats
+          <LayoutDashboard size={18}/> <span>Fleet Stats</span>
         </div>
         <div className={`sidebar-item ${activeTab === "command" ? "active" : ""}`} onClick={() => setActiveTab("command")}>
-          <Activity size={18}/> Command Center
+          <Activity size={18}/> <span>Command Center</span>
         </div>
         <div className={`sidebar-item ${activeTab === "flows" ? "active" : ""}`} onClick={() => setActiveTab("flows")}>
-          <Share2 size={18}/> Flow Designer
+          <Share2 size={18}/> <span>Flow Designer</span>
         </div>
         <div className={`sidebar-item ${activeTab === "marketplace" ? "active" : ""}`} onClick={() => setActiveTab("marketplace")}>
-          <ShoppingBag size={18}/> Marketplace
+          <ShoppingBag size={18}/> <span>Marketplace</span>
         </div>
         <div className={`sidebar-item ${activeTab === "approvals" ? "active" : ""}`} onClick={() => setActiveTab("approvals")}>
-          <ShieldCheck size={18}/> Supervision {approvals.length > 0 && <span className="badge badge-active">{approvals.length}</span>}
+          <ShieldCheck size={18}/> <span>Supervision</span> {approvals.length > 0 && <span className="badge badge-active">{approvals.length}</span>}
         </div>
         <div className={`sidebar-item ${activeTab === "campaign" ? "active" : ""}`} onClick={() => setActiveTab("campaign")}>
           <Phone size={18}/> Outreach
           {escalations.length > 0 && <span className="badge" style={{background: 'rgba(239,68,68,0.2)', color: '#ef4444'}}>{escalations.length}</span>}
         </div>
+        <div className={`sidebar-item ${activeTab === "cloning" ? "active" : ""}`} onClick={() => setActiveTab("cloning")}>
+          <Mic size={18}/> <span>Voice Cloning</span>
+        </div>
         <div className="sidebar-divider" style={{height: '1px', background: 'var(--border-color)', margin: '1rem 1.5rem'}}></div>
         <div className={`sidebar-item ${activeTab === "academy" ? "active" : ""}`} onClick={() => setActiveTab("academy")}>
-          <BookOpen size={18}/> Academy
+          <BookOpen size={18}/> <span>Academy</span>
         </div>
         <div className={`sidebar-item ${activeTab === "settings" ? "active" : ""}`} onClick={async () => {
           setActiveTab("settings");
@@ -239,10 +354,10 @@ export const SaasDashboard: React.FC = () => {
             setSettings(await sRes.json());
           } catch {}
         }}>
-          <Settings size={18}/> Integrations
+          <Settings size={18}/> <span>Integrations</span>
         </div>
         <div className={`sidebar-item ${activeTab === "affiliate" ? "active" : ""}`} onClick={() => setActiveTab("affiliate")}>
-          <Users size={18}/> Affiliate
+          <Users size={18}/> <span>Affiliate</span>
         </div>
       </aside>
 
@@ -260,7 +375,126 @@ export const SaasDashboard: React.FC = () => {
 
         {activeTab === "dashboard" && (
           <div className="fade-in">
-            <h2 style={{marginBottom: '1.5rem'}}>Operational Fleet Overview</h2>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
+              <h2>Operational Fleet Overview</h2>
+              
+              {/* Autopilot Controller Mode Card */}
+              <div className="glass-card" style={{
+                padding: '0.75rem 1.2rem', 
+                background: settings.auto_mode_enabled ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255,255,255,0.02)', 
+                border: settings.auto_mode_enabled ? '1px solid rgba(99, 102, 241, 0.3)' : '1px solid var(--border-color)',
+                borderRadius: '30px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                gap: '0.8rem'
+              }}>
+                <div style={{
+                  width: '8px', 
+                  height: '8px', 
+                  borderRadius: '50%', 
+                  background: settings.auto_mode_enabled ? 'var(--success)' : '#ef4444',
+                  boxShadow: settings.auto_mode_enabled ? '0 0 10px var(--success)' : 'none',
+                  animation: settings.auto_mode_enabled ? 'pulse 2s infinite' : 'none'
+                }} />
+                <span style={{fontSize: '0.85rem', fontWeight: 600, color: '#f3f4f6'}}>
+                  Autopilot: {settings.auto_mode_enabled ? 'FULLY AUTONOMOUS' : 'SUPERVISED'}
+                </span>
+                <button 
+                  className={settings.auto_mode_enabled ? 'btn-primary' : 'btn-outline'} 
+                  style={{
+                    padding: '0.3rem 0.8rem', 
+                    fontSize: '0.75rem', 
+                    borderRadius: '20px', 
+                    background: settings.auto_mode_enabled ? 'var(--success)' : 'transparent',
+                    borderColor: settings.auto_mode_enabled ? 'var(--success)' : 'var(--border-color)',
+                    color: '#fff',
+                    marginLeft: '0.5rem'
+                  }}
+                  onClick={async () => {
+                    const newMode = !settings.auto_mode_enabled;
+                    const res = await fetch("http://localhost:8000/api/v1/saas/settings", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ ...settings, auto_mode_enabled: newMode ? 1 : 0 })
+                    });
+                    if (res.ok) {
+                      setSettings(prev => ({ ...prev, auto_mode_enabled: newMode }));
+                      alert(newMode 
+                        ? "🚀 Autopilot Enabled! AI Agents will now autonomously harvest Triangle B2B leads, trigger outbound dialer loops compliant with local timezone rules, and auto-approve callbacks & schedules." 
+                        : "⚠️ Switched to Supervised Mode. Actions will now require manual clicks in the Action Supervision Queue."
+                      );
+                      fetchData();
+                    }
+                  }}
+                >
+                  {settings.auto_mode_enabled ? 'Switch to Supervised' : 'Activate Autopilot'}
+                </button>
+              </div>
+            </div>
+
+            {/* Executive daily briefing card */}
+            <div className="glass-card" style={{
+              background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.08) 0%, rgba(168, 85, 247, 0.04) 100%)',
+              border: '1px solid rgba(99, 102, 241, 0.25)',
+              padding: '2rem',
+              borderRadius: '16px',
+              marginBottom: '2rem',
+              boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.37)'
+            }}>
+              <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem'}}>
+                <div>
+                  <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                    <span style={{fontSize: '0.75rem', fontWeight: 600, color: 'var(--accent-primary)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Autopilot Briefing</span>
+                    <span className="badge" style={{background: 'rgba(99, 102, 241, 0.1)', color: 'var(--accent-primary)', fontSize: '0.65rem'}}>AI Synthesized</span>
+                  </div>
+                  <h3 style={{fontSize: '1.5rem', marginTop: '0.25rem', fontWeight: 700}}>Daily Executive intelligence</h3>
+                </div>
+                <button className="btn-secondary" style={{fontSize: '0.75rem', padding: '0.4rem 0.8rem'}} onClick={fetchData}>🔄 Re-Analyze Outcomes</button>
+              </div>
+
+              {dailyBriefing ? (
+                <div>
+                  <p style={{fontSize: '1.05rem', lineHeight: 1.6, color: '#e5e7eb', marginBottom: '1.5rem', fontStyle: 'italic', borderLeft: '3px solid var(--accent-primary)', paddingLeft: '1rem'}}>
+                    "{dailyBriefing.summary}"
+                  </p>
+
+                  <div style={{display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1rem', background: 'rgba(0,0,0,0.15)', borderRadius: '12px', padding: '1rem', marginBottom: '1.5rem'}}>
+                    <div style={{textAlign: 'center'}}>
+                      <div style={{fontSize: '0.75rem', color: 'var(--text-secondary)'}}>Calls Dialed</div>
+                      <div style={{fontSize: '1.5rem', fontWeight: 700, color: '#f3f4f6'}}>{dailyBriefing.metrics?.total_calls || 0}</div>
+                    </div>
+                    <div style={{textAlign: 'center'}}>
+                      <div style={{fontSize: '0.75rem', color: 'var(--text-secondary)'}}>Sourced Leads</div>
+                      <div style={{fontSize: '1.5rem', fontWeight: 700, color: '#f3f4f6'}}>{dailyBriefing.metrics?.total_leads || 0}</div>
+                    </div>
+                    <div style={{textAlign: 'center'}}>
+                      <div style={{fontSize: '0.75rem', color: 'var(--text-secondary)'}}>Interested Leads</div>
+                      <div style={{fontSize: '1.5rem', fontWeight: 700, color: 'var(--success)'}}>{dailyBriefing.metrics?.interested_leads || 0}</div>
+                    </div>
+                    <div style={{textAlign: 'center'}}>
+                      <div style={{fontSize: '0.75rem', color: 'var(--text-secondary)'}}>Autonomous Savings</div>
+                      <div style={{fontSize: '1.5rem', fontWeight: 700, color: 'var(--accent-primary)'}}>{dailyBriefing.metrics?.efficiency_gain || '0%'}</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 style={{fontSize: '0.85rem', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: '0.75rem', letterSpacing: '0.05em'}}>Automated Smart Decisions Today:</h4>
+                    <ul style={{margin: 0, paddingLeft: '1.2rem', color: '#cbd5e1', display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.9rem'}}>
+                      {(dailyBriefing.recommendations || []).map((rec: string, index: number) => (
+                        <li key={index} style={{lineHeight: 1.4}}>
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              ) : (
+                <div style={{textAlign: 'center', padding: '1.5rem 0', color: 'var(--text-secondary)', fontSize: '0.9rem'}}>
+                  Awaiting dialer campaigns... Turn on Autopilot above to let the system generate daily executive reports automatically.
+                </div>
+              )}
+            </div>
+
             <div className="stat-grid" style={{marginBottom: '2rem'}}>
                 <div className="glass-card">
                   <p style={{color: 'var(--text-secondary)', fontSize: '0.875rem'}}>Platform Tier</p>
@@ -489,29 +723,82 @@ export const SaasDashboard: React.FC = () => {
                 </h3>
                 <div style={{display: 'flex', flexDirection: 'column', gap: '1rem'}}>
                   {campaignCalls.filter(c => c.status === 'in_progress' || c.status === 'ringing').length > 0 ? (
-                    campaignCalls.filter(c => c.status === 'in_progress' || c.status === 'ringing').map(c => (
-                      <div key={c.id} className="glass-card" style={{padding: '1rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center'}}>
-                         <div>
-                            <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
-                              <span style={{fontWeight: 700, fontSize: '1rem'}}>{c.company_name}</span>
-                              <span className="badge" style={{fontSize: '0.6rem', background: 'rgba(99,102,241,0.1)', color: 'var(--accent-primary)'}}>{c.profile_id}</span>
+                    campaignCalls.filter(c => c.status === 'in_progress' || c.status === 'ringing').map(c => {
+                      const callTranscripts = activeCallTranscripts[c.call_sid] || [];
+                      return (
+                        <div key={c.id} className="glass-card" style={{padding: '1.5rem', background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', gap: '1rem'}}>
+                          <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start'}}>
+                             <div>
+                                <div style={{display: 'flex', alignItems: 'center', gap: '0.5rem'}}>
+                                  <span style={{fontWeight: 700, fontSize: '1.1rem'}}>{c.company_name}</span>
+                                  <span className="badge" style={{fontSize: '0.65rem', background: 'rgba(99,102,241,0.15)', color: 'var(--accent-primary)'}}>{c.profile_id}</span>
+                                </div>
+                                <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem'}}>
+                                  ID: {c.call_sid} | Duration: {Math.floor((Date.now() - new Date(c.started_at).getTime()) / 1000)}s
+                                </div>
+                                {c.sentiment && (
+                                  <div style={{fontSize: '0.75rem', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem'}}>
+                                    <span style={{color: 'var(--text-secondary)'}}>Sentiment:</span>
+                                    <span style={{color: c.sentiment === 'positive' ? 'var(--success)' : c.sentiment === 'negative' ? '#ef4444' : 'var(--text-secondary)', fontWeight: 600}}>{c.sentiment.toUpperCase()}</span>
+                                  </div>
+                                )}
+                             </div>
+                             <div style={{display: 'flex', gap: '0.5rem'}}>
+                               <button className="btn-outline" style={{fontSize: '0.75rem', padding: '0.4rem 0.8rem', color: '#ff4d4d', borderColor: '#ff4d4d'}} onClick={() => handleTakeover(c.call_sid)}>Take Over Voice</button>
+                               <button className="btn-secondary" style={{fontSize: '0.75rem', padding: '0.4rem 0.8rem'}}>Listen In</button>
+                             </div>
+                          </div>
+
+                          {/* Live Transcripts Box */}
+                          <div style={{background: 'rgba(0,0,0,0.2)', border: '1px solid var(--border-color)', borderRadius: '8px', padding: '1rem', maxHeight: '180px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.75rem'}}>
+                            <div style={{fontSize: '0.7rem', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.05em', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '0.25rem', marginBottom: '0.25rem'}}>
+                              Live Transcript Telemetry
                             </div>
-                            <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.25rem'}}>
-                              ID: {c.call_sid} | Duration: {Math.floor((Date.now() - new Date(c.started_at).getTime()) / 1000)}s
-                            </div>
-                            {c.sentiment && (
-                              <div style={{fontSize: '0.75rem', marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.3rem'}}>
-                                <span style={{color: 'var(--text-secondary)'}}>Sentiment:</span>
-                                <span style={{color: c.sentiment === 'positive' ? 'var(--success)' : c.sentiment === 'negative' ? '#ef4444' : 'var(--text-secondary)'}}>{c.sentiment.toUpperCase()}</span>
+                            {callTranscripts.length > 0 ? (
+                              callTranscripts.map((t, idx) => (
+                                <div key={idx} style={{display: 'flex', flexDirection: 'column', alignSelf: t.role === 'user' ? 'flex-start' : 'flex-end', maxWidth: '85%'}}>
+                                  <div style={{
+                                    fontSize: '0.85rem',
+                                    padding: '0.5rem 0.75rem',
+                                    borderRadius: '12px',
+                                    background: t.role === 'user' ? 'rgba(99,102,241,0.1)' : 'rgba(255,255,255,0.05)',
+                                    color: t.role === 'user' ? '#e0e7ff' : '#f3f4f6',
+                                    border: t.role === 'user' ? '1px solid rgba(99,102,241,0.2)' : '1px solid rgba(255,255,255,0.05)'
+                                  }}>
+                                    {t.text || t.content}
+                                  </div>
+                                  {t.sentiment && (
+                                    <span style={{fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.15rem', alignSelf: t.role === 'user' ? 'flex-start' : 'flex-end'}}>
+                                      Sentiment: {t.sentiment}
+                                    </span>
+                                  )}
+                                </div>
+                              ))
+                            ) : (
+                              <div style={{fontSize: '0.8rem', color: 'var(--text-secondary)', textAlign: 'center', padding: '1rem 0'}}>
+                                Waiting for conversation turns...
                               </div>
                             )}
-                         </div>
-                         <div style={{display: 'flex', gap: '0.5rem'}}>
-                           <button className="btn-outline" style={{fontSize: '0.75rem', padding: '0.4rem 0.8rem'}} onClick={() => handleTakeover(c.call_sid)}>Take Over</button>
-                           <button className="btn-secondary" style={{fontSize: '0.75rem', padding: '0.4rem 0.8rem'}}>Listen</button>
-                         </div>
-                      </div>
-                    ))
+                          </div>
+
+                          {/* Whisper to Agent Console */}
+                          <div style={{display: 'flex', gap: '0.5rem'}}>
+                            <input 
+                              placeholder="Whisper context/instruction to Agent mid-call..." 
+                              value={whisperTexts[c.call_sid] || ""}
+                              onChange={e => setWhisperTexts({ ...whisperTexts, [c.call_sid]: e.target.value })}
+                              style={{flex: 1, marginBottom: 0, fontSize: '0.85rem', height: '36px'}}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') handleWhisper(c.call_sid, whisperTexts[c.call_sid] || "");
+                              }}
+                            />
+                            <button className="btn-primary" style={{height: '36px', fontSize: '0.8rem', padding: '0 1rem'}} onClick={() => handleWhisper(c.call_sid, whisperTexts[c.call_sid] || "")}>
+                              💬 Whisper
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
                   ) : (
                     <div style={{textAlign: 'center', padding: '4rem 0', color: 'var(--text-secondary)'}}>
                       <div style={{fontSize: '3rem', marginBottom: '1rem', opacity: 0.2}}>📡</div>
@@ -593,8 +880,8 @@ export const SaasDashboard: React.FC = () => {
                            <td style={{padding: '1rem'}}><span className="badge badge-active">{a.action}</span></td>
                            <td style={{padding: '1rem'}}>{a.params}</td>
                            <td style={{padding: '1rem', textAlign: 'right'}}>
-                              <button className="btn-primary" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', marginRight: '0.5rem'}}>Approve</button>
-                              <button className="btn-outline" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem'}}>Reject</button>
+                              <button className="btn-primary" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem', marginRight: '0.5rem'}} onClick={() => handleApprove(a.id)}>Approve</button>
+                              <button className="btn-outline" style={{padding: '0.4rem 0.8rem', fontSize: '0.8rem'}} onClick={() => handleReject(a.id)}>Reject</button>
                            </td>
                         </tr>
                       ))}
@@ -645,15 +932,29 @@ export const SaasDashboard: React.FC = () => {
           <div className="fade-in">
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
               <h2>B2B Outreach Campaign</h2>
-              <button className="btn-primary" onClick={async () => {
-                const res = await fetch("http://localhost:8000/api/v1/campaign/launch", {
-                  method: "POST", headers: {'Content-Type': 'application/json', 'X-API-Key': 'dev-api-key'},
-                  body: JSON.stringify({profile_id: "PROF-META-SALES", max_concurrent: 3, delay_between_calls: 5})
-                });
-                const d = await res.json();
-                alert(`Campaign ${d.status}: ${d.leads_queued || 0} leads queued`);
-                fetchData();
-              }}>🚀 Launch Campaign</button>
+              <div style={{display: 'flex', gap: '0.5rem'}}>
+                <button className="btn-secondary" style={{borderColor: 'var(--accent-secondary)'}} onClick={async () => {
+                  const res = await fetch("http://localhost:8000/api/v1/campaign/source-leads", {
+                    method: "POST", headers: {'X-API-Key': 'dev-api-key'}
+                  });
+                  const d = await res.json();
+                  alert(`Successfully sourced and seeded ${d.seeded || 0} NC Triangle B2B leads!`);
+                  fetchData();
+                }}>📡 Autonomously Source Triangle Leads</button>
+                <button className="btn-primary" onClick={async () => {
+                  const res = await fetch("http://localhost:8000/api/v1/campaign/launch", {
+                    method: "POST", headers: {'Content-Type': 'application/json', 'X-API-Key': 'dev-api-key'},
+                    body: JSON.stringify({profile_id: "PROF-META-SALES", max_concurrent: 3, delay_between_calls: 5})
+                  });
+                  const d = await res.json();
+                  if (d.status === "scheduled") {
+                    alert(`⏰ Campaign Safeguard: ${d.message}`);
+                  } else {
+                    alert(`Campaign ${d.status}: ${d.leads_queued || 0} leads queued`);
+                  }
+                  fetchData();
+                }}>🚀 Launch Campaign</button>
+              </div>
             </div>
 
             {/* Stats Row */}
@@ -744,6 +1045,12 @@ export const SaasDashboard: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {activeTab === "cloning" && (
+          <div className="fade-in">
+             <VoiceCloning />
           </div>
         )}
 

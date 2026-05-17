@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 type TranscriptEntry = {
   from: string;
   text: string;
@@ -21,6 +21,10 @@ export function CallDetail({ sessionId, onClose }: CallDetailProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const audioStreamRef = useRef<MediaStream | null>(null);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const isMountedRef = useRef(true);
 
   const handleTakeover = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -34,12 +38,14 @@ export function CallDetail({ sessionId, onClose }: CallDetailProps) {
   };
 
   useEffect(() => {
+    isMountedRef.current = true;
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsHost = window.location.host;
     const ws = new WebSocket(`${wsProtocol}//${wsHost}/api/v1/realtime/agent/ws?agent_id=monitor&token=dev-token`);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      if (!isMountedRef.current) return;
       setIsConnected(true);
       ws.send(JSON.stringify({
         type: "subscribe_call",
@@ -48,6 +54,7 @@ export function CallDetail({ sessionId, onClose }: CallDetailProps) {
     };
 
     ws.onmessage = (event) => {
+      if (!isMountedRef.current) return;
       try {
         const data = JSON.parse(event.data);
         if (data.type === "transcript") {
@@ -60,18 +67,55 @@ export function CallDetail({ sessionId, onClose }: CallDetailProps) {
     };
 
     return () => {
+      isMountedRef.current = false;
       ws.close();
-      if (mediaRecorderRef.current) mediaRecorderRef.current.stop();
+      if (mediaRecorderRef.current) {
+        try { mediaRecorderRef.current.stop(); } catch { /* already stopped */ }
+      }
+      // Cleanup audio resources
+      if (processorRef.current) {
+        processorRef.current.disconnect();
+        processorRef.current = null;
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach(t => t.stop());
+        audioStreamRef.current = null;
+      }
     };
   }, [sessionId]);
 
-  const toggleTakeOver = async () => {
+  // Helper: encode Int16Array to base64 without stack overflow
+  const int16ToBase64 = useCallback((int16: Int16Array): string => {
+    const bytes = new Uint8Array(int16.buffer);
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const slice = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+      binary += String.fromCharCode.apply(null, Array.from(slice));
+    }
+    return btoa(binary);
+  }, []);
+
+  const toggleTakeOver = useCallback(async () => {
     if (!isTakingOver) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        if (!isMountedRef.current) {
+          stream.getTracks().forEach(t => t.stop());
+          return;
+        }
+        audioStreamRef.current = stream;
+
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
+        audioCtxRef.current = audioContext;
+
         const source = audioContext.createMediaStreamSource(stream);
         const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        processorRef.current = processor;
 
         source.connect(processor);
         processor.connect(audioContext.destination);
@@ -84,7 +128,8 @@ export function CallDetail({ sessionId, onClose }: CallDetailProps) {
             for (let i = 0; i < inputData.length; i++) {
               int16Data[i] = Math.max(-1, Math.min(1, inputData[i])) * 0x7FFF;
             }
-            const base64 = btoa(String.fromCharCode(...new Uint8Array(int16Data.buffer)));
+            // Safe base64 encoding (no stack overflow)
+            const base64 = int16ToBase64(int16Data);
             wsRef.current?.send(JSON.stringify({
               type: "agent_audio",
               call_sid: sessionId.replace('call_', ''),
@@ -93,20 +138,27 @@ export function CallDetail({ sessionId, onClose }: CallDetailProps) {
           }
         };
 
-        (window as any)._audioCtx = audioContext;
-        (window as any)._audioStream = stream;
         setIsTakingOver(true);
       } catch (err) {
         alert("Microphone access denied.");
       }
     } else {
-      if ((window as any)._audioCtx) {
-        (window as any)._audioCtx.close();
-        (window as any)._audioStream.getTracks().forEach((t: any) => t.stop());
+      // Cleanup audio resources
+      if (processorRef.current) {
+        processorRef.current.disconnect();
+        processorRef.current = null;
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+      }
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach(t => t.stop());
+        audioStreamRef.current = null;
       }
       setIsTakingOver(false);
     }
-  };
+  }, [isTakingOver, sessionId, int16ToBase64]);
 
   const sendWhisper = () => {
     if (wsRef.current?.readyState === WebSocket.OPEN && whisperText.trim()) {
@@ -205,7 +257,7 @@ export function CallDetail({ sessionId, onClose }: CallDetailProps) {
                 )}
               </div>
               <div style={{ fontSize: '0.95rem', lineHeight: '1.5' }}>{t.text}</div>
-              {t.latency_ms > 0 && (
+              {t.latency_ms != null && t.latency_ms > 0 && (
                 <div style={{ fontSize: '0.65rem', color: 'var(--text-secondary)', marginTop: '0.5rem', textAlign: 'right', opacity: 0.5 }}>
                   Turn: {t.latency_ms.toFixed(0)}ms
                 </div>

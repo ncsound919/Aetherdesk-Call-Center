@@ -153,15 +153,25 @@ async def verify_api_key(x_api_key: str = Header(default="dev-api-key")) -> str:
      if x_api_key == INTERNAL_API_KEY or (os.getenv("ENV") != "production" and x_api_key == "dev-api-key"):
          return "TENANT-001" # Default tenant for internal/dev
 
-     # Use synchronous db_context since SQLite connections are sync
-     from apps.api.services.database import db_context_sync
-     with db_context_sync() as conn:
-         cursor = conn.cursor()
-         cursor.execute("SELECT id FROM tenants WHERE api_key = ?", (x_api_key,))
-         row = cursor.fetchone()
-         if not row:
-             raise HTTPException(status_code=403, detail="Invalid API Key")
-         return row["id"]
+     from apps.api.services.database import USE_POSTGRES
+     if USE_POSTGRES:
+         from apps.api.services.database import get_pg_pool
+         pool = await get_pg_pool()
+         if pool:
+             row = await pool.fetchrow("SELECT id FROM tenants WHERE api_key = $1", x_api_key)
+             if not row:
+                 raise HTTPException(status_code=403, detail="Invalid API Key")
+             return row["id"]
+         raise HTTPException(status_code=500, detail="Database connection failed")
+     else:
+         from apps.api.services.database import db_context_sync
+         with db_context_sync() as conn:
+             cursor = conn.cursor()
+             cursor.execute("SELECT id FROM tenants WHERE api_key = ?", (x_api_key,))
+             row = cursor.fetchone()
+             if not row:
+                 raise HTTPException(status_code=403, detail="Invalid API Key")
+             return row["id"]
 
 
 async def verify_tenant_access(
@@ -180,28 +190,44 @@ async def verify_tenant_access(
      if x_api_key == INTERNAL_API_KEY or (is_dev and x_api_key == "dev-api-key"):
          return tenant_id  # Allow access in dev mode
 
-     try:
-         # Use synchronous db_context since SQLite connections are sync
-         from apps.api.services.database import db_context_sync
-         with db_context_sync() as conn:
-             cursor = conn.cursor()
-             # Verify the API key maps to a tenant, and that tenant matches the requested tenant_id
-             cursor.execute(
-                 "SELECT id FROM tenants WHERE api_key = ? AND id = ?",
-                 (x_api_key, tenant_id),
+     from apps.api.services.database import USE_POSTGRES
+     if USE_POSTGRES:
+         from apps.api.services.database import get_pg_pool
+         pool = await get_pg_pool()
+         if pool:
+             row = await pool.fetchrow(
+                 "SELECT id FROM tenants WHERE api_key = $1 AND id = $2",
+                 x_api_key, tenant_id
              )
-             row = cursor.fetchone()
              if not row:
                  raise HTTPException(
                      status_code=403,
                      detail="Access denied: tenant does not own the requested resource",
                  )
              return row["id"]
-     except HTTPException:
-         raise
-     except Exception:
-         # If DB fails in production-like mode, deny access
-         raise HTTPException(
-             status_code=403,
-             detail="Access denied: tenant verification failed",
-         )
+         raise HTTPException(status_code=500, detail="Database connection failed")
+     else:
+         try:
+             from apps.api.services.database import db_context_sync
+             with db_context_sync() as conn:
+                 cursor = conn.cursor()
+                 # Verify the API key maps to a tenant, and that tenant matches the requested tenant_id
+                 cursor.execute(
+                     "SELECT id FROM tenants WHERE api_key = ? AND id = ?",
+                     (x_api_key, tenant_id),
+                 )
+                 row = cursor.fetchone()
+                 if not row:
+                     raise HTTPException(
+                         status_code=403,
+                         detail="Access denied: tenant does not own the requested resource",
+                     )
+                 return row["id"]
+         except HTTPException:
+             raise
+         except Exception:
+             # If DB fails in production-like mode, deny access
+             raise HTTPException(
+                 status_code=403,
+                 detail="Access denied: tenant verification failed",
+             )

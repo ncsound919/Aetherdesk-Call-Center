@@ -7,15 +7,26 @@ export function SocketProvider({ children }) {
   const { user } = useAuth()
   const socketRef = useRef(null)
   const reconnectTimeoutRef = useRef(null)
+  const isMountedRef = useRef(true)
 
   const connectWebSocket = useCallback(() => {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    // Prevent reconnect after unmount
+    if (!isMountedRef.current) return
+
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
     const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/agent/' + (user?.agentId || '')
 
     // Clean up existing connection
     if (socketRef.current) {
-      socketRef.current.close()
+      // Remove onclose handler before closing to prevent reconnect loop
+      if (socketRef.current.tenantSocket) {
+        socketRef.current.tenantSocket.onclose = null
+      }
+      if (socketRef.current.agentSocket) {
+        socketRef.current.agentSocket.onclose = null
+      }
+      socketRef.current.tenantSocket?.close()
+      socketRef.current.agentSocket?.close()
       socketRef.current = null
     }
 
@@ -30,10 +41,12 @@ export function SocketProvider({ children }) {
     const tenantSocket = new WebSocket(tenantWsUrl)
 
     tenantSocket.onopen = () => {
+      if (!isMountedRef.current) { tenantSocket.close(); return }
       console.log('Tenant WebSocket connected')
     }
 
     tenantSocket.onmessage = (event) => {
+      if (!isMountedRef.current) return
       try {
         const data = JSON.parse(event.data)
         // Dispatch custom event for call status updates
@@ -49,7 +62,8 @@ export function SocketProvider({ children }) {
 
     tenantSocket.onclose = () => {
       console.log('Tenant WebSocket disconnected')
-      // Reconnect after delay
+      // Only reconnect if still mounted
+      if (!isMountedRef.current) return
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, 5000)
     }
@@ -65,12 +79,14 @@ export function SocketProvider({ children }) {
       const agentSocket = new WebSocket(wsUrl)
 
       agentSocket.onopen = () => {
+        if (!isMountedRef.current) { agentSocket.close(); return }
         console.log('Agent WebSocket connected, authenticating...')
         // Send auth token
         agentSocket.send(JSON.stringify({ type: 'auth', token: user.token }))
       }
 
       agentSocket.onmessage = (event) => {
+        if (!isMountedRef.current) return
         try {
           const data = JSON.parse(event.data)
           if (data.type === 'auth_success') {
@@ -96,13 +112,19 @@ export function SocketProvider({ children }) {
   }, [user])
 
   useEffect(() => {
+    isMountedRef.current = true
     connectWebSocket()
 
     return () => {
+      isMountedRef.current = false
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
       }
       if (socketRef.current) {
+        // Null onclose to prevent reconnect during teardown
+        if (socketRef.current.tenantSocket) socketRef.current.tenantSocket.onclose = null
+        if (socketRef.current.agentSocket) socketRef.current.agentSocket.onclose = null
         socketRef.current.tenantSocket?.close()
         socketRef.current.agentSocket?.close()
         socketRef.current = null

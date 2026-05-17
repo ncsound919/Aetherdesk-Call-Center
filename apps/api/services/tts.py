@@ -2,6 +2,7 @@ import asyncio
 import io
 import os
 import time
+import json
 
 import structlog
 
@@ -192,8 +193,25 @@ class TTSService:
 
 
 def get_tts_service() -> TTSService:
-    engines = os.getenv("TTS_ENGINE", "edge")
+    config_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../config/default_voice.json"))
+    default_voice = None
+    if os.path.exists(config_path):
+        try:
+            with open(config_path) as f:
+                data = json.load(f)
+                default_voice = data.get("default_voice_id")
+        except Exception:
+            pass
+
+    # Since Chatterbox is not running on this laptop, we MUST use edge TTS so the user hears voice!
+    engines = os.getenv("TTS_ENGINE", "edge,chatterbox")
+    # For Edge TTS, we need a valid Azure/Edge voice name instead of the cloned voice ID
     voice = os.getenv("TTS_VOICE", "en-US-AriaNeural")
+    
+    # If a clone ID is active, edge TTS won't understand "voice_78f08fdb", so we pass a natural sounding Edge voice.
+    if default_voice and "voice_" in default_voice:
+        voice = "en-US-GuyNeural" # A good male voice, or 'en-US-AriaNeural' for female.
+        
     return TTSService(engines=engines, voice=voice)
 
 

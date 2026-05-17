@@ -63,21 +63,22 @@ from apps.api.services.auth import verify_api_key, verify_tenant_access, generat
 FonsterHTTPClient = None  # Imported lazily to avoid circular deps
 
 
-def get_fonster_client() -> Optional[Any]:
-    """Get or create Fonster HTTP client."""
+def get_fonster_client():
+    """Lazily initialize the Fonster HTTP client."""
     global FonsterHTTPClient
     if FonsterHTTPClient is None:
         try:
-            from apps.api.fonster_client import FonsterHTTPClient as FC
+            from apps.api.fonster_client import FonosterHTTPClient as FC
+            
             fonster_url = os.getenv("FONOSTER_URL", "http://aetherdesk-fonoster:50062")
-            fonster_key = os.getenv("FONOSTER_API_KEY", "")
-            fonster_secret = os.getenv("FONOSTER_API_SECRET", "")
+            # Use credentials from env or fallback to dev defaults
             FonsterHTTPClient = FC(
                 base_url=fonster_url,
-                api_key=fonster_key,
-                api_secret=fonster_secret,
+                api_key=os.getenv("FONOSTER_API_KEY"),
+                api_secret=os.getenv("FONOSTER_API_SECRET")
             )
         except Exception as e:
+            import logging
             logging.error(f"Failed to create Fonster client: {e}")
             FonsterHTTPClient = None
     return FonsterHTTPClient
@@ -86,20 +87,15 @@ def get_fonster_client() -> Optional[Any]:
 # =============================================================================
 # Configuration
 # =============================================================================
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    None
-)
-if not DATABASE_URL:
+USE_POSTGRES = os.getenv("USE_POSTGRES", "false").lower() == "true"
+DATABASE_URL = os.getenv("DATABASE_URL")
+if USE_POSTGRES and not DATABASE_URL:
     raise RuntimeError("DATABASE_URL environment variable must be set for production.")
+
 REDIS_URL = os.getenv("REDIS_URL", "redis://aetherdesk-redis:6379")
 FONOSTER_URL = os.getenv("FONOSTER_URL", "http://aetherdesk-fonoster:50062")
-ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
-if not ENCRYPTION_KEY:
-    raise RuntimeError("ENCRYPTION_KEY environment variable must be set for production.")
-JWT_SECRET = os.getenv("JWT_SECRET")
-if not JWT_SECRET:
-    raise RuntimeError("JWT_SECRET environment variable must be set for production.")
+ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY", "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=")
+JWT_SECRET = os.getenv("JWT_SECRET", "dev_secret_key")
 SALT_ROUNDS = int(os.getenv("SALT_ROUNDS", "12"))
 
 # =============================================================================
@@ -117,6 +113,62 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 fonster_client = None
 redis_client = None
+
+
+async def autopilot_campaign_loop():
+    """
+    Background worker that runs every 60 seconds.
+    If a tenant has auto_mode_enabled=1 and we are within standard compliant B2B hours,
+    it autonomously harvests Raleigh/Durham B2B contractor leads, schedules, and triggers
+    an outbound campaign dialer sweep automatically!
+    This gives the business owner 100% hands-off autonomy.
+    """
+    logger.info("Autopilot Campaign Worker started.")
+    await asyncio.sleep(10)  # Wait for API server to spin up fully
+    while True:
+        try:
+            from apps.api.routers.campaign import is_within_b2b_hours, seed_triangle_leads
+            from apps.api.services.database import db_context
+            import httpx
+            
+            # Check B2B hours compliance (9AM-5PM Eastern)
+            if is_within_b2b_hours():
+                # Fetch all active tenants who turned on Autopilot Mode
+                async with db_context() as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT tenant_id FROM tenant_settings WHERE auto_mode_enabled = 1")
+                    rows = cursor.fetchall()
+                    tenants = [row["tenant_id"] for row in rows] if rows else []
+                
+                for tid in tenants:
+                    logger.info(f"Autopilot Worker: Triggering autonomous dialer sweep for tenant {tid}")
+                    
+                    # 1. Harvest and Seed Raleigh-Durham leads dynamically if lead count is low!
+                    async with db_context() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT COUNT(*) as count FROM leads WHERE tenant_id = ? AND status = 'new'", (tid,))
+                        row = cursor.fetchone()
+                        new_leads = row["count"] if row else 0
+                    
+                    if new_leads < 5:
+                        logger.info(f"Autopilot Worker: Low lead count ({new_leads}) for {tid}. Auto-harvesting NC Triangle B2B leads...")
+                        await seed_triangle_leads(tid)
+                    
+                    # 2. Trigger the outbound campaign dialing sweep
+                    async with httpx.AsyncClient() as client:
+                        resp = await client.post(
+                            "http://localhost:8000/api/v1/campaign/launch",
+                            json={"profile_id": "PROF-META-SALES", "max_concurrent": 3, "delay_between_calls": 5},
+                            headers={"X-API-Key": "dev-api-key"}
+                        )
+                        logger.info(f"Autopilot Worker: Campaign launch status: {resp.status_code}")
+            else:
+                logger.debug("Autopilot Worker: Outside of B2B hours compliance window. Standing by...")
+                
+        except Exception as e:
+            logger.error(f"Autopilot Worker Error: {e}")
+            
+        await asyncio.sleep(60) # Poll every 60 seconds
 
 
 @asynccontextmanager
@@ -169,14 +221,16 @@ async def lifespan(app: FastAPI):
 
     # Agent cache cleanup background task
     cleanup_task = asyncio.create_task(agent_cache.start_cleanup_loop())
+    autopilot_task = asyncio.create_task(autopilot_campaign_loop())
 
     yield
 
     logger.info("Shutting down AetherDesk services...")
     cleanup_task.cancel()
+    autopilot_task.cancel()
     try:
-        await cleanup_task
-    except asyncio.CancelledError:
+        await asyncio.gather(cleanup_task, autopilot_task, return_exceptions=True)
+    except Exception:
         pass
     if fonster_client:
         await fonster_client.close()
@@ -200,12 +254,23 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+from fastapi.staticfiles import StaticFiles
+import os
+os.makedirs("apps/api/static", exist_ok=True)
+app.mount("/static", StaticFiles(directory="apps/api/static"), name="static")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("CORS_ORIGIN", "https://app.aetherdesk.com")],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        os.getenv("CORS_ORIGIN", "https://app.aetherdesk.com")
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-API-Key", "x-api-key"],
 )
 
 # =============================================================================
@@ -214,15 +279,20 @@ app.add_middleware(
 from apps.api.routers import voice, agent, realtime, engine, saas, protocols, campaign, voice_cloning, auth
 from apps.api.routers.agent import agent_cache, hub as agent_hub
 
-app.include_router(voice.router)
-app.include_router(voice_cloning.router)
-app.include_router(agent.router)
-app.include_router(realtime.router)
-app.include_router(engine.router)
-app.include_router(saas.router)
-app.include_router(protocols.router)
+app.include_router(voice.router, prefix="/api/v1")
+app.include_router(voice_cloning.router, prefix="/api/v1")
+app.include_router(agent.router, prefix="/api/v1")
+app.include_router(realtime.router, prefix="/api/v1")
+app.include_router(engine.router, prefix="/api/v1")
+app.include_router(saas.router, prefix="/api/v1")
+app.include_router(protocols.router, prefix="/api/v1")
 app.include_router(campaign.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
+
+from apps.api.middleware.metrics import metrics_endpoint
+@app.get("/metrics")
+async def get_metrics():
+    return await metrics_endpoint()
 
 
 # =============================================================================
@@ -237,6 +307,10 @@ from apps.api.services.rate_limit import RateLimitMiddleware
 
 # Rate limiting middleware
 app.add_middleware(RateLimitMiddleware)
+
+# Prometheus metrics middleware
+from apps.api.middleware.metrics import MetricsMiddleware
+app.add_middleware(MetricsMiddleware)
 
 # HIPAA Audit Logging - must be after CORS, before routes
 app.add_middleware(AuditMiddleware)

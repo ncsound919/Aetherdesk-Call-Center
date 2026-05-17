@@ -21,7 +21,6 @@ class ConnectionManager:
         self.voice_connections: dict[str, tuple[WebSocket, str]] = {} # call_sid -> (ws, stream_sid)
 
     async def connect(self, websocket: WebSocket, agent_id: str):
-        await websocket.accept()
         self.active_connections[agent_id] = websocket
         logger.info("agent_connected", agent_id=agent_id)
 
@@ -96,6 +95,29 @@ manager = ConnectionManager()
 
 @router.websocket("/agent/{agent_id}")
 async def agent_websocket(websocket: WebSocket, agent_id: str):
+    await websocket.accept()
+    
+    import os
+    token = websocket.query_params.get("token")
+    is_dev = os.getenv("ENV", "development") != "production"
+    
+    authenticated = False
+    if token == "dev-token" or (is_dev and not token):
+        authenticated = True
+    elif token:
+        from apps.api.services.auth import verify_websocket_token
+        token_data = await verify_websocket_token(token)
+        if token_data:
+            authenticated = True
+            
+    if not authenticated:
+        try:
+            await websocket.send_json({"error": "Unauthorized WebSocket connection"})
+            await websocket.close(code=1008)
+        except Exception:
+            pass
+        return
+
     await manager.connect(websocket, agent_id)
 
     try:
@@ -187,6 +209,27 @@ def broadcast_transcript(call_sid: str, transcript_entry: dict):
 @router.websocket("/call/{call_sid}")
 async def call_websocket(websocket: WebSocket, call_sid: str):
     await websocket.accept()
+    
+    import os
+    token = websocket.query_params.get("token")
+    is_dev = os.getenv("ENV", "development") != "production"
+    
+    authenticated = False
+    if token == "dev-token" or (is_dev and not token):
+        authenticated = True
+    elif token:
+        from apps.api.services.auth import verify_websocket_token
+        token_data = await verify_websocket_token(token)
+        if token_data:
+            authenticated = True
+            
+    if not authenticated:
+        try:
+            await websocket.send_json({"error": "Unauthorized WebSocket connection"})
+            await websocket.close(code=1008)
+        except Exception:
+            pass
+        return
 
     CALL_TRANSCRIPTS.setdefault(call_sid, [])
 

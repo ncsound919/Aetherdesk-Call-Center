@@ -10,8 +10,8 @@ import os
 import httpx
 from playwright.sync_api import sync_playwright
 
-UI = "http://localhost:8000"
-API = "http://localhost:8000"
+UI = os.getenv("E2E_BASE_URL", "http://localhost:3000")
+API = os.getenv("E2E_API_URL", "http://localhost:8000")
 HEADERS = {"x-api-key": "dev-api-key"}
 SCREENSHOTS = os.path.join(os.path.dirname(__file__), "..", "..", ".screenshots")
 os.makedirs(SCREENSHOTS, exist_ok=True)
@@ -51,7 +51,11 @@ page.locator("text=Login").first.click()
 page.wait_for_url(lambda u: "/login" in u)
 page.locator("button:has-text('Sign In')").first.click()
 page.wait_for_url(lambda u: "/dashboard" in u)
-logged_in = page.locator(".sidebar").is_visible()
+try:
+    page.wait_for_selector(".sidebar", timeout=10000)
+    logged_in = True
+except Exception:
+    logged_in = False
 done("Login and reach dashboard", logged_in,
      "sidebar visible" if logged_in else "login failed")
 snap(page, "01_logged_in.png")
@@ -91,10 +95,17 @@ name_input = page.locator(
     "input[placeholder='Agent Name (e.g. Sarah)']"
 ).first
 name_input.fill("OUTBOUND SALES REP")
+page.locator("textarea[placeholder='Full System Prompt / Guidelines']").first.fill("You are an outbound sales rep designed to handle general sales queries.")
 page.locator("text=Deploy Agent Profile").first.click()
-page.wait_for_timeout(500)
-
-form_cleared = name_input.input_value() == ""
+try:
+    page.wait_for_function(
+        "el => el.value === ''",
+        arg=name_input.element_handle(),
+        timeout=5000
+    )
+    form_cleared = True
+except Exception:
+    form_cleared = False
 done("Create agent profile via Flow Designer", form_cleared,
      "name field cleared (deploy accepted)" if form_cleared else "deploy may have failed")
 
@@ -166,13 +177,22 @@ else:
 page.locator("input[placeholder='Acme Corp']").first.fill("Bay Area Tech")
 page.locator("input[placeholder='+15551234567']").first.fill("+15551000104")
 page.locator("button:has-text('Add')").first.click()
-page.wait_for_timeout(800)
-lead_added = page.locator("text=Bay Area Tech").first.is_visible(
-    timeout=5000
-)
-form_cleared2 = page.locator(
-    "input[placeholder='Acme Corp']"
-).first.input_value() == ""
+try:
+    page.wait_for_selector("text=Bay Area Tech", timeout=5000)
+    lead_added = True
+except Exception:
+    lead_added = False
+
+try:
+    page.wait_for_function(
+        "el => el.value === ''",
+        arg=page.locator("input[placeholder='Acme Corp']").first.element_handle(),
+        timeout=5000
+    )
+    form_cleared2 = True
+except Exception:
+    form_cleared2 = False
+
 done("Add lead via UI form", lead_added and form_cleared2,
      "lead visible in pipeline + form cleared" if lead_added else "lead not found")
 
@@ -208,6 +228,8 @@ httpx.post(
 )
 
 # Save via UI (triggers the same endpoint)
+page.locator("input[type='checkbox']").nth(0).set_checked(True)
+page.locator("input[type='checkbox']").nth(1).set_checked(True)
 page.locator("text=Save Safety Configuration").first.click()
 page.wait_for_timeout(500)
 

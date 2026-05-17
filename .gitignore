@@ -1,0 +1,44 @@
+# Byte-compiled / optimized / DLL files
+**/__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Node.js dependencies
+**/node_modules/
+node_modules/
+package-lock.json
+agent-ui/package-lock.json
+
+# Local database files
+*.db
+*.sqlite3
+aetherdesk.db
+aetherdesk.db-journal
+
+# Audio artifacts and cache
+*.wav
+*.mp3
+**/static/*.wav
+apps/api/static/
+
+# Environment files
+.env
+.venv/
+venv/
+env/
+ENV/
+.coverage
+.pytest_cache/
+
+# Build directories
+dist/
+build/
+agent-ui/dist/
+playwright-report/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -84,7 +84,7 @@ async def login(credentials: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     # Production mode: validate against database
-    with db_context() as conn:
+    async with db_context() as conn:
         if not conn:
             raise HTTPException(status_code=503, detail="Database unavailable")
 
