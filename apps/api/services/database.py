@@ -17,13 +17,13 @@ logger = structlog.get_logger()
 
 # ── Configuration ────────────────────────────────────────────────
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    None
-)
-if not DATABASE_URL:
-    raise RuntimeError("DATABASE_URL environment variable must be set for production.")
 USE_POSTGRES = os.getenv("USE_POSTGRES", "false").lower() == "true"
+
+DATABASE_URL = os.getenv("DATABASE_URL", None)
+
+# Only require DATABASE_URL when explicitly using Postgres
+if USE_POSTGRES and not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable must be set when USE_POSTGRES=true")
 
 # SQLite fallback (local dev)
 SQLITE_PATH = os.getenv("SQLITE_PATH", "aetherdesk.db")
@@ -40,13 +40,25 @@ try:
 except ImportError:
     _FERNET_AVAILABLE = False
 
+# DEV default: a valid 32-byte url-safe base64 key. Override via ENCRYPTION_KEY in production.
+_DEV_ENCRYPTION_KEY = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
+
+if USE_POSTGRES and not ENCRYPTION_KEY:
+    raise RuntimeError("ENCRYPTION_KEY environment variable must be set when USE_POSTGRES=true")
+
 if not ENCRYPTION_KEY:
-    raise RuntimeError("ENCRYPTION_KEY environment variable must be set for production.")
+    logger.warning("ENCRYPTION_KEY not set — using insecure dev default. Set this env var in production.")
+    ENCRYPTION_KEY = _DEV_ENCRYPTION_KEY
 
 _fernet = None
 if _FERNET_AVAILABLE:
-    _fernet = Fernet(ENCRYPTION_KEY.encode("utf-8"))
+    try:
+        _fernet = Fernet(ENCRYPTION_KEY.encode("utf-8"))
+    except Exception as e:
+        logger.error(f"Failed to initialize Fernet with provided ENCRYPTION_KEY: {e}. Encryption disabled.")
+        _fernet = None
 
 
 def encrypt_val(val: str) -> str:
@@ -785,9 +797,9 @@ CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_campaign_calls_tenant ON campaign_calls(tenant_id);
 
 INSERT OR IGNORE INTO plans (id, name, description, price_per_hour, price_per_day, price_per_week, price_per_month, max_concurrent_calls, max_agents, max_recordings_mb, features) VALUES
-('PLAN-STARTER', 'Starter', 'Small business plan', 2.50, 20.00, 80.00, 299.00, 2, 2, 500, '[\"basic_ivr\",\"call_recording\",\"basic_analytics\"]'),
-('PLAN-PRO', 'Pro', 'Growing business plan', 4.00, 35.00, 120.00, 499.00, 5, 5, 2000, '[\"smart_routing\",\"ai_assistant\",\"advanced_analytics\",\"multi_channel\"]'),
-('PLAN-ENTERPRISE', 'Enterprise', 'Large scale operations', 6.50, 55.00, 200.00, 999.00, 20, 20, 10000, '[\"custom_ai\",\"predictive_routing\",\"real_time_monitoring\",\"api_access\",\"dedicated_support\"]');
+('PLAN-STARTER', 'Starter', 'Small business plan', 2.50, 20.00, 80.00, 299.00, 2, 2, 500, '["basic_ivr","call_recording","basic_analytics"]'),
+('PLAN-PRO', 'Pro', 'Growing business plan', 4.00, 35.00, 120.00, 499.00, 5, 5, 2000, '["smart_routing","ai_assistant","advanced_analytics","multi_channel"]'),
+('PLAN-ENTERPRISE', 'Enterprise', 'Large scale operations', 6.50, 55.00, 200.00, 999.00, 20, 20, 10000, '["custom_ai","predictive_routing","real_time_monitoring","api_access","dedicated_support"]');
 """
 
 
