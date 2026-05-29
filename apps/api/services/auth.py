@@ -180,7 +180,7 @@ async def verify_api_key(x_api_key: str = Header(default=None)) -> str:
              x_api_key = "dev-api-key"
          else:
              raise HTTPException(status_code=401, detail="API key required")
-     if x_api_key == INTERNAL_API_KEY or (os.getenv("ENV") != "production" and x_api_key == "dev-api-key"):
+     if x_api_key == INTERNAL_API_KEY or (os.getenv("APP_ENV", "development") != "production" and x_api_key == "dev-api-key"):
          return "TENANT-001" # Default tenant for internal/dev
 
      from apps.api.services.database import get_tenant_by_api_key
@@ -202,7 +202,7 @@ async def verify_tenant_access(
      Dev mode (ENV != production) bypasses this check for internal keys.
      """
      # Dev/internal key bypass - check FIRST before any DB calls
-     is_dev = os.getenv("ENV", "development") != "production"
+     is_dev = os.getenv("APP_ENV", "development") != "production"
      if x_api_key == INTERNAL_API_KEY or (is_dev and x_api_key == "dev-api-key"):
          return tenant_id  # Allow access in dev mode
 

@@ -185,9 +185,19 @@ class TestAgentWorkflow:
         return resp.json()["id"]
 
     def test_full_agent_lifecycle(self, client):
-        tenant_id = self._create_tenant_for_agent_test(client)
+        # Use dev admin's tenant directly so JWT ownership check passes
+        tenant_id = "TENANT-001"
 
-        # Create Agent
+        # Login to get JWT token (needed for agent status endpoint)
+        login_resp = client.post(
+            "/api/v1/auth/login",
+            json={"email": "admin@aetherdesk.com", "password": "admin123"},
+        )
+        assert login_resp.status_code == 200
+        login_body = login_resp.json()
+        bearer = _bearer_headers(login_body.get("access_token") or login_body.get("token", ""))
+
+        # Create Agent under dev tenant (TENANT-001)
         resp = client.post(
             f"/api/v1/tenants/{tenant_id}/agents",
             json={"name": "E2E Agent", "agent_type": "ai", "skills": ["sales", "support"], "config": {"model": "llama-3.1-70b", "temperature": 0.7}},
@@ -205,11 +215,11 @@ class TestAgentWorkflow:
         agents = resp.json()
         assert agent_id in [a["id"] for a in agents]
 
-        # Update Agent Status
+        # Update Agent Status (requires JWT Bearer token with matching tenant_id)
         resp = client.patch(
             f"/api/v1/agents/{agent_id}/status",
             json={"status": "available"},
-            headers=_auth_headers(),
+            headers=bearer,
         )
         assert resp.status_code == 200
 

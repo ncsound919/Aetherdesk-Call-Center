@@ -11,6 +11,8 @@ import os
 import uuid
 import json
 import logging
+import hmac
+import hashlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
@@ -283,7 +285,7 @@ app.add_middleware(
     allow_origins=[os.getenv("CORS_ORIGIN", "https://app.aetherdesk.com")],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-API-Key"],
 )
 
 # =============================================================================
@@ -311,6 +313,7 @@ app.include_router(auth.router, prefix="/api/v1")
 # Middleware (HIPAA/GDPR Compliance)
 # =============================================================================
 from apps.api.middleware.audit import AuditMiddleware
+from apps.api.services.auth import WebSocketAuthMiddleware
 from apps.api.services.rate_limit import RateLimitMiddleware
 
 # Rate limiting middleware
@@ -318,6 +321,9 @@ app.add_middleware(RateLimitMiddleware)
 
 # HIPAA Audit Logging - must be after CORS, before routes
 app.add_middleware(AuditMiddleware)
+
+# WebSocket Authentication - must be after CORS, before routes
+app.add_middleware(WebSocketAuthMiddleware)
 
 # =============================================================================
 # Pydantic Models
@@ -786,9 +792,21 @@ async def delete_agent(tenant_id: str, agent_id: str, _=Depends(verify_tenant_ac
 
 
 @app.patch("/api/v1/agents/{agent_id}/status")
-async def handle_update_agent_status(agent_id: str, status: AgentStatusUpdate):
+async def handle_update_agent_status(
+    agent_id: str,
+    status: AgentStatusUpdate,
+    current_user: dict = Depends(get_current_user),
+):
     """Update agent status with real-time WebSocket notification"""
     result = await update_agent_status(agent_id, status.status, status.session_ref)
+
+    # Ownership check: agent must belong to the token's tenant
+    agent = await get_agent_db(agent_id)
+    if agent and agent.get("tenant_id") != current_user.get("tenant_id"):
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: agent does not belong to this tenant",
+        )
 
     # Publish status change to Redis for real-time updates
     await safe_redis_publish(
@@ -889,11 +907,22 @@ async def create_call(call: CallCreate, tenant_id: str = Depends(verify_tenant_a
 
 
 @app.post("/api/v1/calls/{call_id}/action")
-async def call_action(call_id: str, action: CallAction):
+async def call_action(
+    call_id: str,
+    action: CallAction,
+    tenant_id: str = Depends(verify_tenant_access),
+):
     """Perform call action via Fonster"""
     call_session = await get_call_session(call_id)
     if not call_session:
         raise HTTPException(status_code=404, detail="Call not found")
+
+    # IDOR protection: confirm call belongs to requesting tenant
+    if call_session.get("tenant_id") != tenant_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: call does not belong to this tenant",
+        )
 
     await log_audit_event(
         tenant_id=call_session.get("tenant_id", ""),
@@ -995,8 +1024,28 @@ async def list_calls(
 # Webhook Handler for Fonster Events
 # =============================================================================
 @app.post("/api/v1/webhooks/fonster")
-async def fonster_webhook(request: Request, background_tasks: BackgroundTasks):
+async def fonster_webhook(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    x_fonoster_signature: str = Header(default=None),
+):
     """Handle Fonster call events (call.answered, call.completed, call.failed)"""
+    # HMAC signature verification
+    fonster_webhook_secret = os.getenv("FONOSTER_WEBHOOK_SECRET")
+    if fonster_webhook_secret and x_fonoster_signature:
+        raw_body = await request.body()
+        expected_sig = hmac.new(
+            fonster_webhook_secret.encode(),
+            raw_body,
+            hashlib.sha256,
+        ).hexdigest()
+        if not hmac.compare_digest(expected_sig, x_fonoster_signature):
+            raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    elif fonster_webhook_secret and not x_fonoster_signature:
+        # Secret is configured but no signature sent — reject in non-dev mode
+        if os.getenv("APP_ENV", "development") == "production":
+            raise HTTPException(status_code=401, detail="Missing webhook signature")
+
     payload = await request.json()
     event_type = payload.get("event_type")
     call_id = payload.get("call_id")
@@ -1043,14 +1092,10 @@ async def get_usage(
     x_api_key: str = Header(default="dev-api-key"),
     period_start: datetime = Query(default=None),
     period_end: datetime = Query(default=None),
+    _=Depends(verify_tenant_access),
 ):
     """Get usage analytics for a tenant"""
     # Use verify_tenant_access for authorization
-    try:
-        tenant_id = await verify_tenant_access(tenant_id, x_api_key)
-    except HTTPException:
-        # In dev mode, allow access
-        pass
 
     # Default to last 7 days if not specified
     now = datetime.now(timezone.utc)
@@ -1099,14 +1144,10 @@ async def get_billing(
     x_api_key: str = Header(default="dev-api-key"),
     period_start: datetime = Query(default=None),
     period_end: datetime = Query(default=None),
+    _=Depends(verify_tenant_access),
 ):
     """Get billing summary"""
     # Use verify_tenant_access for authorization
-    try:
-        tenant_id = await verify_tenant_access(tenant_id, x_api_key)
-    except HTTPException:
-        # In dev mode, allow access
-        pass
 
     # Default to last 7 days if not specified
     now = datetime.now(timezone.utc)
@@ -1133,7 +1174,7 @@ async def get_billing(
 # Real-Time WebSocket
 # =============================================================================
 @app.websocket("/ws/calls/{tenant_id}")
-async def websocket_calls(websocket: WebSocket, tenant_id: str):
+async def websocket_calls(websocket: WebSocket, tenant_id: str, _=Depends(verify_tenant_access)):
     """WebSocket for real-time call status updates"""
     await websocket.accept()
     pubsub = None
@@ -1172,17 +1213,18 @@ async def websocket_agent(websocket: WebSocket, agent_id: str):
         while True:
             pubsub = redis_client.pubsub() if redis_client else None
             if pubsub:
-                await pubsub.subscribe(f"agent:{agent_id}:assignments")
-                message = await pubsub.get_message(timeout=30.0)
+                try:
+                    await pubsub.subscribe(f"agent:{agent_id}:assignments")
+                    message = await pubsub.get_message(timeout=30.0)
 
-                if message and message["type"] == "message":
-                    call_data = json.loads(message["data"])
-                    await websocket.send_json({
-                        "type": "call_assignment",
-                        **call_data
-                    })
-
-                await pubsub.unsubscribe(f"agent:{agent_id}:assignments")
+                    if message and message["type"] == "message":
+                        call_data = json.loads(message["data"])
+                        await websocket.send_json({
+                            "type": "call_assignment",
+                            **call_data
+                        })
+                finally:
+                    await pubsub.unsubscribe(f"agent:{agent_id}:assignments")
             else:
                 await asyncio.sleep(1)
 
