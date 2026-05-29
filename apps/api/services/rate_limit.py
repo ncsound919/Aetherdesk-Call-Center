@@ -40,7 +40,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         # Apply rate limiting to all endpoints except static files and health checks
-        if any(skip in request.url.path for skip in ["/static/", "/docs", "/redoc", "/metrics"]):
+        if any(skip in request.url.path for skip in ["/static/", "/docs", "/redoc", "/metrics", "/health"]):
             return await call_next(request)
 
         client_ip = self._get_client_ip(request)
