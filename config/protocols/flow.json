@@ -1,0 +1,15 @@
+{
+  "nodes": {
+    "start": {
+      "prompt": "Welcome!",
+      "field": "name",
+      "validate": "required",
+      "next": "done"
+    },
+    "done": {
+      "prompt": "All set.",
+      "next": "end",
+      "on_ok": "Yes No"
+    }
+  }
+}

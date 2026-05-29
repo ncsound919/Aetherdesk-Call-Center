@@ -1,0 +1,54 @@
+# AetherDesk Call Center - API Requirements
+# Python 3.11+ recommended (3.12 has issues with some dependencies)
+
+# Web Framework
+fastapi>=0.104.0,<1.0
+uvicorn>=0.24.0,<1.0
+gunicorn>=21.2.0
+
+# Database
+asyncpg>=0.29.0
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+
+# Redis
+redis[hiredis]>=5.0
+aioredis>=2.0
+
+# HTTP Client
+httpx>=0.25.0
+
+# Auth & Security
+pyjwt>=2.8
+python-dotenv>=1.0
+passlib[bcrypt]>=1.7
+
+# Encryption (HIPAA compliance)
+cryptography>=41.0
+
+# Speech Services
+deepgram-sdk>=3.0
+httpx>=0.27.0
+groq>=0.4
+
+# ASR/TTS Fallbacks
+whisper>=1.0
+edge-tts>=6.1
+
+# Struct Logging
+structlog>=23.0
+
+# Pydantic
+pydantic>=2.0,<3.0
+
+# Testing
+pytest>=7.4
+pytest-asyncio>=0.23
+httpx>=0.25
+
+# Playwright (for E2E tests)
+playwright>=1.40
+
+# Utilities
+aiofiles>=23.0
+python-multipart>=0.0.6

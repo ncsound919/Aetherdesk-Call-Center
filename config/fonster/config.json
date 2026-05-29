@@ -1,0 +1,88 @@
+{
+  "name": "AetherDesk Call Center",
+  "environment": "production",
+  "version": "1.0.0",
+
+  "webhook": {
+    "url": "https://api.aetherdesk.com/api/v1/webhooks/fonster",
+    "events": [
+      "call.answered",
+      "call.completed",
+      "call.failed",
+      "call.transcription_ready",
+      "call.recording_ready",
+      "agent.status_changed"
+    ],
+    "secret": "${WEBHOOK_SECRET}"
+  },
+
+  "stt": {
+    "engine": "deepgram",
+    "config": {
+      "model": "nova-2",
+      "language_code": "en-US",
+      "enable_punctuations": true,
+      "enable_profanity_filter": true,
+      "redact_pii": true
+    },
+    "api_key": "${DEEPGRAM_API_KEY}"
+  },
+
+  "tts": {
+    "engine": "chatterbox",
+    "config": {
+      "voice": "default",
+      "emotion": "neutral",
+      "language": "en-US"
+    },
+    "api_key": "chatterbox-local"
+  },
+
+  "llm": {
+    "provider": "groq",
+    "model": "llama-3.1-70b-versatile",
+    "config": {
+      "temperature": 0.7,
+      "max_tokens": 1024,
+      "top_p": 0.9,
+      "stream": false
+    },
+    "api_key": "${GROQ_API_KEY}"
+  },
+
+  "tenant": {
+    "default_tenant_id": "${DEFAULT_TENANT_ID}",
+    "default_tenant_name": "AetherDesk Default",
+    "timezone": "America/New_York",
+    "language": "en-US"
+  },
+
+  "sip": {
+    "trunk_host": "${SIP_TRUNK_HOST}",
+    "trunk_username": "${SIP_TRUNK_USERNAME}",
+    "trunk_password": "${SIP_TRUNK_PASSWORD}",
+    "trunk_from": "${SIP_TRUNK_FROM}",
+    "port": 5060,
+    "transport": "udp",
+    "rtp_start_port": 10000,
+    "rtp_end_port": 20000
+  },
+
+  "call_settings": {
+    "max_concurrent_calls": 10,
+    "call_timeout_seconds": 3600,
+    "recording_enabled": true,
+    "recording_format": "wav",
+    "retention_days": 365,
+    "silence_timeout_seconds": 30
+  },
+
+  "features": {
+    "enable_ivr": true,
+    "enable_call_recording": true,
+    "enable_transcription": true,
+    "enable_sentiment_analysis": true,
+    "enable_queue_callback": true,
+    "enable_agent_assist": true
+  }
+}

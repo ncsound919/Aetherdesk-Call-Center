@@ -1,0 +1,15 @@
+{
+  "nodes": {
+    "start": {
+      "prompt": "Welcome! Enter your name.",
+      "field": "name",
+      "validate": "required",
+      "next": "q_name"
+    },
+    "q_name": {
+      "prompt": "Thanks {name}. Confirm?",
+      "next": "end",
+      "on_ok": "Yes No"
+    }
+  }
+}

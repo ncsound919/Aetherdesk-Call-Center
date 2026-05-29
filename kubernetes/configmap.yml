@@ -1,0 +1,152 @@
+# ============================================
+# AetherDesk Call Center - ConfigMap
+# Centralized configuration for all services
+# ============================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aetherdesk-app-config
+  namespace: aetherdesk
+data:
+  # Application Settings
+  APP_ENV: "production"
+  APP_URL: "https://app.aetherdesk.com"
+  API_URL: "https://api.aetherdesk.com"
+
+  # Database
+  DB_HOST: "aetherdesk-db"
+  DB_PORT: "5432"
+  DB_NAME: "aetherdesk"
+
+  # Redis
+  REDIS_HOST: "aetherdesk-redis"
+  REDIS_PORT: "6379"
+
+  # Fonoster
+  FONOSTER_HOST: "aetherdesk-fonoster"
+  FONOSTER_PORT: "50061"
+  FONOSTER_API_URL: "http://aetherdesk-fonoster:50062"
+
+  # FreeSWITCH
+  FS_HOST: "aetherdesk-freeswitch"
+  FS_PORT: "5060"
+  FS_ESL_HOST: "aetherdesk-freeswitch"
+  FS_ESL_PORT: "8021"
+
+# AI/ML Services
+  STT_ENGINE: "deepgram"
+  TTS_ENGINE: "chatterbox,qwen3"
+  TTS_FALLBACK_ORDER: "chatterbox,qwen3"
+  LLM_PROVIDER: "groq"
+  DEEPGRAM_API_KEY: "REPLACE_WITH_DEEPGRAM_API_KEY"
+  GROQ_API_KEY: "REPLACE_WITH_GROQ_API_KEY"
+  QWEN_MODEL: "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+
+  # SIP Trunk
+  SIP_TRUNK_HOST: "REPLACE_WITH_SIP_TRUNK_HOST"
+  SIP_TRUNK_USERNAME: "REPLACE_WITH_SIP_TRUNK_USERNAME"
+  SIP_TRUNK_PASSWORD: "REPLACE_WITH_SIP_TRUNK_PASSWORD"
+
+  # Compliance
+  GDPR_COMPLIANT: "true"
+  HIPAA_COMPLIANT: "true"
+  DATA_RESIDENCY: "us-east1"
+  ENCRYPTION_AT_REST: "true"
+  ENCRYPTION_IN_TRANSIT: "true"
+
+  # Limits
+  MAX_CONCURRENT_CALLS: "10"
+  MAX_RECORDINGS_SIZE: "1000"
+  CALL_RECORDING_RETENTION_DAYS: "365"
+
+  # Feature Flags
+  ENABLE_CALL_RECORDING: "true"
+  ENABLE_TRANSCRIPTION: "true"
+  ENABLE_SENTIMENT_ANALYSIS: "true"
+  ENABLE_IVR: "true"
+  ENABLE_QUEUE_CALLBACK: "true"
+
+---
+# ============================================
+# HPA - Horizontal Pod Autoscaler
+# ============================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aetherdesk-fonoster-hpa
+  namespace: aetherdesk
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aetherdesk-fonoster
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aetherdesk-freeswitch-hpa
+  namespace: aetherdesk
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aetherdesk-freeswitch
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 75
+
+---
+# ============================================
+# ServiceAccount for Backup CronJob
+# ============================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backup-sa
+  namespace: aetherdesk
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: backup-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "pods/log"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: backup-role-binding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: backup-role
+subjects:
+  - kind: ServiceAccount
+    name: backup-sa
+    namespace: aetherdesk
