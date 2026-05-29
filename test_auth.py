@@ -6,7 +6,7 @@ import sys
 import time
 import httpx
 
-os.chdir(r"C:\Users\User\Desktop\aetherdesk_scaffold")
+os.chdir(r"C:\Users\User\Desktop\Aetherdesk-Call-Center-main")
 
 # Start API server
 print("Starting API server...")
@@ -43,13 +43,13 @@ try:
 except Exception as e:
     print(f"Health failed: {e}")
 
-# Test auth login
-try:
-    r = httpx.post("http://127.0.0.1:8000/auth/login", json={
-        "email": "admin@aetherdesk.com",
-        "password": "admin123"
-    }, timeout=5)
-    print(f"\nLogin: {r.status_code}")
-    print(r.text[:500])
-except Exception as e:
-    print(f"Login failed: {e}")
+    # Test auth login
+    try:
+        r = httpx.post("http://127.0.0.1:8000/api/v1/auth/login", json={
+            "email": "admin@aetherdesk.com",
+            "password": "admin123"
+        }, timeout=5)
+        print(f"\nLogin: {r.status_code}")
+        print(r.text[:500])
+    except Exception as e:
+        print(f"Login failed: {e}")

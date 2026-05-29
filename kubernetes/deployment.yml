@@ -55,6 +55,33 @@ data:
   CALL_RECORDING_RETENTION_DAYS: "365"
 
 ---
+# FreeSWITCH Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: freeswitch-config
+  namespace: aetherdesk
+data:
+  vars.xml: |
+    <X-PRE-PROCESS cmd="set" data="bind_local_addr=0.0.0.0"/>
+    <X-PRE-PROCESS cmd="set" data="external_ssl_enable=true"/>
+    <X-PRE-PROCESS cmd="set" data="outer_address=$${local_ip_v4}"/>
+    <X-PRE-PROCESS cmd="set" data="alias=$${local_ip_v4}"/>
+    <X-PRE-PROCESS cmd="set" data="sip_trace=yes"/>
+    <X-PRE-PROCESS cmd="set" data="sip_trace_level=9"/>
+    <X-PRE-PROCESS cmd="set" data="sip_trace_in=true"/>
+    <X-PRE-PROCESS cmd="set" data="sip_trace_out=true"/>
+    <X-PRE-PROCESS cmd="set" data="sip_trace_console=true"/>
+    <X-PRE-PROCESS cmd="set" data="debug=0"/>
+    <X-PRE-PROCESS cmd="set" data="console_loglevel=0"/>
+    <X-PRE-PROCESS cmd="set" data="loglevel=0"/>
+    <X-PRE-PROCESS cmd="set" data="max_sessions=2000"/>
+    <X-PRE-PROCESS cmd="set" data="sip_port=5060"/>
+    <X-PRE-PROCESS cmd="set" data="tls_port=5061"/>
+    <X-PRE-PROCESS cmd="set" data="esl_port=8021"/>
+    <X-PRE-PROCESS cmd="set" data="websocket_port=7443"/>
+
+---
 # ============================================
 # SealedSecrets (Replaces plaintext Opaque Secret)
 # ============================================
@@ -86,18 +113,84 @@ spec:
 
 ---
 # ============================================
-# Network Policies (Zero-Trust Architecture)
+# API Gateway / SaaS Platform
 # ============================================
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
+apiVersion: v1
+kind: Service
 metadata:
-  name: default-deny-all
+  name: aetherdesk-api
   namespace: aetherdesk
 spec:
-  podSelector: {}
-  policyTypes:
-    - Ingress
-    - Egress
+  selector:
+    app: aetherdesk-api
+  ports:
+    - port: 80
+      targetPort: 3000
+      protocol: TCP
+  type: LoadBalancer
+
+---
+# ============================================
+# Web Frontend
+# ============================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aetherdesk-web
+  namespace: aetherdesk
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aetherdesk-web
+  template:
+    metadata:
+      labels:
+        app: aetherdesk-web
+        app-group: aetherdesk
+    spec:
+      containers:
+        - name: web
+          image: aetherdesk/web:latest
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: aetherdesk-config
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-web
+  namespace: aetherdesk
+spec:
+  selector:
+    app: aetherdesk-web
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+  type: ClusterIP
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -481,9 +574,15 @@ spec:
       labels:
         app: aetherdesk-freeswitch
         app-group: aetherdesk
-    spec:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
+spec:
+       # hostNetwork: true is required for FreeSWITCH to directly access SIP/UDP ports
+       # without NAT traversal issues. This is compensated by:
+       # 1. Restrictive network policies limiting egress/ingress
+       # 2. Running FreeSWITCH as non-root user
+       # 3. Limited host filesystem access (only /var/freeswitch mounted)
+       # 4. Seccomp and AppArmor profiles (to be implemented)
+       hostNetwork: true
+       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: freeswitch
           image: fonoster/freeswitch:latest
