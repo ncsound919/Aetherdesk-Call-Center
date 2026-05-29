@@ -197,6 +197,7 @@ class TestAgentManagement:
         assert len(agents) >= 2
 
     def test_update_agent_status(self, client):
+        from apps.api.services.auth import generate_access_token
         email = self._uniq("status@ltd")
         tenant = client.post(
             "/api/v1/tenants",
@@ -210,10 +211,16 @@ class TestAgentManagement:
             headers={"x-api-key": "dev-api-key"},
         )
         agent_id = agent.json()["id"]
+        # Generate JWT scoped to the new tenant so ownership check passes
+        token = generate_access_token({
+            "sub": f"user-{tenant_id}",
+            "tenant_id": tenant_id,
+            "role": "admin",
+        })
         resp = client.patch(
             f"/api/v1/agents/{agent_id}/status",
             json={"status": "available"},
-            headers={"x-api-key": "dev-api-key"},
+            headers={"Authorization": f"Bearer {token}"},
         )
         assert resp.status_code == 200
 

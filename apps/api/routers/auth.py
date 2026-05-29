@@ -1,5 +1,6 @@
 import os
 import structlog
+import logging
 from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -10,8 +11,9 @@ from apps.api.services.database import get_user_by_email_db
 from apps.api.services.auth import generate_access_token, token_store
 
 logger = structlog.get_logger()
+_auth_logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/auth", tags=["auth"])
+router = APIRouter()
 
 # Dev mode credentials — only active when APP_ENV=development
 # Override via DEV_ADMIN_PASSWORD / DEV_AGENT_PASSWORD env vars
@@ -30,7 +32,15 @@ DEV_USERS = {
         "role": "agent",
         "name": "Test Agent",
     },
-}
+    }
+
+# Startup warning — log once at import time
+if os.getenv("APP_ENV", "development") == "development":
+    _auth_logger.warning(
+        "DEV_USERS are active (APP_ENV=development). "
+        "These accounts (admin@aetherdesk.com, agent@aetherdesk.com) "
+        "must NEVER be reachable in production."
+    )
 
 
 class LoginRequest(BaseModel):
@@ -39,6 +49,10 @@ class LoginRequest(BaseModel):
 
 
 class LoginResponse(BaseModel):
+    # OAuth2-compatible fields (used by frontend and E2E tests)
+    access_token: str
+    token_type: str = "bearer"
+    # Legacy fields (kept for backward compatibility)
     token: str
     tenantId: str
     userId: str
@@ -65,6 +79,8 @@ async def login(credentials: LoginRequest):
                 "role": user["role"],
             })
             return LoginResponse(
+                access_token=token,
+                token_type="bearer",
                 token=token,
                 tenantId=user["tenant_id"],
                 userId=user["user_id"],
@@ -95,6 +111,8 @@ async def login(credentials: LoginRequest):
     })
 
     return LoginResponse(
+        access_token=token,
+        token_type="bearer",
         token=token,
         tenantId=row["tenant_id"],
         userId=row["id"],
