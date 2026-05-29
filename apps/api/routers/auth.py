@@ -13,7 +13,7 @@ from apps.api.services.auth import generate_access_token, token_store
 logger = structlog.get_logger()
 _auth_logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Dev mode credentials — only active when APP_ENV=development
 # Override via DEV_ADMIN_PASSWORD / DEV_AGENT_PASSWORD env vars
