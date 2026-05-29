@@ -1,0 +1,26 @@
+{
+  "nodes": {
+    "start": {
+      "prompt": "How can I help you today?",
+      "next": "route"
+    },
+    "route": {
+      "action": "llm_route",
+      "on_ok": "confirm_route",
+      "on_fail": "agent_handoff"
+    },
+    "confirm_route": {
+      "prompt": "I understand you need help with {{topic}}. Is that correct?",
+      "options": [
+        "yes:end",
+        "no:start"
+      ]
+    },
+    "end": {
+      "action": "complete"
+    },
+    "agent_handoff": {
+      "action": "handoff"
+    }
+  }
+}

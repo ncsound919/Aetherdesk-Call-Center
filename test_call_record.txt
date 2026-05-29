@@ -1,0 +1,1 @@
+('lookup_invoice', {'invoice_id': 'INV-123'})|{'tenant_id': 'TENANT-001'}

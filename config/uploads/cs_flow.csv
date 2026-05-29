@@ -1,0 +1,4 @@
+node,prompt,field,validate,next,action,on_ok,on_fail,options
+greeting,Hello! How can I help?,intent,required,route,,,,
+route,Based on your {intent}...,,,menu,menu,Refill,Billing,Support
+menu,Thanks! Let me handle that.,,,end,,,

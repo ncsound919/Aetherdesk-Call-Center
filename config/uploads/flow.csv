@@ -1,0 +1,3 @@
+node,prompt,field,validate,next,action,on_ok,on_fail,options
+start,Welcome!,name,required,done,,,,
+done,All set.,,,end,,Yes No,

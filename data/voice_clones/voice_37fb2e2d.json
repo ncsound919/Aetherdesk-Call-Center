@@ -1,0 +1,10 @@
+{
+  "voice_id": "voice_37fb2e2d",
+  "name": "cloned_voice_37fb2e2d",
+  "language": "en-US",
+  "source": "browser_recording",
+  "engine": "chatterbox",
+  "created_at": "1780061805.5240307",
+  "chatterbox_voice_id": null,
+  "fallback": true
+}

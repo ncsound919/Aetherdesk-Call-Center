@@ -1,0 +1,33 @@
+{
+  "nodes": {
+    "start": {
+      "prompt": "I'll help with your order. What's your order ID?",
+      "field": "order_id",
+      "next": "zip"
+    },
+    "zip": {
+      "prompt": "What's the shipping ZIP code?",
+      "field": "zip",
+      "validate": "^[0-9]{5}$",
+      "next": "check_status"
+    },
+    "check_status": {
+      "action": "lookup_order",
+      "on_ok": "show_status",
+      "on_fail": "agent_handoff"
+    },
+    "show_status": {
+      "prompt": "Your order is {{status}}. Expected delivery: {{delivery_date}}. Anything else?",
+      "options": [
+        "yes:start",
+        "no:end"
+      ]
+    },
+    "end": {
+      "action": "complete"
+    },
+    "agent_handoff": {
+      "action": "handoff"
+    }
+  }
+}

@@ -1,0 +1,261 @@
+# AetherDesk Call Center - Kubernetes Service Definitions
+# These services expose the internal components for communication
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-api
+  namespace: aetherdesk
+  labels:
+    app: aetherdesk-api
+spec:
+  selector:
+    app: aetherdesk-api
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-agent-ui
+  namespace: aetherdesk
+  labels:
+    app: aetherdesk-agent-ui
+spec:
+  selector:
+    app: aetherdesk-agent-ui
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+  type: LoadBalancer
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-fonoster-api
+  namespace: aetherdesk
+  labels:
+    app: aetherdesk-fonoster
+spec:
+  selector:
+    app: aetherdesk-fonoster
+  ports:
+    - name: api
+      port: 50062
+      targetPort: 50062
+      protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-fonoster-voice
+  namespace: aetherdesk
+  labels:
+    app: aetherdesk-fonoster
+spec:
+  selector:
+    app: aetherdesk-fonoster
+  ports:
+    - name: voice
+      port: 50061
+      targetPort: 50061
+      protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-chatterbox
+  namespace: aetherdesk
+  labels:
+    app: aetherdesk-chatterbox
+spec:
+  selector:
+    app: aetherdesk-chatterbox
+  ports:
+    - name: http
+      port: 5001
+      targetPort: 5001
+      protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aetherdesk-chatterbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aetherdesk-chatterbox
+  template:
+    metadata:
+      labels:
+        app: aetherdesk-chatterbox
+        app-group: aetherdesk
+    spec:
+      containers:
+        - name: chatterbox
+          image: ghcr.io/resembleai/chatterbox:latest
+          ports:
+            - containerPort: 5001
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "4Gi"
+              cpu: "2000m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-qwen3-tts
+  namespace: aetherdesk
+  labels:
+    app: aetherdesk-qwen3-tts
+spec:
+  selector:
+    app: aetherdesk-qwen3-tts
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+      protocol: TCP
+  type: ClusterIP
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aetherdesk-qwen3-tts
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aetherdesk-qwen3-tts
+  template:
+    metadata:
+      labels:
+        app: aetherdesk-qwen3-tts
+        app-group: aetherdesk
+    spec:
+      nodeSelector:
+        workload-type: gpu-ai
+      tolerations:
+        - key: nvidia.com/gpu
+          value: present
+          effect: NoSchedule
+      containers:
+        - name: qwen3-tts
+          image: qwen/qwen-tts:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: MODEL_ID
+              value: "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+          resources:
+            requests:
+              memory: "4Gi"
+              cpu: "2000m"
+              nvidia.com/gpu: "1"
+            limits:
+              memory: "8Gi"
+              cpu: "4000m"
+              nvidia.com/gpu: "1"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aetherdesk-agent-ui
+  namespace: aetherdesk
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aetherdesk-agent-ui
+  template:
+    metadata:
+      labels:
+        app: aetherdesk-agent-ui
+        app-group: aetherdesk
+    spec:
+      containers:
+        - name: agent-ui
+          image: aetherdesk/ui:latest
+          ports:
+            - containerPort: 80
+          env:
+            - name: VITE_API_URL
+              value: "https://api.aetherdesk.com"
+            - name: VITE_WS_URL
+              value: "wss://api.aetherdesk.com/ws"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aetherdesk-ui-hpa
+  namespace: aetherdesk
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aetherdesk-agent-ui
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-webhook-processor
+  namespace: aetherdesk
+spec:
+  selector:
+    app: aetherdesk-api
+  ports:
+    - name: webhook
+      port: 3000
+      targetPort: 3000
+  type: ClusterIP

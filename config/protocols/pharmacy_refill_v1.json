@@ -1,0 +1,27 @@
+{
+  "nodes": {
+    "start": {
+      "prompt": "I can help with prescription refills. What's your prescription number?",
+      "field": "rx_number",
+      "next": "verify"
+    },
+    "verify": {
+      "action": "verify_rx",
+      "on_ok": "confirm",
+      "on_fail": "start"
+    },
+    "confirm": {
+      "prompt": "Your prescription is ready for pickup. Need anything else?",
+      "options": [
+        "yes:start",
+        "no:end"
+      ]
+    },
+    "end": {
+      "action": "complete"
+    },
+    "agent_handoff": {
+      "action": "handoff"
+    }
+  }
+}
