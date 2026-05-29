@@ -75,7 +75,7 @@ async def clone_voice(
             )
 
         voice_id = f"voice_{uuid.uuid4().hex[:8]}"
-        temp_path = os.path.join(VOICE_CLONES_DIR, f"{voice_id}_temp")
+        temp_path = os.path.join(VOICE_CLONES_DIR, f"{voice_id}_{uuid.uuid4().hex}_temp")
 
         with open(temp_path, "wb") as f:
             f.write(content)
