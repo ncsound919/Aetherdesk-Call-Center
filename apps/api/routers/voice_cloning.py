@@ -168,7 +168,7 @@ async def process_voice_clone(voice_id: str, audio_path: str, language: str) -> 
     return voice_profile
 
 
-@router.get("/clones")
+@router.get("/clones", dependencies=[Depends(verify_api_key)])
 async def list_voice_clones():
     """List all available voice clones."""
     clones = []
@@ -208,7 +208,7 @@ async def list_voice_clones():
     return {"voices": clones}
 
 
-@router.get("/clones/{voice_id}")
+@router.get("/clones/{voice_id}", dependencies=[Depends(verify_api_key)])
 async def get_voice_clone(voice_id: str):
     """Get details of a specific voice clone."""
     profile_copy = _profile_store.get_copy(voice_id)
@@ -223,7 +223,7 @@ async def get_voice_clone(voice_id: str):
     raise HTTPException(status_code=404, detail="Voice clone not found")
 
 
-@router.delete("/clones/{voice_id}")
+@router.delete("/clones/{voice_id}", dependencies=[Depends(verify_api_key)])
 async def delete_voice_clone(voice_id: str):
     """Delete a voice clone."""
     _profile_store.delete(voice_id)
@@ -238,7 +238,7 @@ async def delete_voice_clone(voice_id: str):
     return {"message": "Voice clone deleted"}
 
 
-@router.post("/set-default")
+@router.post("/set-default", dependencies=[Depends(verify_api_key)])
 async def set_default_voice(voice_id: str):
     """Set the default voice for TTS."""
     if not _profile_store.contains(voice_id):
@@ -255,7 +255,7 @@ async def set_default_voice(voice_id: str):
     return {"message": f"Default voice set to {voice_id}"}
 
 
-@router.get("/default")
+@router.get("/default", dependencies=[Depends(verify_api_key)])
 async def get_default_voice():
     """Get the default voice configuration."""
     config_path = os.path.join(os.path.dirname(__file__), "../../../config/default_voice.json")
