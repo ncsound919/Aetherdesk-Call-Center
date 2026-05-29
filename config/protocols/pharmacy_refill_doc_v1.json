@@ -1,0 +1,26 @@
+{
+  "nodes": {
+    "start": {
+      "prompt": "I'll arrange a doctor callback for your prescription. What's your date of birth?",
+      "field": "patient_dob",
+      "next": "doctor_name"
+    },
+    "doctor_name": {
+      "prompt": "What doctor would you like to speak with?",
+      "field": "doctor_name",
+      "next": "confirm"
+    },
+    "confirm": {
+      "action": "request_callback",
+      "on_ok": "end",
+      "on_fail": "agent_handoff"
+    },
+    "end": {
+      "prompt": "You'll receive a call within 24 hours. Thank you!",
+      "action": "complete"
+    },
+    "agent_handoff": {
+      "action": "handoff"
+    }
+  }
+}

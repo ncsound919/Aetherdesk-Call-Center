@@ -1,0 +1,116 @@
+[build-system]
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
+
+[project]
+name = "aetherdesk"
+version = "0.1.0"
+description = "Voice AI agent platform with modular ASR/LLM/TTS pipeline"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "AetherDesk Team", email = "team@aetherdesk.com"},
+]
+
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "redis>=5.0.0",
+    "python-dotenv>=1.0.0",
+    "twilio>=9.0.0",
+    "websockets>=12.0",
+    "faster-whisper>=0.10.0",
+    "realtimetts>=0.6.0",
+    "numpy>=1.24.0",
+    "httpx>=0.25.0",
+    "langchain>=0.1.0",
+    "langchain-community>=0.0.10",
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+    "structlog>=23.0.0",
+    "prometheus-client>=0.19.0",
+    "gtts>=2.3.0",
+    "pydantic>=2.5.0",
+    "sqlalchemy>=2.0.0",
+    "psycopg2-binary>=2.9.0",
+    "pgvector>=0.2.0",
+    "aiocircuitbreaker>=1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "black>=23.11.0",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+    "pre-commit>=3.5.0",
+    "pytest-cov>=4.1.0",
+    "playwright>=1.40.0",
+]
+
+ml = [
+    "torch>=2.1.0; platform_system != 'darwin'",
+    "torchaudio>=2.1.0; platform_system != 'darwin'",
+    "transformers>=4.36.0",
+]
+
+[tool.uv]
+exclude-newer = "2026-12-31T00:00:00Z"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=apps --cov-report=term-missing --cov-report=html"
+markers = [
+    "e2e_core: Core E2E tests that gate every PR (no ML dependencies, deterministic)",
+    "e2e_ml: ML-dependent E2E tests run nightly with pinned scientific deps",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["apps"]
+
+[project.urls]
+Homepage = "https://github.com/your-org/aetherdesk"
+Repository = "https://github.com/your-org/aetherdesk"
+Issues = "https://github.com/your-org/aetherdesk/issues"

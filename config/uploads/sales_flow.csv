@@ -1,0 +1,4 @@
+node,prompt,field,validate,next,action,on_ok,on_fail,options
+start,Welcome! What is your name?,name,required,verify,,"Sorry, let's try again.",,
+verify,Thanks {name}. Can I confirm?,,,close,,Yes,No
+close,Great! We'll be in touch.,,,end,,,

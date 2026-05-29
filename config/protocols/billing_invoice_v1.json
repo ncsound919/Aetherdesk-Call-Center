@@ -1,0 +1,34 @@
+{
+  "nodes": {
+    "start": {
+      "prompt": "Please enter your invoice ID",
+      "field": "invoice_id",
+      "validate": "^[A-Z0-9-]{6,18}$",
+      "next": "ask_zip"
+    },
+    "ask_zip": {
+      "prompt": "Please enter your billing ZIP code",
+      "field": "zip",
+      "validate": "^[0-9]{5}$",
+      "next": "fetch_invoice"
+    },
+    "fetch_invoice": {
+      "action": "lookup_invoice",
+      "on_ok": "show_summary",
+      "on_fail": "agent_handoff"
+    },
+    "show_summary": {
+      "prompt": "Invoice {{invoice_id}} for ZIP {{zip}} is {{status}}. Amount: {{amount}}. Need agent?",
+      "options": [
+        "yes:agent_handoff",
+        "no:end"
+      ]
+    },
+    "agent_handoff": {
+      "action": "handoff"
+    },
+    "end": {
+      "action": "complete"
+    }
+  }
+}

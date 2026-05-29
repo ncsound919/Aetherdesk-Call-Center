@@ -1,0 +1,47 @@
+{
+  "refill:id_lookup": {
+    "protocol_id": "pharmacy_refill_v1",
+    "queue": "rx",
+    "fields": [
+      "rx_number"
+    ]
+  },
+  "refill:doctor_callback": {
+    "protocol_id": "pharmacy_refill_doc_v1",
+    "queue": "rx",
+    "fields": [
+      "patient_dob",
+      "doctor_name"
+    ]
+  },
+  "billing:invoice": {
+    "protocol_id": "billing_invoice_v1",
+    "queue": "billing",
+    "fields": [
+      "invoice_id"
+    ]
+  },
+  "billing:refund": {
+    "protocol_id": "billing_refund_v1",
+    "queue": "billing",
+    "fields": [
+      "order_id",
+      "reason_code"
+    ]
+  },
+  "status:order": {
+    "protocol_id": "order_status_v1",
+    "queue": "ops",
+    "fields": [
+      "order_id",
+      "zip"
+    ]
+  },
+  "tech-support:password": {
+    "protocol_id": "reset_v1",
+    "queue": "support",
+    "fields": [
+      "customer_id"
+    ]
+  }
+}

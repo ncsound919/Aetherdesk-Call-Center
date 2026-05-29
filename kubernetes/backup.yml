@@ -1,0 +1,135 @@
+# ============================================
+# AetherDesk Call Center - Backup Configuration
+# HIPAA/GDPR Compliant Backup Strategy
+# ============================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backup-config
+  namespace: aetherdesk
+data:
+  backup.sh: |
+    #!/bin/bash
+    # AetherDesk Backup Script
+    # Runs daily via CronJob
+    # HIPAA/GDPR compliant encryption
+
+    set -e
+
+    BACKUP_DIR="/backups"
+    DATE=$(date +%Y%m%d_%H%M%S)
+    ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY}"
+    GCP_BUCKET="${GCP_BACKUP_BUCKET}"
+
+    echo "[$(date)] Starting backup..."
+
+    # Create backup directory
+    mkdir -p "$BACKUP_DIR/$DATE"
+
+    # Backup PostgreSQL database
+    echo "Backing up PostgreSQL..."
+    pg_dump -h aetherdesk-db -U aetherdesk_admin -d aetherdesk \
+      | gzip \
+      | openssl enc -aes-256-cbc -salt -pass pass:"$ENCRYPTION_KEY" \
+      > "$BACKUP_DIR/$DATE/database.sql.gz.enc"
+
+    # Backup recordings metadata
+    echo "Backing up recordings metadata..."
+    pg_dump -h aetherdesk-db -U aetherdesk_admin -d aetherdesk \
+      -t recordings -t transcriptions \
+      | gzip \
+      | openssl enc -aes-256-cbc -salt -pass pass:"$ENCRYPTION_KEY" \
+      > "$BACKUP_DIR/$DATE/recordings_metadata.sql.gz.enc"
+
+    # Backup Fonoster configuration
+    echo "Backing up Fonoster configuration..."
+    kubectl get configmap fonoster-config -n aetherdesk -o yaml \
+      | openssl enc -aes-256-cbc -salt -pass pass:"$ENCRYPTION_KEY" \
+      > "$BACKUP_DIR/$DATE/fonoster-config.yaml.enc"
+
+    # Backup Kubernetes secrets (encrypted)
+    echo "Backing up Kubernetes secrets..."
+    kubectl get secrets -n aetherdesk -o yaml \
+      | openssl enc -aes-256-cbc -salt -pass pass:"$ENCRYPTION_KEY" \
+      > "$BACKUP_DIR/$DATE/secrets.yaml.enc"
+
+    # Upload to Google Cloud Storage
+    echo "Uploading to GCS..."
+    gsutil cp -r "$BACKUP_DIR/$DATE" "gs://$GCP_BUCKET/backups/$DATE/"
+
+    # Set retention policy (keep 30 days)
+    gsutil lifecycle set lifecycle.json "gs://$GCP_BUCKET"
+
+    # Cleanup local backup
+    rm -rf "$BACKUP_DIR/$DATE"
+
+    echo "[$(date)] Backup completed successfully"
+
+  lifecycle.json: |
+    {
+      "rule": [
+        {
+          "action": {"type": "Delete"},
+          "condition": {
+            "age": 30,
+            "isLive": true
+          }
+        },
+        {
+          "action": {"type": "SetStorageClass", "storageClass": "NEARLINE"},
+          "condition": {
+            "age": 7,
+            "isLive": true
+          }
+        },
+        {
+          "action": {"type": "SetStorageClass", "storageClass": "COLDLINE"},
+          "condition": {
+            "age": 90,
+            "isLive": true
+          }
+        }
+      ]
+    }
+
+---
+# ============================================
+# Backup CronJob
+# ============================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: aetherdesk-backup
+  namespace: aetherdesk
+spec:
+  schedule: "0 2 * * *"  # 2:00 AM daily
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: backup
+              image: google/cloud-sdk:alpine
+              command: ["/bin/bash", "/scripts/backup.sh"]
+              env:
+                - name: BACKUP_ENCRYPTION_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: aetherdesk-secrets
+                      key: BACKUP_ENCRYPTION_KEY
+                - name: GCP_BACKUP_BUCKET
+                  value: "aetherdesk-backups"
+                - name: DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: aetherdesk-secrets
+                      key: DB_PASSWORD
+              volumeMounts:
+                - name: backup-scripts
+                  mountPath: /scripts
+          volumes:
+            - name: backup-scripts
+              configMap:
+                name: backup-config
+          restartPolicy: OnFailure

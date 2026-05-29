@@ -1,0 +1,775 @@
+# AetherDesk Call Center - Kubernetes Deployment Manifests
+# Deploy to GKE cluster: aetherdesk-cluster in us-east1
+# HIPAA/GDPR Compliant Multi-Tenant Architecture
+
+# ============================================
+# Namespace
+# ============================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: aetherdesk
+  labels:
+    app: aetherdesk
+    compliance: hipaa-gdpr
+    environment: production
+
+---
+# ============================================
+# ConfigMaps
+# ============================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aetherdesk-config
+  namespace: aetherdesk
+data:
+  APP_ENV: "production"
+  DB_HOST: "aetherdesk-db"
+  DB_PORT: "5432"
+  DB_NAME: "aetherdesk"
+  DB_USER: "aetherdesk_admin"
+  REDIS_HOST: "aetherdesk-redis"
+  REDIS_PORT: "6379"
+  FONOSTER_HOST: "aetherdesk-fonoster"
+  FONOSTER_PORT: "50061"
+  FS_HOST: "aetherdesk-freeswitch"
+  FS_PORT: "5060"
+  FS_ESL_HOST: "aetherdesk-freeswitch"
+  FS_ESL_PORT: "8021"
+  API_URL: "https://api.aetherdesk.com"
+  APP_URL: "https://app.aetherdesk.com"
+  STT_ENGINE: "deepgram"
+  TTS_ENGINE: "chatterbox,qwen3"
+  CHATTERBOX_API_URL: "http://aetherdesk-chatterbox:5001"
+  QWEN_API_URL: "http://aetherdesk-qwen3-tts:8000"
+  QWEN_MODEL: "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+  LLM_PROVIDER: "groq"
+  MAX_CONCURRENT_CALLS: "10"
+  AGENT_IDLE_TIMEOUT: "300"
+  GDPR_COMPLIANT: "true"
+  HIPAA_COMPLIANT: "true"
+  DATA_RESIDENCY: "us-east1"
+  ENCRYPTION_AT_REST: "true"
+  ENCRYPTION_IN_TRANSIT: "true"
+  CALL_RECORDING_RETENTION_DAYS: "365"
+
+---
+# ============================================
+# SealedSecrets (Replaces plaintext Opaque Secret)
+# ============================================
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: aetherdesk-secrets
+  namespace: aetherdesk
+  annotations:
+    sealedsecrets.bitnami.com/namespace-wide: "true"
+spec:
+  encryptedData:
+    # These values must be generated using kubeseal:
+    # echo -n "secret-value" | kubectl create secret generic aetherdesk-secrets --dry-run=client --from-file=DB_PASSWORD=/dev/stdin -o json | kubeseal --format=yaml
+    DB_PASSWORD: "Ag...encrypted_data_here..."
+    REDIS_PASSWORD: "Ag...encrypted_data_here..."
+    FONOSTER_API_KEY: "Ag...encrypted_data_here..."
+    FONOSTER_API_SECRET: "Ag...encrypted_data_here..."
+    ENCRYPTION_KEY: "Ag...encrypted_data_here..."
+    JWT_SECRET: "Ag...encrypted_data_here..."
+    DEEPGRAM_API_KEY: "Ag...encrypted_data_here..."
+    GROQ_API_KEY: "Ag...encrypted_data_here..."
+    SIP_TRUNK_PASSWORD: "Ag...encrypted_data_here..."
+  template:
+    metadata:
+      name: aetherdesk-secrets
+      namespace: aetherdesk
+    type: Opaque
+
+---
+# ============================================
+# Network Policies (Zero-Trust Architecture)
+# ============================================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: aetherdesk
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-database-access
+  namespace: aetherdesk
+spec:
+  podSelector:
+    matchLabels:
+      app: aetherdesk-db
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app-group: aetherdesk
+  policyTypes:
+    - Ingress
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-fonoster-access
+  namespace: aetherdesk
+spec:
+  podSelector:
+    matchLabels:
+      app: aetherdesk-fonoster
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: aetherdesk-api
+        - podSelector:
+            matchLabels:
+              app: aetherdesk-freeswitch
+  policyTypes:
+    - Ingress
+
+---
+# ============================================
+# Persistent Volume Claims
+# ============================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-data-pvc
+  namespace: aetherdesk
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: standard
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: recordings-pvc
+  namespace: aetherdesk
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 200Gi
+  storageClassName: standard
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: freeswitch-data-pvc
+  namespace: aetherdesk
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 50Gi
+  storageClassName: standard
+
+---
+# Redis PVC for data persistence (replaces emptyDir)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data-pvc
+  namespace: aetherdesk
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+
+---
+# ============================================
+# PostgreSQL Database
+# ============================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: aetherdesk-db
+  namespace: aetherdesk
+spec:
+  serviceName: aetherdesk-db
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aetherdesk-db
+  template:
+    metadata:
+      labels:
+        app: aetherdesk-db
+        app-group: aetherdesk
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:15
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: aetherdesk-config
+                  key: DB_NAME
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: aetherdesk-config
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: DB_PASSWORD
+          volumeMounts:
+            - name: db-data
+              mountPath: /var/lib/postgresql/data
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - aetherdesk_admin
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - aetherdesk_admin
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+  volumeClaimTemplates:
+    - metadata:
+        name: db-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 50Gi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-db
+  namespace: aetherdesk
+spec:
+  selector:
+    app: aetherdesk-db
+  ports:
+    - port: 5432
+  clusterIP: None
+
+---
+# ============================================
+# Redis Cache
+# ============================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aetherdesk-redis
+  namespace: aetherdesk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aetherdesk-redis
+  template:
+    metadata:
+      labels:
+        app: aetherdesk-redis
+        app-group: aetherdesk
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          command: ["redis-server"]
+          args:
+            - "--appendonly"
+            - "yes"
+            - "--maxmemory"
+            - "512mb"
+            - "--maxmemory-policy"
+            - "allkeys-lru"
+          ports:
+            - containerPort: 6379
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command: ["redis-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+volumeMounts:
+             - name: redis-data
+               mountPath: /data
+       volumes:
+         - name: redis-data
+           persistentVolumeClaim:
+             claimName: redis-data-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-redis
+  namespace: aetherdesk
+spec:
+  selector:
+    app: aetherdesk-redis
+  ports:
+    - port: 6379
+
+---
+# ============================================
+# Fonoster Voice Server
+# ============================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aetherdesk-fonoster
+  namespace: aetherdesk
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: aetherdesk-fonoster
+  template:
+    metadata:
+      labels:
+        app: aetherdesk-fonoster
+        app-group: aetherdesk
+    spec:
+      containers:
+        - name: fonoster
+          image: fonoster/fonoster:latest
+          ports:
+            - containerPort: 50061
+            - containerPort: 50062
+          env:
+            - name: DB_HOST
+              value: "aetherdesk-db"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: aetherdesk-config
+                  key: DB_NAME
+            - name: DB_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: aetherdesk-config
+                  key: DB_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: DB_PASSWORD
+            - name: REDIS_HOST
+              value: "aetherdesk-redis"
+            - name: REDIS_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: aetherdesk-config
+                  key: REDIS_PORT
+            - name: API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: FONOSTER_API_KEY
+            - name: API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: FONOSTER_API_SECRET
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "4Gi"
+              cpu: "2"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 50062
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 50062
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-fonoster
+  namespace: aetherdesk
+spec:
+  selector:
+    app: aetherdesk-fonoster
+  ports:
+    - name: voice
+      port: 50061
+      targetPort: 50061
+    - name: api
+      port: 50062
+      targetPort: 50062
+  type: ClusterIP
+
+---
+# ============================================
+# FreeSWITCH Media Server
+# ============================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aetherdesk-freeswitch
+  namespace: aetherdesk
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: aetherdesk-freeswitch
+  template:
+    metadata:
+      labels:
+        app: aetherdesk-freeswitch
+        app-group: aetherdesk
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: freeswitch
+          image: fonoster/freeswitch:latest
+          ports:
+            - containerPort: 5060
+              hostPort: 5060
+              protocol: UDP
+            - containerPort: 5061
+              hostPort: 5061
+              protocol: TCP
+            - containerPort: 8021
+              hostPort: 8021
+              protocol: TCP
+            - containerPort: 7443
+              hostPort: 7443
+              protocol: TCP
+          env:
+            - name: FONOSTER_HOST
+              value: "aetherdesk-fonoster"
+            - name: FONOSTER_PORT
+              value: "50061"
+            - name: FS_ESL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: FS_ESL_PASSWORD
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "1"
+            limits:
+              memory: "4Gi"
+              cpu: "4"
+          volumeMounts:
+            - name: freeswitch-data
+              mountPath: /var/freeswitch
+            - name: freeswitch-config
+              mountPath: /etc/freeswitch
+      volumes:
+        - name: freeswitch-data
+          persistentVolumeClaim:
+            claimName: freeswitch-data-pvc
+        - name: freeswitch-config
+          configMap:
+            name: freeswitch-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-freeswitch-sip
+  namespace: aetherdesk
+spec:
+  selector:
+    app: aetherdesk-freeswitch
+  ports:
+    - name: sip-udp
+      port: 5060
+      targetPort: 5060
+      protocol: UDP
+    - name: sip-tls
+      port: 5061
+      targetPort: 5061
+      protocol: TCP
+    - name: esl
+      port: 8021
+      targetPort: 8021
+      protocol: TCP
+    - name: wss
+      port: 7443
+      targetPort: 7443
+      protocol: TCP
+  type: LoadBalancer
+
+---
+# ============================================
+# API Gateway / SaaS Platform
+# ============================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: aetherdesk-api
+  namespace: aetherdesk
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: aetherdesk-api
+  template:
+    metadata:
+      labels:
+        app: aetherdesk-api
+        app-group: aetherdesk
+    spec:
+      containers:
+        - name: api
+          image: aetherdesk/api:latest
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: aetherdesk-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: DB_PASSWORD
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: REDIS_PASSWORD
+            - name: ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: ENCRYPTION_KEY
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: JWT_SECRET
+            - name: DEEPGRAM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: DEEPGRAM_API_KEY
+            - name: GROQ_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: GROQ_API_KEY
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "2Gi"
+              cpu: "2"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: aetherdesk-api
+  namespace: aetherdesk
+spec:
+  selector:
+    app: aetherdesk-api
+  ports:
+    - port: 80
+      targetPort: 3000
+      protocol: TCP
+  type: LoadBalancer
+
+---
+# ============================================
+# Horizontal Pod Autoscaler
+# ============================================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: aetherdesk-api-hpa
+  namespace: aetherdesk
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: aetherdesk-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+---
+# ============================================
+# Ingress Controller (if using external load balancer)
+# ============================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aetherdesk-ingress
+  namespace: aetherdesk
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+   ingressClassName: nginx
+   tls:
+     - hosts:
+         - api.aetherdesk.com
+         - app.aetherdesk.com
+       secretName: aetherdesk-tls-secret
+   rules:
+     - host: api.aetherdesk.com
+       http:
+         paths:
+           - path: /
+             pathType: Prefix
+             backend:
+               service:
+                 name: aetherdesk-api
+                 port:
+                   number: 80
+     - host: app.aetherdesk.com
+       http:
+         paths:
+           - path: /
+             pathType: Prefix
+             backend:
+               service:
+                 name: aetherdesk-web
+                 port:
+                   number: 80
+
+---
+# ============================================
+# Pod Disruption Budgets
+# ============================================
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aetherdesk-api-pdb
+  namespace: aetherdesk
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: aetherdesk-api
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aetherdesk-fonoster-pdb
+  namespace: aetherdesk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aetherdesk-fonoster
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aetherdesk-redis-pdb
+  namespace: aetherdesk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aetherdesk-redis
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: aetherdesk-freeswitch-pdb
+  namespace: aetherdesk
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: aetherdesk-freeswitch

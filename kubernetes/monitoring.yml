@@ -1,0 +1,212 @@
+# AetherDesk Call Center - Monitoring & Observability
+# Prometheus and Grafana configuration for HIPAA/GDPR compliant monitoring
+
+# ============================================
+# Kubernetes ServiceMonitor for Prometheus
+# ============================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aetherdesk-api
+  namespace: aetherdesk
+  labels:
+    app: aetherdesk
+    monitoring: enabled
+spec:
+  selector:
+    matchLabels:
+      app: aetherdesk-api
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+  namespaceSelector:
+    matchNames:
+      - aetherdesk
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: aetherdesk-fonoster
+  namespace: aetherdesk
+  labels:
+    app: aetherdesk
+    monitoring: enabled
+spec:
+  selector:
+    matchLabels:
+      app: aetherdesk-fonoster
+  endpoints:
+    - port: metrics
+      interval: 30s
+  namespaceSelector:
+    matchNames:
+      - aetherdesk
+
+---
+# ============================================
+# Prometheus Rule Files
+# ============================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: aetherdesk-alerts
+  namespace: aetherdesk
+spec:
+  groups:
+    - name: aetherdesk.rules
+      rules:
+        # High error rate alert
+        - alert: HighErrorRate
+          expr: |
+            rate(http_requests_total{status=~"5.."}[5m]) /
+            rate(http_requests_total[5m]) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "High error rate detected"
+            description: "Error rate is above 5% for the last 5 minutes"
+
+        # High latency alert
+        - alert: HighLatency
+          expr: |
+            histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le)) > 1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High latency detected"
+            description: "95th percentile latency is above 1 second"
+
+        # Agent availability alert
+        - alert: LowAgentAvailability
+          expr: |
+            count(agent_status{status="available"}) /
+            count(agent_status) < 0.2
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Low agent availability"
+            description: "Less than 20% of agents are available"
+
+        # Call queue length alert
+        - alert: HighQueueLength
+          expr: |
+            call_queue_length > 50
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High call queue length"
+            description: "Call queue length is above 50"
+
+---
+# ============================================
+# Grafana Dashboard Configuration
+# ============================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aetherdesk-grafana-dashboard
+  namespace: aetherdesk
+  labels:
+    grafana_dashboard: "1"
+data:
+  aetherdesk-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "AetherDesk Call Center",
+        "panels": [
+          {
+            "title": "Active Calls",
+            "type": "stat",
+            "targets": [{
+              "expr": "sum(call_sessions_active)"
+            }]
+          },
+          {
+            "title": "Agent Status",
+            "type": "piechart",
+            "targets": [{
+              "expr": "count by (status) (agent_status)"
+            }]
+          },
+          {
+            "title": "Call Volume (Last 24h)",
+            "type": "timeseries",
+            "targets": [{
+              "expr": "rate(call_sessions_total[1h])"
+            }]
+          },
+          {
+            "title": "Average Call Duration",
+            "type": "timeseries",
+            "targets": [{
+              "expr": "avg(call_duration_seconds)"
+            }]
+          },
+          {
+            "title": "Call Queue Length",
+            "type": "gauge",
+            "targets": [{
+              "expr": "call_queue_length"
+            }]
+          },
+          {
+            "title": "API Response Time (95th pct)",
+            "type": "timeseries",
+            "targets": [{
+              "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))"
+            }]
+          }
+        ]
+      }
+    }
+
+---
+# ============================================
+# Logging Configuration (ELK/Fluentd)
+# ============================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-config
+  namespace: aetherdesk
+data:
+  fluent.conf: |
+    <source>
+      @type tail
+      path /var/log/containers/*.log
+      pos_file /var/log/fluentd-containers.log.pos
+      tag kubernetes.*
+      format json
+      time_key time
+      time_format %Y-%m-%dT%H:%M:%S.%N%z
+    </source>
+
+    <filter kubernetes.**>
+      @type kubernetes_metadata
+    </filter>
+
+    <filter kubernetes.**>
+      @type grep
+      <regexp>
+        key log
+        pattern /PII|SSN|credit.card|password/i
+      </regexp>
+      <exclude>
+        key log
+      </exclude>
+    </filter>
+
+    <match kubernetes.**>
+      @type elasticsearch
+      host elasticsearch-master
+      port 9200
+      logstash_format true
+      logstash_prefix aetherdesk
+      flush_interval 10s
+    </match>

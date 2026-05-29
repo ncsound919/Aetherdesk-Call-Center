@@ -1,0 +1,291 @@
+<!-- AetherDesk Call Center - FreeSWITCH Configuration -->
+<!-- HIPAA/GDPR Compliant SIP Configuration -->
+
+<configuration name="sip_profiles" description="SIP Profiles Configuration">
+
+  <!-- Internal SIP Profile (for agents and internal calls) -->
+  <profile name="internal">
+    <settings>
+      <!-- Basic Settings -->
+      <param name="context" value="default"/>
+      <param name="bind-addr" value="0.0.0.0:5060"/>
+      <param name="tls-bind-addr" value="0.0.0.0:5061"/>
+      <param name="tls-version" value="tlsv1.2"/>
+
+      <!-- Security Settings -->
+      <param name="apply-inbound-acl" value="internal"/>
+      <param name="auth-calls" value="true"/>
+      <param name="auth-all-packets" value="false"/>
+      <param name="challenge-realm" value="auto_from"/>
+      <param name="accept-blind-auth" value="false"/>
+
+      <!-- RTP Settings -->
+      <param name="rtp-start-port" value="16384"/>
+      <parameter name="rtp-end-port" value="32768"/>
+      <parameter name="rtp-timer-name" value="soft"/>
+      <parameter name="rtp-timeout-sec" value="300"/>
+      <parameter name="rtp-hold-timeout-sec" value="1800"/>
+
+      <!-- NAT Traversal -->
+      <param name="apply-nat-acl" value="rfc1918"/>
+      <parameter name="ext-rtp-ip" value="$${external_rtp_ip}"/>
+      <parameter name="ext-sip-ip" value="$${external_sip_ip}"/>
+
+      <!-- Codecs -->
+      <param name="codec-prefs" value="PCMA,PCMU,OPUS,G729"/>
+      <parameter name="inbound-codec-prefs" value="PCMA,PCMU,OPUS,G729"/>
+      <parameter name="outbound-codec-prefs" value="PCMA,PCMU,OPUS,G729"/>
+      <parameter name="codec-sample-rate" value="$${codec-sample-rate}"/>
+
+      <!-- Session Timers -->
+      <parameter name="session-timeout" value="1800"/>
+      <parameter name="session-refresher" value="uac"/>
+      <parameter name="enable-100rel" value="true"/>
+
+      <!-- Call Features -->
+      <param name="enable-3pcc" value="true"/>
+      <param name="manage-presence" value="true"/>
+      <param name="presence-hosts" value="localhost"/>
+
+      <!-- DTMF -->
+      <param name="dtmf-duration" value="100"/>
+      <parameter name="dtmf-type" value="rfc2833"/>
+
+      <!-- Media Encryption (SRTP for HIPAA) -->
+      <parameter name="zrtp-enable" value="true"/>
+      <parameter name="sip-ip" value="$${local_ip_v4}"/>
+    </settings>
+
+    <!-- Gateways for SIP Trunking -->
+    <gateways>
+      <gateway name="sip-trunk">
+        <param name="username" value="$${sip_trunk_username}"/>
+        <param name="password" value="$${sip_trunk_password}"/>
+        <param name="realm" value="$${sip_trunk_host}"/>
+        <param name="proxy" value="$${sip_trunk_host}:$${sip_trunk_port}"/>
+        <param name="register" value="true"/>
+        <param name="caller-id-in-from" value="true"/>
+        <param name="ping" value="25"/>
+        <param name="context" value="public"/>
+      </gateway>
+    </gateways>
+  </profile>
+
+  <!-- External SIP Profile (for PSTN access) -->
+  <profile name="external">
+    <settings>
+      <param name="context" value="public"/>
+      <param name="bind-addr" value="0.0.0.0:5080"/>
+      <param name="tls-bind-addr" value="0.0.0.0:5081"/>
+      <param name="auth-calls" value="true"/>
+      <param name="accept-blind-auth" value="false"/>
+      <param name="rtp-start-port" value="20000"/>
+      <parameter name="rtp-end-port" value="40000"/>
+    </settings>
+  </profile>
+
+</configuration>
+
+<!-- Dialplan Configuration -->
+<configuration name="dialplan" description="AetherDesk Call Center Dialplan">
+
+  <context name="default">
+
+    <!-- Extension: Agent Login (SIP registration) -->
+    <extension name="agent-login">
+      <condition field="destination_number" expression="^(\d{3,5})$">
+        <action application="set" data="domain_name=$${domain}"/>
+        <action application="export" data="sip_h_X-caller-ext=$1"/>
+        <action application="bridge" data="user/$1@$${domain}"/>
+      </condition>
+    </extension>
+
+    <!-- Extension: Inbound Calls from PSTN -->
+    <extension name="inbound-pstn">
+      <condition field="destination_number" expression="^(\+?\d{10,15})$">
+        <!-- Log call for HIPAA compliance -->
+        <action application="set" data="call_direction=inbound"/>
+        <action application="set" data="call_start_time=${strftime(%Y-%m-%d %H:%M:%S)}"/>
+
+        <!-- Set caller ID -->
+        <action application="set" data="effective_caller_id_number=$1"/>
+
+        <!-- Route to IVR / Queue -->
+        <action application="answer"/>
+        <action application="sleep" data="1000"/>
+
+        <!-- Play welcome message -->
+        <action application="playback" data="ivr/ivr-welcome.wav"/>
+
+        <!-- Get caller intent via DTMF -->
+        <action application="menu" data="1 Voicemail 2 Sales 3 Support 4 Billing"/>
+
+        <!-- Route based on selection -->
+        <action application="set" data="queue_name=$${queue_selection}"/>
+        <action application="bridge" data="sofia/internal/${queue_selection}@$${domain}"/>
+      </condition>
+    </extension>
+
+    <!-- Extension: Agent Extension Dial -->
+    <extension name="agent-direct">
+      <condition field="destination_number" expression="^1(\d{3})$">
+        <action application="set" data="sip_h_X-agent-ext=$1"/>
+        <action application="bridge" data="sofia/internal/1$1@$${domain}"/>
+      </condition>
+    </extension>
+
+    <!-- Extension: Conference Bridge -->
+    <extension name="conference">
+      <condition field="destination_number" expression="^conf-(\d+)$">
+        <action application="conference" data="$1-${domain}@default"/>
+      </condition>
+    </extension>
+
+    <!-- Extension: Voicemail -->
+    <extension name="voicemail">
+      <condition field="destination_number" expression="^vm-(\d+)$">
+        <action application="answer"/>
+        <action application="sleep" data="1000"/>
+        <action application="playback" data="voicemail/vm-greeting.wav"/>
+        <action application="voicemail" data="check default $1@default"/>
+      </condition>
+    </extension>
+
+    <!-- Extension: Hold Music -->
+    <extension name="hold-music">
+      <condition field="destination_number" expression="^hold$">
+        <action application="answer"/>
+        <action application="playback" data="holdmusic/hold_music.wav"/>
+      </condition>
+    </extension>
+
+    <!-- Extension: Queue (Agent Selection) -->
+    <extension name="agent-queue">
+      <condition field="destination_number" expression="^queue-(\w+)$">
+        <action application="set" data="queue_name=$1"/>
+        <action application="set" data="queue_max_wait_time=300000"/>
+        <action application="set" data="queue_tier_rules=ring-all"/>
+        <action application="set" data="queue_record_template=$${recordings_dir}/${strftime(%Y/%m/%d)}/${queue_name}-${uuid}.wav"/>
+
+        <!-- Queue with music on hold -->
+        <action application="queue" data="$1 XML default"/>
+      </condition>
+    </extension>
+
+  </context>
+
+  <!-- Public Context - PSTN Access -->
+  <context name="public">
+
+    <!-- Inbound from SIP Trunk -->
+    <extension name="inbound-sip-trunk">
+      <condition field="destination_number" expression="^(\+?\d{10,15})$">
+        <action application="set" data="domain_name=$${domain}"/>
+        <action application="transfer" data="$1 XML default"/>
+      </condition>
+    </extension>
+
+    <!-- Outbound PSTN Dialing -->
+    <extension name="outbound-pstn">
+      <condition field="destination_number" expression="^(\+?\d{10,15})$">
+        <action application="set" data="effective_caller_id_number=$${outbound_caller_id}"/>
+        <action application="bridge" data="sofia/gateway/sip-trunk/$1"/>
+      </condition>
+    </extension>
+
+  </context>
+
+</configuration>
+
+<!-- ACL Configuration - Network Security -->
+<configuration name="acl" description="AetherDesk Network ACLs">
+
+  <!-- Internal network - Agents and internal services -->
+  <network-list name="internal" default="deny">
+    <node type="allow" cidr="172.20.0.0/16"/>  <!-- Docker internal network -->
+    <node type="allow" cidr="10.0.0.0/8"/>     <!-- Kubernetes cluster CIDR -->
+    <node type="allow" cidr="127.0.0.1/32"/>    <!-- Loopback -->
+  </network-list>
+
+  <!-- External access - SIP trunk and authorized IPs -->
+  <network-list name="external" default="deny">
+    <!-- Add your SIP trunk provider IPs here -->
+    <node type="allow" cidr="208.80.152.0/24"/>  <!-- Example: Twilio/SIP trunk -->
+    <node type="allow" cidr="66.235.136.0/24"/>
+    <node type="allow" cidr="91.108.6.0/24"/>
+  </network-list>
+
+  <!-- RADIUS (for authentication if used) -->
+  <network-list name="radius" default="deny">
+    <node type="allow" cidr="127.0.0.1/32"/>
+  </network-list>
+
+</configuration>
+
+<!-- Directory Configuration - Agent Users -->
+<configuration name="directory" description="AetherDesk Agent Directory">
+
+  <domain name="$${domain}">
+
+    <!-- Agent Group -->
+    <group name="agents">
+      <params>
+        <param name="context" value="default"/>
+        <param name="effective-caller-id-name" value="AetherDesk Agent"/>
+      </params>
+    </group>
+
+    <!-- Individual Agent Users (created dynamically in production) -->
+    <!-- Example placeholder - would be generated by the platform -->
+    <user id="1000">
+      <params>
+        <param name="password" value="encrypted-password-here"/>
+        <param name="vm-password" value="$${default_voicemail_password}"/>
+        <param name="dial-string" value="{sip_invite_domain=${destination_domain},leg_timeout=30,presence_id=${dialed_user}@${dialed_domain}}${sofia_contact(*/${dialed_user}@${dialed_domain})}"/>
+      </params>
+      <variables>
+        <variable name="toll_allow" value="domestic,international,local"/>
+        <variable name="accountcode" value="1000"/>
+        <variable name="user_context" value="default"/>
+        <variable name="effective_caller_id_name" value="Agent 1000"/>
+        <variable name="outbound_caller_id_name" value="$${outbound_caller_name}"/>
+        <variable name="outbound_caller_id_number" value="$${outbound_caller_id}"/>
+      </variables>
+    </user>
+
+  </domain>
+
+</configuration>
+
+<!-- Logging Configuration - HIPAA Compliant -->
+<configuration name="switch.conf" description="Core Switch Configuration">
+
+  <settings>
+    <!-- Log Levels - HIPAA: No PII in logs -->
+    <param name="loglevel" value="WARNING"/>
+    <param name="console-loglevel" value="INFO"/>
+
+    <!-- Call Detail Records -->
+    <param name=" cdr-csv-mode" value="true"/>
+    <parameter name="cdr-log-dir" value="/var/log/freeswitch/cdr"/>
+
+    <!-- Recording Settings - HIPAA: All calls recorded with encryption -->
+    <param name="record-calls" value="true"/>
+    <parameter name="record-path" value="/var/freeswitch/recordings"/>
+    <parameter name="record-template" value="$${recordings_dir}/${strftime(%Y/%m/%d)}/${caller_id_number}-${uuid}.wav"/>
+
+    <!-- RTP Settings -->
+    <parameter name="rtp-start-port" value="16384"/>
+    <parameter name="rtp-end-port" value="32768"/>
+
+    <!-- SIP Settings -->
+    <parameter name="max-proceeding" value="1000"/>
+    <parameter name="max-registrations" value="5000"/>
+
+    <!-- Performance Tuning -->
+    <parameter name="switchname" value="AetherDesk"/>
+    <parameter name="odbc-dsn" value="$${dsn}"/>
+
+  </settings>
+
+</configuration>

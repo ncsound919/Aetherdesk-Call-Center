@@ -1,0 +1,21 @@
+{
+  "nodes": {
+    "start": {
+      "prompt": "Welcome! What is your name?",
+      "field": "name",
+      "validate": "required",
+      "next": "verify",
+      "on_ok": "Sorry, let's try again."
+    },
+    "verify": {
+      "prompt": "Thanks {name}. Can I confirm?",
+      "next": "close",
+      "on_ok": "Yes",
+      "on_fail": "No"
+    },
+    "close": {
+      "prompt": "Great! We'll be in touch.",
+      "next": "end"
+    }
+  }
+}

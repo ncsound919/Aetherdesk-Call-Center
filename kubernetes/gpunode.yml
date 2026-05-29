@@ -1,0 +1,138 @@
+# ============================================
+# GKE GPU Node Pool for Qwen3-TTS
+# ============================================
+
+apiVersion: container.cnrm.cloud.google.com/v1beta1
+kind: ContainerNodePool
+metadata:
+  name: aetherdesk-gpu-nodepool
+  namespace: aetherdesk
+  labels:
+    app-group: aetherdesk
+spec:
+  clusterRef:
+    name: aetherdesk_cluster
+  location: us-east1
+  nodeCount: 1
+  autoscaling:
+    minNodeCount: 0
+    maxNodeCount: 2
+  config:
+    machineType: n1-standard-4
+    labels:
+      app-group: aetherdesk
+      workload-type: gpu-ai
+    oauthScopes:
+      - https://www.googleapis.com/auth/cloud-platform
+    serviceAccount: default
+    shieldedInstanceConfig:
+      secureBootEnabled: true
+      integrityMonitoringEnabled: true
+    acceleratorConfigs:
+      - gpuCount: "1"
+        gpuType: nvidia-t4-vmware-gpu
+    taints:
+      - key: nvidia.com/gpu
+        value: present
+        effect: NoSchedule
+    kubeletConfig:
+      cpuCfsQuota: true
+      cpuCfsQuotaPeriod: Period100Ms
+      evictionHard:
+        memory.available: 100Mi
+        nodefs.available: 5%
+      imagePullProgressDeadline: 60s
+      kubeReserved:
+        cpu: 500m
+        memory: 500Mi
+  management:
+    autoRepair: true
+    autoUpgrade: true
+    upgradeStrategy: Surge
+  version: "1.30"
+
+---
+# ============================================
+# GPU Node Pool for Chatterbox (CPU-optimized)
+# ============================================
+
+apiVersion: container.cnrm.cloud.google.com/v1beta1
+kind: ContainerNodePool
+metadata:
+  name: aetherdesk-cpu-nodepool
+  namespace: aetherdesk
+  labels:
+    app-group: aetherdesk
+spec:
+  clusterRef:
+    name: aetherdesk_cluster
+  location: us-east1
+  nodeCount: 2
+  autoscaling:
+    minNodeCount: 1
+    maxNodeCount: 5
+  config:
+    machineType: n2-standard-4
+    labels:
+      app-group: aetherdesk
+      workload-type: cpu-ai
+    oauthScopes:
+      - https://www.googleapis.com/auth/cloud-platform
+    serviceAccount: default
+    shieldedInstanceConfig:
+      secureBootEnabled: true
+      integrityMonitoringEnabled: true
+    kubeletConfig:
+      cpuCfsQuota: true
+      cpuCfsQuotaPeriod: Period100Ms
+      evictionHard:
+        memory.available: 100Mi
+        nodefs.available: 5%
+  management:
+    autoRepair: true
+    autoUpgrade: true
+    upgradeStrategy: Surge
+  version: "1.30"
+
+---
+# ============================================
+# Node Pool for General Workloads
+# ============================================
+
+apiVersion: container.cnrm.cloud.google.com/v1beta1
+kind: ContainerNodePool
+metadata:
+  name: aetherdesk-general-nodepool
+  namespace: aetherdesk
+  labels:
+    app-group: aetherdesk
+spec:
+  clusterRef:
+    name: aetherdesk_cluster
+  location: us-east1
+  nodeCount: 2
+  autoscaling:
+    minNodeCount: 1
+    maxNodeCount: 10
+  config:
+    machineType: n2-standard-2
+    labels:
+      app-group: aetherdesk
+      workload-type: general
+    oauthScopes:
+      - https://www.googleapis.com/auth/cloud-platform
+    serviceAccount: default
+    shieldedInstanceConfig:
+      secureBootEnabled: true
+      integrityMonitoringEnabled: true
+    kubeletConfig:
+      cpuCfsQuota: true
+      cpuCfsQuotaPeriod: Period100Ms
+      evictionHard:
+        memory.available: 100Mi
+        nodefs.available: 5%
+  management:
+    autoRepair: true
+    autoUpgrade: true
+    upgradeStrategy: Surge
+  version: "1.30"
