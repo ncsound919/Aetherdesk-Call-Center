@@ -315,6 +315,7 @@ app.include_router(auth.router, prefix="/api/v1")
 from apps.api.middleware.audit import AuditMiddleware
 from apps.api.services.auth import WebSocketAuthMiddleware
 from apps.api.services.rate_limit import RateLimitMiddleware
+from apps.api.middleware.security import SecurityHeadersMiddleware
 
 # Rate limiting middleware
 app.add_middleware(RateLimitMiddleware)
@@ -324,6 +325,9 @@ app.add_middleware(AuditMiddleware)
 
 # WebSocket Authentication - must be after CORS, before routes
 app.add_middleware(WebSocketAuthMiddleware)
+
+# Security Headers - must be after CORS, before routes
+app.add_middleware(SecurityHeadersMiddleware)
 
 # =============================================================================
 # Pydantic Models
