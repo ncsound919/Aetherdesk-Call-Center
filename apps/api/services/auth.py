@@ -1,21 +1,46 @@
 import os
+import re
 import secrets
 import time
 
 import structlog
 from fastapi import Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from passlib.context import CryptContext
 
 from apps.api.services.database import db_context
 
 logger = structlog.get_logger()
 
+# ---------------------------------------------------------------------------
+# Password hashing (H1 fix: verify_password was previously missing)
+# ---------------------------------------------------------------------------
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """Verify a plaintext password against a bcrypt hash."""
+    return _pwd_context.verify(plain_password, hashed_password)
+
+
+def hash_password(password: str) -> str:
+    """Hash a password using bcrypt."""
+    return _pwd_context.hash(password)
+
+
+# ---------------------------------------------------------------------------
+# JWT secret — C9 fix: no fallback to known default in ANY environment.
+# Raises RuntimeError at import time if JWT_SECRET is unset.
+# Set JWT_SECRET=<any-value> in your local .env for development.
+# ---------------------------------------------------------------------------
 SECRET_KEY = os.getenv("JWT_SECRET")
 if not SECRET_KEY:
-    env = os.getenv("APP_ENV", "development")
-    if env == "production":
-        raise RuntimeError("JWT_SECRET environment variable must be set for production.")
-    SECRET_KEY = "dev-jwt-secret-do-not-use-in-production"
+    raise RuntimeError(
+        "JWT_SECRET environment variable must be set. "
+        "For local development, add JWT_SECRET=<random-string> to your .env file. "
+        "Never use a guessable value."
+    )
+
 TOKEN_EXPIRY_SECONDS = 3600
 
 
@@ -117,31 +142,24 @@ class WebSocketAuthMiddleware:
         if scope["type"] != "websocket":
             await self.app(scope, receive, send)
             return
-
         path = scope.get("path", "")
-
         if any(path.startswith(exclude) for exclude in self.exclude_paths):
             await self.app(scope, receive, send)
             return
-
         query_params = scope.get("query_string", b"").decode()
         token = None
-
         if "token=" in query_params:
             for param in query_params.split("&"):
                 if param.startswith("token="):
                     token = param[6:]
                     break
-
         if not token:
             await self._reject(scope, receive, send, "Missing authentication token")
             return
-
         token_data = await verify_websocket_token(token)
         if not token_data:
             await self._reject(scope, receive, send, "Invalid or expired token")
             return
-
         scope["websocket_token_data"] = token_data
         await self.app(scope, receive, send)
 
@@ -165,61 +183,62 @@ async def get_optional_token(credentials: HTTPAuthorizationCredentials = None) -
         return credentials.credentials
     return None
 
+
+# ---------------------------------------------------------------------------
+# Internal API key — same pattern: raise at import time if unset in production.
+# ---------------------------------------------------------------------------
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
 if not INTERNAL_API_KEY:
-    env = os.getenv("APP_ENV", "development")
-    if env == "production":
+    _app_env = os.getenv("APP_ENV", "development")
+    if _app_env == "production":
         raise RuntimeError("INTERNAL_API_KEY environment variable must be set for production.")
     INTERNAL_API_KEY = "dev-api-key"
 
-async def verify_api_key(x_api_key: str = Header(default=None)) -> str:
-     """Verifies API key and returns tenant_id."""
-     if not x_api_key:
-         env = os.getenv("APP_ENV", "development")
-         if env != "production":
-             x_api_key = "dev-api-key"
-         else:
-             raise HTTPException(status_code=401, detail="API key required")
-     if x_api_key == INTERNAL_API_KEY or (os.getenv("APP_ENV", "development") != "production" and x_api_key == "dev-api-key"):
-         return "TENANT-001" # Default tenant for internal/dev
 
-     from apps.api.services.database import get_tenant_by_api_key
-     row = await get_tenant_by_api_key(x_api_key)
-     if not row:
-         raise HTTPException(status_code=403, detail="Invalid API Key")
-     return row["id"]
+async def verify_api_key(x_api_key: str = Header(default=None)) -> str:
+    """Verifies API key and returns tenant_id."""
+    _app_env = os.getenv("APP_ENV", "development")
+    if not x_api_key:
+        if _app_env != "production":
+            x_api_key = "dev-api-key"
+        else:
+            raise HTTPException(status_code=401, detail="API key required")
+    if x_api_key == INTERNAL_API_KEY or (_app_env != "production" and x_api_key == "dev-api-key"):
+        return "TENANT-001"  # Default tenant for internal/dev
+    from apps.api.services.database import get_tenant_by_api_key
+    row = await get_tenant_by_api_key(x_api_key)
+    if not row:
+        raise HTTPException(status_code=403, detail="Invalid API Key")
+    return row["id"]
 
 
 async def verify_tenant_access(
     tenant_id: str,
     x_api_key: str = Header(default="dev-api-key"),
 ) -> str:
-     """Validates that the requesting tenant's API key owns the target tenant_id.
+    """Validates that the requesting tenant's API key owns the target tenant_id.
 
-     Prevents IDOR (Insecure Direct Object Reference) by ensuring the
-     authenticated tenant can only access its own resources.
-
-     Dev mode (ENV != production) bypasses this check for internal keys.
-     """
-     # Dev/internal key bypass - check FIRST before any DB calls
-     is_dev = os.getenv("APP_ENV", "development") != "production"
-     if x_api_key == INTERNAL_API_KEY or (is_dev and x_api_key == "dev-api-key"):
-         return tenant_id  # Allow access in dev mode
-
-     try:
-         from apps.api.services.database import verify_tenant_api_key
-         valid = await verify_tenant_api_key(tenant_id, x_api_key)
-         if not valid:
-             raise HTTPException(
-                 status_code=403,
-                 detail="Access denied: tenant does not own the requested resource",
-             )
-         return tenant_id
-     except HTTPException:
-         raise
-     except Exception:
-         # If DB fails in production-like mode, deny access
-         raise HTTPException(
-             status_code=403,
-             detail="Access denied: tenant verification failed",
-         )
+    Prevents IDOR by ensuring the authenticated tenant can only access its own
+    resources. Dev mode (APP_ENV != production) allows the internal dev key
+    through for local testing only.
+    """
+    _app_env = os.getenv("APP_ENV", "development")
+    is_dev = _app_env != "production"
+    if x_api_key == INTERNAL_API_KEY or (is_dev and x_api_key == "dev-api-key"):
+        return tenant_id  # Allow access in dev mode
+    try:
+        from apps.api.services.database import verify_tenant_api_key
+        valid = await verify_tenant_api_key(tenant_id, x_api_key)
+        if not valid:
+            raise HTTPException(
+                status_code=403,
+                detail="Access denied: tenant does not own the requested resource",
+            )
+        return tenant_id
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=403,
+            detail="Access denied: tenant verification failed",
+        )
