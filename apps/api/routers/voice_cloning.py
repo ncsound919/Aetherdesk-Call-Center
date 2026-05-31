@@ -1,4 +1,5 @@
 import os
+import re
 import uuid
 import json
 import time
@@ -20,17 +21,34 @@ os.makedirs(VOICE_CLONES_DIR, exist_ok=True)
 MAX_VOICE_PROFILES = 100
 _profile_store = VoiceProfileStore(max_profiles=MAX_VOICE_PROFILES)
 MAX_AUDIO_SIZE_BYTES = 10 * 1024 * 1024  # 10MB max upload
-MIN_AUDIO_SIZE_BYTES = 32 * 1024  # ~2s at 16kHz mono 16-bit; reject trivially short clips
+MIN_AUDIO_SIZE_BYTES = 32 * 1024         # ~2s at 16kHz mono 16-bit
 
 # Audio format magic-byte signatures
 _AUDIO_MAGIC: list[tuple[bytes, str]] = [
-    (b"RIFF", "wav"),      # WAV — first 4 bytes
-    (b"fLaC", "flac"),    # FLAC
-    (b"ID3", "mp3"),      # MP3 with ID3 tag
-    (b"\xff\xfb", "mp3"), # MP3 without ID3
-    (b"\xff\xf3", "mp3"), # MP3 MPEG-1 layer 3
-    (b"\xff\xf2", "mp3"), # MP3 MPEG-2 layer 3
+    (b"RIFF", "wav"),       # WAV — first 4 bytes
+    (b"fLaC", "flac"),     # FLAC
+    (b"ID3", "mp3"),        # MP3 with ID3 tag
+    (b"\xff\xfb", "mp3"),  # MP3 without ID3
+    (b"\xff\xf3", "mp3"),  # MP3 MPEG-1 layer 3
+    (b"\xff\xf2", "mp3"),  # MP3 MPEG-2 layer 3
 ]
+
+# C8 fix: regex to whitelist safe characters for user-supplied names/IDs
+_SAFE_NAME_RE = re.compile(r"[^a-zA-Z0-9 _\-]")
+_SAFE_ID_RE = re.compile(r"[^a-zA-Z0-9_\-]")
+
+
+def _sanitize_name(name: str, max_len: int = 64) -> str:
+    """Strip non-alphanumeric/space/underscore/hyphen chars and truncate."""
+    return _SAFE_NAME_RE.sub("_", name)[:max_len].strip()
+
+
+def _sanitize_voice_id(voice_id: str) -> str:
+    """Ensure a voice_id only contains safe filesystem characters."""
+    sanitized = _SAFE_ID_RE.sub("", voice_id)
+    if not sanitized:
+        raise HTTPException(status_code=400, detail="Invalid voice_id")
+    return sanitized
 
 
 def _detect_audio_format(data: bytes) -> str | None:
@@ -51,6 +69,9 @@ async def clone_voice(
     Clone voice from audio sample.
     Creates a voice profile that can be used for TTS.
     """
+    # C8 fix: sanitize user-controlled voice_name before any storage or path use
+    safe_voice_name = _sanitize_name(voice_name)
+
     temp_path = None
     try:
         # Read content and validate size BEFORE writing to disk
@@ -76,15 +97,15 @@ async def clone_voice(
 
         voice_id = f"voice_{uuid.uuid4().hex[:8]}"
         temp_path = os.path.join(VOICE_CLONES_DIR, f"{voice_id}_{uuid.uuid4().hex}_temp")
-
         with open(temp_path, "wb") as f:
             f.write(content)
 
-        logger.info("voice_clone_started", voice_id=voice_id, voice_name=voice_name,
+        logger.info("voice_clone_started", voice_id=voice_id, voice_name=safe_voice_name,
                     size_bytes=len(content), format=detected_fmt)
 
         voice_profile = await process_voice_clone(voice_id, temp_path, language)
-
+        # Store the sanitized name, never the raw user input
+        voice_profile["name"] = safe_voice_name
         _profile_store.put(voice_id, voice_profile)
 
         final_path = os.path.join(VOICE_CLONES_DIR, f"{voice_id}.json")
@@ -96,13 +117,12 @@ async def clone_voice(
 
         return {
             "voice_id": voice_id,
-            "voice_name": voice_name,
+            "voice_name": safe_voice_name,
             "language": language,
             "status": "ready" if not voice_profile.get("fallback") else "fallback",
             "chatterbox_voice_id": voice_profile.get("chatterbox_voice_id"),
             "message": "Voice cloned successfully"
         }
-
     except HTTPException:
         raise
     except Exception as e:
@@ -123,7 +143,6 @@ async def process_voice_clone(voice_id: str, audio_path: str, language: str) -> 
     Uses Chatterbox for voice cloning if available, otherwise falls back to config.
     """
     chatterbox_url = os.getenv("CHATTERBOX_API_URL", "http://chatterbox:5001")
-
     voice_profile = {
         "voice_id": voice_id,
         "name": f"cloned_{voice_id}",
@@ -131,13 +150,11 @@ async def process_voice_clone(voice_id: str, audio_path: str, language: str) -> 
         "source": "browser_recording",
         "engine": "chatterbox",
         "created_at": str(time.time()),
-        "chatterbox_voice_id": None,  # populated below on success
+        "chatterbox_voice_id": None,
     }
-
     try:
         async with aiohttp.ClientSession() as session:
             data = aiohttp.FormData()
-            # Properly open and close file to avoid handle leak
             with open(audio_path, 'rb') as audio_file:
                 data.add_field('audio', audio_file.read(), filename=f'{voice_id}.wav', content_type='audio/wav')
             data.add_field('name', voice_id)
@@ -149,22 +166,18 @@ async def process_voice_clone(voice_id: str, audio_path: str, language: str) -> 
             ) as resp:
                 if resp.status == 200:
                     result = await resp.json()
-                    # Capture the Chatterbox-assigned voice ID so TTS can reference it
                     chatterbox_id = result.get("id") or result.get("voice_id") or voice_id
                     voice_profile["chatterbox_voice_id"] = chatterbox_id
-                    voice_profile.update({k: v for k, v in result.items()
-                                          if k not in ("id", "voice_id")})
+                    voice_profile.update({k: v for k, v in result.items() if k not in ("id", "voice_id")})
                     voice_profile["engine"] = "chatterbox"
                 else:
                     body = await resp.text()
-                    logger.warning("chatterbox_clone_bad_status",
-                                   status=resp.status, body=body[:200])
+                    logger.warning("chatterbox_clone_bad_status", status=resp.status, body=body[:200])
                     voice_profile["fallback"] = True
     except Exception as e:
         logger.warning("chatterbox_clone_failed_using_default", error=str(e))
         voice_profile["engine"] = "chatterbox"
         voice_profile["fallback"] = True
-
     return voice_profile
 
 
@@ -172,8 +185,6 @@ async def process_voice_clone(voice_id: str, audio_path: str, language: str) -> 
 async def list_voice_clones():
     """List all available voice clones."""
     clones = []
-
-    # Thread-safe read of in-memory profiles
     for voice_id, profile in _profile_store.items_snapshot():
         clones.append({
             "voice_id": voice_id,
@@ -182,77 +193,72 @@ async def list_voice_clones():
             "engine": profile.get("engine"),
             "status": "ready" if not profile.get("fallback") else "fallback"
         })
-
-    # Read from disk (filesystem is inherently thread-safe for reads)
     try:
         for filename in os.listdir(VOICE_CLONES_DIR):
             if filename.endswith(".json"):
                 voice_id = filename.replace(".json", "")
                 if _profile_store.contains(voice_id):
-                        continue
+                    continue
                 try:
                     with open(os.path.join(VOICE_CLONES_DIR, filename)) as f:
                         profile = json.load(f)
-                        clones.append({
-                            "voice_id": profile.get("voice_id"),
-                            "name": profile.get("name"),
-                            "language": profile.get("language"),
-                            "engine": profile.get("engine"),
-                            "status": "ready"
-                        })
+                    clones.append({
+                        "voice_id": profile.get("voice_id"),
+                        "name": profile.get("name"),
+                        "language": profile.get("language"),
+                        "engine": profile.get("engine"),
+                        "status": "ready"
+                    })
                 except (json.JSONDecodeError, IOError):
                     pass
     except OSError:
-        pass  # Directory might not exist yet
-
+        pass
     return {"voices": clones}
 
 
 @router.get("/clones/{voice_id}", dependencies=[Depends(verify_api_key)])
 async def get_voice_clone(voice_id: str):
     """Get details of a specific voice clone."""
-    profile_copy = _profile_store.get_copy(voice_id)
+    # C8 fix: sanitize voice_id path parameter before using in filesystem path
+    safe_id = _sanitize_voice_id(voice_id)
+    profile_copy = _profile_store.get_copy(safe_id)
     if profile_copy is not None:
         return profile_copy
-
-    filepath = os.path.join(VOICE_CLONES_DIR, f"{voice_id}.json")
+    filepath = os.path.join(VOICE_CLONES_DIR, f"{safe_id}.json")
     if os.path.exists(filepath):
         with open(filepath) as f:
             return json.load(f)
-
     raise HTTPException(status_code=404, detail="Voice clone not found")
 
 
 @router.delete("/clones/{voice_id}", dependencies=[Depends(verify_api_key)])
 async def delete_voice_clone(voice_id: str):
     """Delete a voice clone."""
-    _profile_store.delete(voice_id)
-
-    filepath = os.path.join(VOICE_CLONES_DIR, f"{voice_id}.json")
+    safe_id = _sanitize_voice_id(voice_id)
+    _profile_store.delete(safe_id)
+    filepath = os.path.join(VOICE_CLONES_DIR, f"{safe_id}.json")
     if os.path.exists(filepath):
         try:
             os.remove(filepath)
         except OSError:
             pass
-
     return {"message": "Voice clone deleted"}
 
 
 @router.post("/set-default", dependencies=[Depends(verify_api_key)])
 async def set_default_voice(voice_id: str):
     """Set the default voice for TTS."""
-    if not _profile_store.contains(voice_id):
-        filepath = os.path.join(VOICE_CLONES_DIR, f"{voice_id}.json")
+    safe_id = _sanitize_voice_id(voice_id)
+    if not _profile_store.contains(safe_id):
+        filepath = os.path.join(VOICE_CLONES_DIR, f"{safe_id}.json")
         if not os.path.exists(filepath):
             raise HTTPException(status_code=404, detail="Voice clone not found")
-
     config_path = os.path.join(os.path.dirname(__file__), "../../../config/default_voice.json")
     os.makedirs(os.path.dirname(config_path), exist_ok=True)
     with open(config_path, "w") as f:
-        json.dump({"default_voice_id": voice_id}, f)
-
-    logger.info("default_voice_set", voice_id=voice_id)
-    return {"message": f"Default voice set to {voice_id}"}
+        json.dump({"default_voice_id": safe_id}, f)
+    logger.info("default_voice_set", voice_id=safe_id)
+    return {"message": f"Default voice set to {safe_id}"}
 
 
 @router.get("/default", dependencies=[Depends(verify_api_key)])
@@ -262,5 +268,4 @@ async def get_default_voice():
     if os.path.exists(config_path):
         with open(config_path) as f:
             return json.load(f)
-
     return {"default_voice_id": None, "engine": "chatterbox", "voice": "default"}
