@@ -7,11 +7,13 @@ import structlog
 
 logger = structlog.get_logger()
 
+
 class MemoryService:
     """
     Long-term Memory Service inspired by Mem0/MemGPT.
     Extracts and persists customer-specific facts across sessions.
     """
+
     def __init__(self):
         self.storage_path = os.path.abspath("data/memory")
         os.makedirs(self.storage_path, exist_ok=True)
@@ -37,11 +39,14 @@ class MemoryService:
 
     async def _get_lock(self, key: str) -> asyncio.Lock:
         async with self._global_lock:
-            # Memory safety: if we have too many locks, clear them (rare but prevents leak)
+            # H10 fix: clear idle (unlocked) locks when the dict grows too large.
+            # Previous code kept locked locks (inverted condition) causing unbounded growth.
             if len(self._locks) > 1000:
-                # Only clear locks that aren't currently held
-                self._locks = {k: lock for k, lock in self._locks.items() if lock.locked()}
-
+                # Keep only locks that ARE currently held (in use); drop idle ones.
+                self._locks = {
+                    k: lock for k, lock in self._locks.items()
+                    if lock.locked()  # keep in-use locks
+                }
             if key not in self._locks:
                 self._locks[key] = asyncio.Lock()
             return self._locks[key]
@@ -52,7 +57,6 @@ class MemoryService:
         path = os.path.join(self._get_tenant_path(tenant_id), f"{safe_customer}.json")
         if not os.path.exists(path):
             return []
-
         try:
             def _read():
                 with open(path) as f:
@@ -69,32 +73,29 @@ class MemoryService:
         path = os.path.join(self._get_tenant_path(tenant_id), f"{safe_customer}.json")
         lock_key = f"{tenant_id}:{safe_customer}"
         lock = await self._get_lock(lock_key)
-
         async with lock:
             existing = await self.get_memories(tenant_id, customer_id)
-
             # Simple extraction heuristic for demo
             new_facts = []
             if "prefer" in transcript.lower():
                 # Prevent massively long string injections
                 safe_snippet = transcript[:200].replace('\n', ' ')
                 new_facts.append(f"Derived from transcript: {safe_snippet}...")
-
             if not new_facts:
                 return
-
             combined = list(set(existing + new_facts))
             # Cap to prevent unbounded growth
             if len(combined) > 50:
                 combined = combined[-50:]
-
             try:
                 def _write():
                     with open(path, 'w') as f:
                         json.dump({"facts": combined}, f)
                 await asyncio.to_thread(_write)
-                logger.info("memories_updated", tenant_id=tenant_id, customer_id=customer_id, count=len(new_facts))
+                logger.info("memories_updated", tenant_id=tenant_id,
+                            customer_id=customer_id, count=len(new_facts))
             except Exception as e:
                 logger.error("memory_write_error", error=str(e))
+
 
 memory_service = MemoryService()
