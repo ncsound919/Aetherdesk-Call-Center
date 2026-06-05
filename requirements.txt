@@ -1,75 +1,17 @@
-# AetherDesk Call Center Platform - Python Dependencies
-# Core Framework
-fastapi>=0.104.0,<1.0.0
-uvicorn[standard]>=0.24.0
-
-# Database
-asyncpg>=0.29.0
-sqlalchemy>=2.0.0,<3.0.0
-alembic>=1.12.0
-
-# Caching
-redis>=5.0.0
-
-# Configuration
-python-dotenv>=1.0.0
-pydantic-settings>=2.0.0
-
-# Authentication
-python-jose[cryptography]>=3.3.0
-passlib[bcrypt]>=1.7.4
-
-# Speech-to-Text
-faster-whisper>=0.10.0
-deepgram-sdk>=3.0.0
-
-# Text-to-Speech
-gtts>=2.3.0
-httpx>=0.27.0
-
-# AI/LLM
-langchain>=0.1.0
-langchain-community>=0.1.0
-langchain-text-splitters>=0.2.0
-groq>=0.4.0
-
-# Data Processing
-numpy>=1.26.0
-pandas>=2.0.0
-
-# Real-Time Communication
-websockets>=12.0
-python-socketio>=5.10.0
-python-engineio>=4.8.0
-
-# HTTP Client
-httpx>=0.25.0
-requests>=2.31.0
-
-# Security
-cryptography>=41.0.0
-
-# Background Tasks
-celery>=5.3.0
-
-# Testing
-pytest>=7.4.0
-pytest-asyncio>=0.21.0
-pytest-cov>=4.1.0
-playwright>=1.40.0
-
-# Observability
-prometheus-client>=0.19.0
-structlog>=23.0.0
-sentry-sdk[fastapi]>=1.30.0
-
-# Code Quality
-ruff>=0.1.0
-black>=23.0.0
-isort>=5.12.0
-mypy>=1.7.0
-
-# Serialization
-orjson>=3.9.0
-msgpack>=1.0.0
-protobuf>=4.24.0,<6.0.0
+# ============================================================
+# AetherDesk — pip compatibility shim
+# ============================================================
+# pyproject.toml is the single source of truth for dependencies.
+#
+# To install for development:
+#   pip install -e ".[dev]"
+#
+# To install with ML extras:
+#   pip install -e ".[dev,ml]"
+#
+# To regenerate a pinned lockfile (recommended for deployments):
+#   pip-compile pyproject.toml --extra dev --extra ml -o requirements.lock
+#
+# This file exists only for tools that require a flat requirements.txt
+# and should NOT be edited directly.
+-e .

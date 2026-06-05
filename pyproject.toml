@@ -14,28 +14,81 @@ authors = [
 ]
 
 dependencies = [
-    "fastapi>=0.104.0",
+    # Web framework
+    "fastapi>=0.104.0,<1.0.0",
     "uvicorn[standard]>=0.24.0",
-    "redis>=5.0.0",
-    "python-dotenv>=1.0.0",
-    "twilio>=9.0.0",
-    "websockets>=12.0",
-    "faster-whisper>=0.10.0",
-    "realtimetts>=0.6.0",
-    "numpy>=1.24.0",
-    "httpx>=0.25.0",
-    "langchain>=0.1.0",
-    "langchain-community>=0.0.10",
-    "chromadb>=0.4.0",
-    "sentence-transformers>=2.2.0",
-    "structlog>=23.0.0",
-    "prometheus-client>=0.19.0",
-    "gtts>=2.3.0",
-    "pydantic>=2.5.0",
-    "sqlalchemy>=2.0.0",
+
+    # Database — async driver + ORM + migrations
+    "asyncpg>=0.29.0",
+    "sqlalchemy>=2.0.0,<3.0.0",
+    "alembic>=1.12.0",
     "psycopg2-binary>=2.9.0",
     "pgvector>=0.2.0",
+    "sqlparse>=0.4.4",
+
+    # Caching & session store
+    "redis>=5.0.0",
+
+    # Configuration
+    "python-dotenv>=1.0.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.0.0",
+
+    # Authentication
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "cryptography>=41.0.0",
+
+    # Real-time comms
+    "websockets>=12.0",
+    "python-socketio>=5.10.0",
+    "python-engineio>=4.8.0",
+
+    # HTTP clients
+    "httpx>=0.27.0",
+    "requests>=2.31.0",
+
+    # Speech-to-Text
+    "faster-whisper>=0.10.0",
+    "deepgram-sdk>=3.0.0",
+
+    # Text-to-Speech
+    "gtts>=2.3.0",
+    "realtimetts>=0.6.0",
+    "edge-tts>=6.1.0",
+
+    # Telephony
+    "twilio>=9.0.0",
+
+    # AI / LLM
+    "langchain>=0.1.0",
+    "langchain-community>=0.1.0",
+    "langchain-text-splitters>=0.2.0",
+    "groq>=0.4.0",
+
+    # RAG / Vector store
+    "chromadb>=0.4.0",
+    "sentence-transformers>=2.2.0",
+
+    # Data processing
+    "numpy>=1.26.0",
+    "pandas>=2.0.0",
+
+    # Background tasks
+    "celery>=5.3.0",
+
+    # Serialization
+    "orjson>=3.9.0",
+    "msgpack>=1.0.0",
+    "protobuf>=4.24.0,<6.0.0",
+
+    # Resilience
     "aiocircuitbreaker>=1.0.0",
+
+    # Observability
+    "prometheus-client>=0.19.0",
+    "structlog>=23.0.0",
+    "sentry-sdk[fastapi]>=1.30.0",
 ]
 
 [project.optional-dependencies]
@@ -48,12 +101,17 @@ dev = [
     "pre-commit>=3.5.0",
     "pytest-cov>=4.1.0",
     "playwright>=1.40.0",
+    "isort>=5.12.0",
 ]
 
 ml = [
     "torch>=2.1.0; platform_system != 'darwin'",
     "torchaudio>=2.1.0; platform_system != 'darwin'",
     "transformers>=4.36.0",
+]
+
+all = [
+    "aetherdesk[dev,ml]",
 ]
 
 [tool.uv]
@@ -111,6 +169,6 @@ markers = [
 packages = ["apps"]
 
 [project.urls]
-Homepage = "https://github.com/your-org/aetherdesk"
-Repository = "https://github.com/your-org/aetherdesk"
-Issues = "https://github.com/your-org/aetherdesk/issues"
+Homepage = "https://github.com/ncsound919/Aetherdesk-Call-Center"
+Repository = "https://github.com/ncsound919/Aetherdesk-Call-Center"
+Issues = "https://github.com/ncsound919/Aetherdesk-Call-Center/issues"
