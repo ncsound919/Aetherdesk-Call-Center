@@ -6,7 +6,7 @@ import asyncio
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 
 import httpx
 import structlog
@@ -226,7 +226,7 @@ async def _run_campaign(leads: list, config: CampaignLaunch, tenant_id: str):
                 with db_context_sync() as conn:
                     cursor = conn.cursor()
                     cursor.execute("UPDATE leads SET status = 'calling', last_called_at = ? WHERE id = ?",
-                                 (datetime.utcnow().isoformat(), lead["id"]))
+                                 (datetime.now(UTC).isoformat(), lead["id"]))
                     conn.commit()
 
                 # Create campaign_call record
@@ -291,7 +291,7 @@ async def push_escalation_alert(call_sid: str, reason: str, agent_name: str):
         "call_sid": call_sid,
         "agent": agent_name,
         "reason": reason,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "severity": "high" if "manager" in reason.lower() else "medium"
     }
 

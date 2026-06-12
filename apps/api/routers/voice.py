@@ -9,7 +9,6 @@ import structlog
 from fastapi import (
     APIRouter,
     Depends,
-    Header,
     HTTPException,
     Request,
     WebSocket,
@@ -28,8 +27,6 @@ from apps.api.services.call_session import (
 )
 from apps.api.services.database import (
     create_call_session,
-    get_call_session,
-    update_call_status,
 )
 from apps.api.services.intent_classifier import classifier
 from apps.api.services.orchestrator import Orchestrator
@@ -63,7 +60,6 @@ async def handle_incoming_call(request: Request):
 
     session_ref = data.get("sessionRef") or data.get("session_ref") or str(uuid.uuid4())
     ingress_number = data.get("ingressNumber") or data.get("from", "")
-    app_ref = data.get("appRef") or data.get("app_ref", "")
     # tenant_id comes from the webhook payload or JWT auth
     tenant_id = data.get("tenantId") or data.get("tenant_id")
     profile_id = data.get("profileId") or data.get("profile_id", "PROF-001")
@@ -304,7 +300,7 @@ async def trigger_outbound_call(request: dict):
         result = await fonster.create_application({
             "name": f"Outbound-{to_phone}",
             "type": "EXTERNAL",
-            "endpoint": f"tcp://aetherdesk-voice:50061",
+            "endpoint": "tcp://aetherdesk-voice:50061",
             "variables": {
                 "outbound_caller_id": os.getenv("SIP_TRUNK_FROM", ""),
                 "outbound_number": to_phone,

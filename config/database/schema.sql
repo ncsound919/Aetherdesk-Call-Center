@@ -10,6 +10,26 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "citext";
 
 -- ============================================
+-- PLANS (Subscription tiers - must be created before tenants)
+-- ============================================
+CREATE TABLE plans (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL, -- "Starter", "Pro", "Enterprise"
+    description TEXT,
+    price_per_hour DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    price_per_day DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    price_per_week DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    price_per_month DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    max_concurrent_calls INT DEFAULT 10,
+    max_agents INT DEFAULT 5,
+    max_recordings_mb INT DEFAULT 1000,
+    features JSONB DEFAULT '[]',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- ============================================
 -- TENANTS (Businesses that rent agents)
 -- ============================================
 CREATE TABLE tenants (
@@ -32,26 +52,6 @@ CREATE TABLE tenants (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     deleted_at TIMESTAMP WITH TIME ZONE -- Soft delete
-);
-
--- ============================================
--- PLANS (Subscription tiers)
--- ============================================
-CREATE TABLE plans (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL, -- "Starter", "Pro", "Enterprise"
-    description TEXT,
-    price_per_hour DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    price_per_day DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    price_per_week DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    price_per_month DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    max_concurrent_calls INT DEFAULT 10,
-    max_agents INT DEFAULT 5,
-    max_recordings_mb INT DEFAULT 1000,
-    features JSONB DEFAULT '[]',
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- ============================================

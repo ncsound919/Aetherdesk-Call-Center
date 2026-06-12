@@ -2,11 +2,11 @@ import asyncio
 import os
 from typing import Any
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import CSVLoader, JSONLoader, TextLoader
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 KB_DIR = os.getenv("KB_DIR", "data/kb")
 CHROMA_DIR = os.getenv("CHROMA_DIR", "chroma_db")

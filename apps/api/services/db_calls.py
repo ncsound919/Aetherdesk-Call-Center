@@ -1,10 +1,11 @@
 import json
 import uuid
+from datetime import UTC, datetime
+
 import structlog
-from datetime import datetime, timezone
 
 from apps.api.services.db_config import USE_POSTGRES
-from apps.api.services.db_pool import get_pg_pool, _get_sqlite_conn
+from apps.api.services.db_pool import _get_sqlite_conn, get_pg_pool
 
 logger = structlog.get_logger()
 
@@ -28,7 +29,7 @@ async def create_call_session(tenant_id, agent_id, caller_number, caller_name=No
     else:
         conn = _get_sqlite_conn()
         try:
-            now = datetime.now(timezone.utc).isoformat()
+            now = datetime.now(UTC).isoformat()
             conn.execute("""
                 INSERT INTO call_sessions (id, tenant_id, agent_id, caller_number, caller_name, called_number,
                     call_direction, call_status, sip_call_id, intent_detected, created_at, updated_at)
@@ -62,7 +63,7 @@ async def update_call_status(call_id, status):
             return await pool.fetchrow("SELECT * FROM call_sessions WHERE id = $1", call_id)
     else:
         conn = _get_sqlite_conn()
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         conn.execute("UPDATE call_sessions SET call_status = ?, updated_at = ? WHERE id = ?",
                      (status, now, call_id))
         conn.commit()
@@ -133,14 +134,15 @@ async def dequeue_call(tenant_id, agent_id):
                         return dict(row)
     else:
         conn = _get_sqlite_conn()
-        now = datetime.now(timezone.utc).isoformat()
-        row = conn.execute("SELECT * FROM call_queue WHERE tenant_id = ? AND status = 'waiting' ORDER BY position LIMIT 1", (tenant_id,)).fetchone()
-        if row:
-            conn.execute("UPDATE call_queue SET status = 'assigned', assigned_at = ? WHERE id = ?", (now, row['id']))
-            conn.commit()
+        try:
+            now = datetime.now(UTC).isoformat()
+            row = conn.execute("SELECT * FROM call_queue WHERE tenant_id = ? AND status = 'waiting' ORDER BY position LIMIT 1", (tenant_id,)).fetchone()
+            if row:
+                conn.execute("UPDATE call_queue SET status = 'assigned', assigned_at = ? WHERE id = ?", (now, row['id']))
+                conn.commit()
+                return dict(row)
+        finally:
             conn.close()
-            return dict(row)
-        conn.close()
     return None
 
 
@@ -162,17 +164,19 @@ async def get_usage_stats(tenant_id):
             }
     else:
         conn = _get_sqlite_conn()
-        row = conn.execute("SELECT COUNT(*) as cnt FROM agents WHERE tenant_id = ?", (tenant_id,)).fetchone()
-        total_agents = row["cnt"] if row else 0
-        row = conn.execute("SELECT COUNT(*) as cnt FROM agents WHERE tenant_id = ? AND status IN ('available','busy','on_call')", (tenant_id,)).fetchone()
-        active_agents = row["cnt"] if row else 0
-        row = conn.execute("SELECT COUNT(*) as cnt FROM call_sessions WHERE tenant_id = ?", (tenant_id,)).fetchone()
-        total_calls = row["cnt"] if row else 0
-        row = conn.execute("SELECT COUNT(*) as cnt FROM call_sessions WHERE tenant_id = ? AND call_status = 'active'", (tenant_id,)).fetchone()
-        active_calls = row["cnt"] if row else 0
-        row = conn.execute("SELECT COALESCE(SUM(duration_seconds)/60.0, 0) as val FROM call_sessions WHERE tenant_id = ?", (tenant_id,)).fetchone()
-        total_minutes = row["val"] if row else 0
-        conn.close()
+        try:
+            row = conn.execute("SELECT COUNT(*) as cnt FROM agents WHERE tenant_id = ?", (tenant_id,)).fetchone()
+            total_agents = row["cnt"] if row else 0
+            row = conn.execute("SELECT COUNT(*) as cnt FROM agents WHERE tenant_id = ? AND status IN ('available','busy','on_call')", (tenant_id,)).fetchone()
+            active_agents = row["cnt"] if row else 0
+            row = conn.execute("SELECT COUNT(*) as cnt FROM call_sessions WHERE tenant_id = ?", (tenant_id,)).fetchone()
+            total_calls = row["cnt"] if row else 0
+            row = conn.execute("SELECT COUNT(*) as cnt FROM call_sessions WHERE tenant_id = ? AND call_status = 'active'", (tenant_id,)).fetchone()
+            active_calls = row["cnt"] if row else 0
+            row = conn.execute("SELECT COALESCE(SUM(duration_seconds)/60.0, 0) as val FROM call_sessions WHERE tenant_id = ?", (tenant_id,)).fetchone()
+            total_minutes = row["val"] if row else 0
+        finally:
+            conn.close()
         return {
             "total_agents": total_agents, "active_agents": active_agents or 0,
             "total_calls": total_calls or 0, "active_calls": active_calls or 0,
@@ -189,9 +193,11 @@ async def get_billing_summary(tenant_id, period_start, period_end):
             return {"total_calls": total_calls, "total_minutes": float(total_minutes or 0), "total_cost": float(total_minutes or 0) * 0.015, "currency": "USD"}
     else:
         conn = _get_sqlite_conn()
-        total_calls = (conn.execute("SELECT COUNT(*) AS cnt FROM call_sessions WHERE tenant_id = ? AND created_at BETWEEN ? AND ?", (tenant_id, period_start, period_end)).fetchone() or {}).get("cnt", 0)
-        total_minutes = (conn.execute("SELECT COALESCE(SUM(duration_seconds)/60.0, 0) AS mins FROM call_sessions WHERE tenant_id = ? AND created_at BETWEEN ? AND ?", (tenant_id, period_start, period_end)).fetchone() or {}).get("mins", 0)
-        conn.close()
+        try:
+            total_calls = (conn.execute("SELECT COUNT(*) AS cnt FROM call_sessions WHERE tenant_id = ? AND created_at BETWEEN ? AND ?", (tenant_id, period_start, period_end)).fetchone() or {}).get("cnt", 0)
+            total_minutes = (conn.execute("SELECT COALESCE(SUM(duration_seconds)/60.0, 0) AS mins FROM call_sessions WHERE tenant_id = ? AND created_at BETWEEN ? AND ?", (tenant_id, period_start, period_end)).fetchone() or {}).get("mins", 0)
+        finally:
+            conn.close()
         return {"total_calls": total_calls or 0, "total_minutes": float(total_minutes or 0), "total_cost": float(total_minutes or 0) * 0.015, "currency": "USD"}
 
 
@@ -207,12 +213,14 @@ async def log_audit_event(tenant_id, user_id, action, resource_type, resource_id
             """, tenant_id, user_id, action, resource_type, resource_id, json.dumps(old_values or {}), json.dumps(new_values or {}))
     else:
         conn = _get_sqlite_conn()
-        conn.execute("""
-            INSERT INTO audit_log (tenant_id, user_id, action, resource_type, resource_id, old_values, new_values, ip_address)
-            VALUES (?, ?, ?, ?, ?, ?, ?, '127.0.0.1')
-        """, (tenant_id, user_id, action, resource_type, resource_id, json.dumps(old_values or {}), json.dumps(new_values or {})))
-        conn.commit()
-        conn.close()
+        try:
+            conn.execute("""
+                INSERT INTO audit_log (tenant_id, user_id, action, resource_type, resource_id, old_values, new_values, ip_address)
+                VALUES (?, ?, ?, ?, ?, ?, ?, '127.0.0.1')
+            """, (tenant_id, user_id, action, resource_type, resource_id, json.dumps(old_values or {}), json.dumps(new_values or {})))
+            conn.commit()
+        finally:
+            conn.close()
 
 
 # --- SaaS Dashboard & Operations Helpers ---
@@ -229,12 +237,14 @@ async def get_saas_dashboard_db(tenant_id: str) -> dict:
             }
     else:
         conn = _get_sqlite_conn()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM rentals WHERE tenant_id = ?", (tenant_id,))
-        rentals = [dict(row) for row in cursor.fetchall()]
-        cursor.execute("SELECT * FROM agent_profiles WHERE tenant_id = ?", (tenant_id,))
-        profiles = [dict(row) for row in cursor.fetchall()]
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM rentals WHERE tenant_id = ?", (tenant_id,))
+            rentals = [dict(row) for row in cursor.fetchall()]
+            cursor.execute("SELECT * FROM agent_profiles WHERE tenant_id = ?", (tenant_id,))
+            profiles = [dict(row) for row in cursor.fetchall()]
+        finally:
+            conn.close()
         return {
             "rentals": rentals,
             "profiles": profiles
@@ -252,12 +262,14 @@ async def rent_agent_db(rental_id, tenant_id, profile_id, duration_type, end_tim
             )
     else:
         conn = _get_sqlite_conn()
-        conn.execute(
-            "INSERT INTO rentals (id, tenant_id, profile_id, duration_type, end_time) VALUES (?, ?, ?, ?, ?)",
-            (rental_id, tenant_id, profile_id, duration_type, end_time.strftime("%Y-%m-%d %H:%M:%S"))
-        )
-        conn.commit()
-        conn.close()
+        try:
+            conn.execute(
+                "INSERT INTO rentals (id, tenant_id, profile_id, duration_type, end_time) VALUES (?, ?, ?, ?, ?)",
+                (rental_id, tenant_id, profile_id, duration_type, end_time.strftime("%Y-%m-%d %H:%M:%S"))
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
 
 async def get_session_recordings_db(tenant_id):
@@ -268,8 +280,10 @@ async def get_session_recordings_db(tenant_id):
             return [dict(r) for r in rows]
     else:
         conn = _get_sqlite_conn()
-        rows = conn.execute("SELECT * FROM session_recordings WHERE tenant_id = ? ORDER BY created_at DESC", (tenant_id,)).fetchall()
-        conn.close()
+        try:
+            rows = conn.execute("SELECT * FROM session_recordings WHERE tenant_id = ? ORDER BY created_at DESC", (tenant_id,)).fetchall()
+        finally:
+            conn.close()
         return [dict(r) for r in rows]
     return []
 
@@ -282,8 +296,10 @@ async def get_pending_approvals_db(tenant_id):
             return [dict(r) for r in rows]
     else:
         conn = _get_sqlite_conn()
-        rows = conn.execute("SELECT * FROM action_approvals WHERE status = 'pending' AND tenant_id = ?", (tenant_id,)).fetchall()
-        conn.close()
+        try:
+            rows = conn.execute("SELECT * FROM action_approvals WHERE status = 'pending' AND tenant_id = ?", (tenant_id,)).fetchall()
+        finally:
+            conn.close()
         return [dict(r) for r in rows]
     return []
 
@@ -300,11 +316,13 @@ async def process_approval_db(approval_id, status, tenant_id):
                 return False
     else:
         conn = _get_sqlite_conn()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE action_approvals SET status = ? WHERE id = ? AND tenant_id = ?", (status, approval_id, tenant_id))
-        rows_updated = cursor.rowcount
-        conn.commit()
-        conn.close()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE action_approvals SET status = ? WHERE id = ? AND tenant_id = ?", (status, approval_id, tenant_id))
+            rows_updated = cursor.rowcount
+            conn.commit()
+        finally:
+            conn.close()
         return rows_updated > 0
     return False
 
@@ -324,8 +342,10 @@ async def get_webhook_url_db(tenant_id):
                     return row_settings["webhook_url"]
         else:
             conn = _get_sqlite_conn()
-            row = conn.execute("SELECT webhook_url FROM tenant_settings WHERE tenant_id = ?", (tenant_id,)).fetchone()
-            conn.close()
+            try:
+                row = conn.execute("SELECT webhook_url FROM tenant_settings WHERE tenant_id = ?", (tenant_id,)).fetchone()
+            finally:
+                conn.close()
             if row:
                 return row.get("webhook_url")
     except Exception as e:

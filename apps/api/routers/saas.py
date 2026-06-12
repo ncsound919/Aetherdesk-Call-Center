@@ -1,4 +1,3 @@
-import json
 import os
 import uuid
 from datetime import datetime, timedelta
@@ -7,15 +6,15 @@ import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from apps.api.services.database import (
-    get_tenant_by_api_key,
-    get_saas_dashboard_db,
     create_agent_profile_db,
-    rent_agent_db,
-    get_tenant_settings_db,
-    update_tenant_settings_db,
-    get_session_recordings_db,
     get_pending_approvals_db,
+    get_saas_dashboard_db,
+    get_session_recordings_db,
+    get_tenant_by_api_key,
+    get_tenant_settings_db,
     process_approval_db,
+    rent_agent_db,
+    update_tenant_settings_db,
 )
 
 router = APIRouter(prefix="/saas", tags=["saas"])

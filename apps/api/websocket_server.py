@@ -6,12 +6,11 @@ Real-time communication for agent dashboard and call monitoring
 import asyncio
 import json
 import logging
-from datetime import datetime
-
-import websockets
-from websockets.server import serve
+from datetime import UTC, datetime
 
 import redis.asyncio as redis
+import websockets
+from websockets.server import serve
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +23,12 @@ connected_clients = {}
 
 async def register_client(websocket, path):
     """Register a new client connection"""
-    client_id = f"client_{datetime.utcnow().timestamp()}"
+    client_id = f"client_{datetime.now(UTC).timestamp()}"
     connected_clients[client_id] = {
         "websocket": websocket,
         "tenant_id": None,
         "agent_id": None,
-        "connected_at": datetime.utcnow().isoformat(),
+        "connected_at": datetime.now(UTC).isoformat(),
     }
     logger.info(f"Client registered: {client_id}")
     return client_id
@@ -57,7 +56,7 @@ async def handle_message(websocket, message, client_id):
                 connected_clients[client_id]["tenant_id"] = tenant_id
                 await websocket.send(json.dumps({
                     "type": "auth_success",
-                    "timestamp": datetime.utcnow().isoformat()
+                    "timestamp": datetime.now(UTC).isoformat()
                 }))
             else:
                 await websocket.send(json.dumps({
@@ -88,13 +87,20 @@ async def handle_message(websocket, message, client_id):
         elif message_type == "ping":
             await websocket.send(json.dumps({
                 "type": "pong",
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(UTC).isoformat()
             }))
 
     except json.JSONDecodeError:
         logger.error(f"Invalid JSON from client {client_id}")
+        await websocket.send(json.dumps({"type": "error", "message": "Invalid JSON"}))
+    except websockets.exceptions.ConnectionClosed:
+        logger.info(f"Client {client_id} disconnected during message handling")
     except Exception as e:
-        logger.error(f"Error handling message: {e}")
+        logger.error(f"Error handling message: {e}", exc_info=True)
+        try:
+            await websocket.send(json.dumps({"type": "error", "message": "Internal error"}))
+        except Exception:
+            pass
 
 
 async def process_call_action(call_id, action):
@@ -105,7 +111,7 @@ async def process_call_action(call_id, action):
             f"call:{call_id}:actions",
             json.dumps({
                 "action": action,
-                "timestamp": datetime.utcnow().isoformat()
+                "timestamp": datetime.now(UTC).isoformat()
             })
         )
 
@@ -114,10 +120,10 @@ async def process_call_action(call_id, action):
         "type": "call_action",
         "call_id": call_id,
         "action": action,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(UTC).isoformat()
     })
 
-    for client_id, client in connected_clients.items():
+    for _client_id, client in connected_clients.items():
         if "call_updates" in client.get("subscriptions", []):
             try:
                 await client["websocket"].send(message)
@@ -128,10 +134,11 @@ async def process_call_action(call_id, action):
 def verify_token(token):
     """Verify JWT token (simplified for example)"""
     # In production, use proper JWT verification
-    import jwt
     import os
+
+    import jwt
     try:
-        payload = jwt.decode(token, os.getenv("JWT_SECRET", "your-jwt-secret-key"), algorithms=["HS256"])
+        jwt.decode(token, os.getenv("JWT_SECRET", "your-jwt-secret-key"), algorithms=["HS256"])
         return True
     except jwt.InvalidTokenError:
         return False
@@ -151,12 +158,12 @@ async def redis_listener():
             event_type = message["channel"].decode()
 
             # Broadcast to all connected clients
-            for client_id, client in connected_clients.items():
+            for _client_id, client in connected_clients.items():
                 try:
                     await client["websocket"].send(json.dumps({
                         "type": event_type,
                         "data": data,
-                        "timestamp": datetime.utcnow().isoformat()
+                        "timestamp": datetime.now(UTC).isoformat()
                     }))
                 except websockets.exceptions.ConnectionClosed:
                     pass

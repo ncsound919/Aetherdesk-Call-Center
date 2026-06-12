@@ -4,13 +4,16 @@ import structlog
 
 logger = structlog.get_logger()
 
-# Global instances
 analyzer = None
 anonymizer = None
 prompt_classifier = None
 
+
 def init_security_modules():
+    """Lazy-init security modules only when first needed."""
     global analyzer, anonymizer, prompt_classifier
+    if analyzer is not None:
+        return
 
     try:
         from presidio_analyzer import AnalyzerEngine
@@ -22,15 +25,17 @@ def init_security_modules():
         logger.warning("presidio_missing", fallback="regex")
 
     try:
-        # Utilizing huggingface pipelines for robust prompt injection detection
-        # (e.g. meta-llama/Prompt-Guard-86M or similar trending model)
-        # For lightweight implementation, we mock the pipeline load, but standard integration looks like this:
-        # import torch
-        # from transformers import pipeline
-        # prompt_classifier = pipeline("text-classification", model="protectai/deberta-v3-base-prompt-injection", device=0 if torch.cuda.is_available() else -1)
+        from transformers import pipeline
+        prompt_classifier = pipeline(
+            "text-classification",
+            model="protectai/deberta-v3-base-prompt-injection",
+            device=-1,
+        )
         logger.info("prompt_guard_initialized", status="success")
     except ImportError:
         logger.warning("transformers_missing", fallback="regex_heuristics")
+    except Exception as e:
+        logger.warning("prompt_guard_init_failed", error=str(e), fallback="regex_heuristics")
 
 # --- Fallback Heuristics ---
 INJECTION_PATTERNS = [
@@ -52,6 +57,8 @@ def detect_prompt_injection(text: str) -> tuple[bool, float]:
     Checks the user prompt using an advanced ML classifier if available,
     falling back to strict regex heuristics.
     """
+    if analyzer is None:
+        init_security_modules()
     if prompt_classifier:
         try:
             result = prompt_classifier(text[:2000])[0]
@@ -77,6 +84,8 @@ def redact_pii(text: str, return_detailed: bool = False) -> str:
     if not text:
         return text
 
+    if analyzer is None:
+        init_security_modules()
     if analyzer and anonymizer:
         try:
             results = analyzer.analyze(text=text, language='en')
@@ -93,5 +102,4 @@ def redact_pii(text: str, return_detailed: bool = False) -> str:
 
     return text
 
-# Initialize on module import
-init_security_modules()
+# Lazy initialization happens on first use; do NOT init at import time

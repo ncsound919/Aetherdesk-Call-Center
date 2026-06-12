@@ -1,10 +1,9 @@
 # Pure HTTP client for Fonster - no SDK dependency
 # All calls go directly to the Fonster REST API
 
-import uuid
 import logging
+
 import httpx
-from typing import Optional, Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +47,7 @@ class FonosterHTTPClient:
             logger.error(f"Fonoster create app error {e.response.status_code}: {e.response.text}")
             raise e
 
-    async def get_application(self, ref: str) -> Optional[dict]:
+    async def get_application(self, ref: str) -> dict | None:
         """Retrieve a single Voice Application by ref."""
         try:
             resp = await self.client.get(f"/applications/{ref}")
@@ -68,7 +67,7 @@ class FonosterHTTPClient:
             logger.error(f"Fonoster delete app error: {e}")
             return False
 
-    async def list_applications(self) -> List[dict]:
+    async def list_applications(self) -> list[dict]:
         """List all Voice Applications."""
         try:
             resp = await self.client.get("/applications")
@@ -137,7 +136,7 @@ class FonosterHTTPClient:
         application_ref: str,
         timeout: int = 15000,
         language: str = "en-US",
-        hints: Optional[List[str]] = None,
+        hints: list[str] | None = None,
     ) -> dict:
         """Gather speech input from the caller for intent detection."""
         return await self.send_command(
@@ -159,7 +158,7 @@ class FonosterHTTPClient:
 
     # ── Events / Webhooks ─────────────────────────────────────────
 
-    async def register_webhook(self, application_ref: str, url: str, events: List[str]) -> dict:
+    async def register_webhook(self, application_ref: str, url: str, events: list[str]) -> dict:
         """Register a webhook URL for call events."""
         try:
             resp = await self.client.post(

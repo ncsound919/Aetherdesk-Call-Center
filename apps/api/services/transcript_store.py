@@ -1,9 +1,10 @@
 """Transcript storage service — replaces global CALL_TRANSCRIPTS + CALL_LAST_ACTIVITY."""
 
-import time
 import asyncio
-from cachetools import LRUCache
+import time
+
 import structlog
+from cachetools import LRUCache
 
 logger = structlog.get_logger()
 

@@ -1,12 +1,11 @@
 import os
 import secrets
 import time
+from datetime import UTC
 
 import structlog
 from fastapi import Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-
-from apps.api.services.database import db_context
 
 logger = structlog.get_logger()
 
@@ -27,8 +26,9 @@ class TokenStore:
             "created_at": time.time(),
             "metadata": metadata or {}
         }
-        from apps.api.main import redis_client
         import json
+
+        from apps.api.main import redis_client
         if redis_client:
             await redis_client.setex(f"ws_token:{token}", TOKEN_EXPIRY_SECONDS, json.dumps(token_data))
         else:
@@ -38,8 +38,9 @@ class TokenStore:
         return token
 
     async def validate_token(self, token: str) -> dict | None:
-        from apps.api.main import redis_client
         import json
+
+        from apps.api.main import redis_client
         if redis_client:
             data = await redis_client.get(f"ws_token:{token}")
             if data:
@@ -83,21 +84,23 @@ async def generate_websocket_token(user_id: str, metadata: dict = None) -> str:
 
 def generate_access_token(data: dict, expires_delta_seconds: int = 3600) -> str:
     """Generate JWT access token (for API authentication)."""
+    from datetime import datetime, timedelta
+
     import jwt
-    from datetime import datetime, timezone, timedelta
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(seconds=expires_delta_seconds)
+    expire = datetime.now(UTC) + timedelta(seconds=expires_delta_seconds)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
 
 
 async def verify_access_token(token: str) -> dict | None:
     """Verify JWT access token."""
+    from datetime import datetime
+
     import jwt
-    from datetime import datetime, timezone
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        if payload.get("exp", 0) < datetime.now(timezone.utc).timestamp():
+        if payload.get("exp", 0) < datetime.now(UTC).timestamp():
             return None
         return payload
     except jwt.InvalidTokenError:
@@ -222,4 +225,4 @@ async def verify_tenant_access(
          raise HTTPException(
              status_code=403,
              detail="Access denied: tenant verification failed",
-         )
+         ) from None

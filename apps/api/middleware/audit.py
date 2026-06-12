@@ -9,15 +9,13 @@ remote SIEM endpoint for compliance monitoring.
 import json
 import time
 import uuid
-import logging
-from datetime import datetime, timezone
-from typing import Callable
+from collections.abc import Callable
 
 import structlog
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from apps.api.services.database import log_audit_event, USE_POSTGRES
+from apps.api.services.database import USE_POSTGRES
 
 logger = structlog.get_logger()
 
@@ -44,7 +42,7 @@ PHI_FIELDS = {
     "caller_number", "caller_name", "called_number", "phone", "email",
     "name", "address", "date_of_birth", "ssn", "medical_record_number",
     "patient_id", "prescription", "diagnosis", "transcript", "full_text",
-    "caller_number", "ingress_number",
+    "ingress_number",
 }
 
 
@@ -137,24 +135,34 @@ class AuditMiddleware(BaseHTTPMiddleware):
                 if USE_POSTGRES:
                     # Async logging for PostgreSQL
                     import asyncio
+
                     from apps.api.services.database import get_pg_pool
                     pool = await get_pg_pool()
                     if pool:
                         async def _log_async():
-                            await pool.execute(
-                                """INSERT INTO audit_log
-                                   (tenant_id, user_id, action, resource_type, resource_id,
-                                    old_values, new_values, ip_address)
-                                   VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
-                                tenant_id, user_id, action, resource_type, request_id,
-                                "{}", json.dumps(new_values),
-                                request.client.host if request.client else "0.0.0.0"
-                            )
-                        asyncio.create_task(_log_async())
+                            try:
+                                await pool.execute(
+                                    """INSERT INTO audit_log
+                                       (tenant_id, user_id, action, resource_type, resource_id,
+                                        old_values, new_values, ip_address)
+                                       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
+                                    tenant_id, user_id, action, resource_type, request_id,
+                                    "{}", json.dumps(new_values),
+                                    request.client.host if request.client else "0.0.0.0"
+                                )
+                            except Exception as log_err:
+                                logger.error("async_audit_log_failed", error=str(log_err))
+                        task = asyncio.create_task(_log_async())
+                        # Store reference to prevent GC of pending task
+                        if not hasattr(request.app.state, '_background_tasks'):
+                            request.app.state._background_tasks = set()
+                        request.app.state._background_tasks.add(task)
+                        task.add_done_callback(request.app.state._background_tasks.discard)
                 else:
                     # Synchronous logging for SQLite
-                    from apps.api.services.database import _get_sqlite_conn
                     import datetime as dt
+
+                    from apps.api.services.database import _get_sqlite_conn
                     conn = _get_sqlite_conn()
                     conn.execute(
                         """INSERT INTO audit_log
@@ -164,7 +172,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                         (tenant_id, user_id, action, resource_type, str(request_id),
                          "{}", json.dumps(new_values),
                          request.client.host if request.client else "0.0.0.0",
-                         dt.datetime.now(dt.timezone.utc).isoformat())
+                         dt.datetime.now(dt.UTC).isoformat())
                     )
                     conn.commit()
                     conn.close()

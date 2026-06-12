@@ -4,10 +4,10 @@ import httpx
 import structlog
 
 from apps.api.services.database import (
+    decrypt_val,
+    get_order_status_db,
     get_webhook_url_db,
     lookup_invoice_db,
-    get_order_status_db,
-    decrypt_val,
 )
 
 from .queue import QueueManager

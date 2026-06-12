@@ -1,10 +1,6 @@
 import asyncpg
 import structlog
 
-from apps.api.services.db_config import USE_POSTGRES, DATABASE_URL, SQLITE_PATH, SQLITE_POOL_SIZE, SQLITE_TIMEOUT
-from apps.api.services.db_pool import _get_sqlite_conn
-
-
 logger = structlog.get_logger()
 
 
@@ -14,6 +10,24 @@ SCHEMA_SQL = """
 -- Extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+-- Plans (MUST be created before tenants which references it)
+CREATE TABLE IF NOT EXISTS plans (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    price_per_hour DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    price_per_day DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    price_per_week DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    price_per_month DECIMAL(10, 2) NOT NULL DEFAULT 0,
+    max_concurrent_calls INT DEFAULT 10,
+    max_agents INT DEFAULT 5,
+    max_recordings_mb INT DEFAULT 1000,
+    features JSONB DEFAULT '[]',
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 -- Tenants
 CREATE TABLE IF NOT EXISTS tenants (
@@ -36,24 +50,6 @@ CREATE TABLE IF NOT EXISTS tenants (
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     deleted_at TIMESTAMPTZ
-);
-
--- Plans
-CREATE TABLE IF NOT EXISTS plans (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL,
-    description TEXT,
-    price_per_hour DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    price_per_day DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    price_per_week DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    price_per_month DECIMAL(10, 2) NOT NULL DEFAULT 0,
-    max_concurrent_calls INT DEFAULT 10,
-    max_agents INT DEFAULT 5,
-    max_recordings_mb INT DEFAULT 1000,
-    features JSONB DEFAULT '[]',
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Agents
@@ -685,6 +681,7 @@ async def init_pg_schema(pool: asyncpg.Pool):
 
 
 def init_sqlite_schema():
+    from apps.api.services.db_pool import _get_sqlite_conn
     conn = _get_sqlite_conn()
     conn.executescript(SQLITE_SCHEMA_SQL)
     conn.commit()

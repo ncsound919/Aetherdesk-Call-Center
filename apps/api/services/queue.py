@@ -98,9 +98,9 @@ class QueueManager:
 
     def enqueue(self, queue: str, item: dict) -> None:
         backend = self._get_backend()
-        item = dict(item)
-        item.setdefault("created_ts", time.time())
-        backend.lpush(QUEUE_KEY.format(name=queue), json.dumps(item))
+        entry = dict(item)
+        entry.setdefault("created_ts", time.time())
+        backend.lpush(QUEUE_KEY.format(name=queue), json.dumps(entry))
 
     def peek(self, queue: str, n: int = 50):
         backend = self._get_backend()
