@@ -1,8 +1,8 @@
 """Centralized database error types."""
-from typing import Optional
+
 
 class DatabaseError(Exception):
-    def __init__(self, message: str, detail: Optional[dict] = None):
+    def __init__(self, message: str, detail: dict | None = None):
         self.message = message
         self.detail = detail or {}
         super().__init__(self.message)

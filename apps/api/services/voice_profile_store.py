@@ -1,8 +1,9 @@
 """Voice profile storage — replaces global voice_profiles LRUCache."""
 
+from threading import Lock
+
 import structlog
 from cachetools import LRUCache
-from threading import Lock
 
 logger = structlog.get_logger()
 

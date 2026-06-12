@@ -1,13 +1,18 @@
-import os
 import asyncio
-import structlog
-from typing import Optional
+import os
+import sqlite3
 from contextlib import asynccontextmanager
 
 import asyncpg
-import sqlite3
+import structlog
 
-from apps.api.services.db_config import DATABASE_URL, USE_POSTGRES, SQLITE_PATH, SQLITE_POOL_SIZE, SQLITE_TIMEOUT
+from apps.api.services.db_config import (
+    DATABASE_URL,
+    SQLITE_PATH,
+    SQLITE_POOL_SIZE,
+    SQLITE_TIMEOUT,
+    USE_POSTGRES,
+)
 
 
 def _dict_factory(cursor, row):
@@ -72,10 +77,10 @@ async def db_context():
 
 # ── Asyncpg Pool (PostgreSQL) ────────────────────────────────────
 
-_pg_pool: Optional[asyncpg.Pool] = None
+_pg_pool: asyncpg.Pool | None = None
 
 
-async def get_pg_pool() -> Optional[asyncpg.Pool]:
+async def get_pg_pool() -> asyncpg.Pool | None:
     global _pg_pool
     if _pg_pool is None or _pg_pool.is_closed():
         try:

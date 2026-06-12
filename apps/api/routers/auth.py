@@ -1,14 +1,13 @@
-import os
-import structlog
 import logging
-from datetime import datetime, timezone, timedelta
+import os
 
-from fastapi import APIRouter, HTTPException, Depends
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+import structlog
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 
+from apps.api.services.auth import generate_access_token
 from apps.api.services.database import get_user_by_email_db
-from apps.api.services.auth import generate_access_token, token_store
 
 logger = structlog.get_logger()
 _auth_logger = logging.getLogger(__name__)
@@ -94,7 +93,7 @@ async def login(credentials: LoginRequest):
         row = await get_user_by_email_db(email)
     except Exception as e:
         logger.error("login_db_error", error=str(e))
-        raise HTTPException(status_code=503, detail="Database unavailable")
+        raise HTTPException(status_code=503, detail="Database unavailable") from e
 
     if not row:
         raise HTTPException(status_code=401, detail="Invalid email or password")

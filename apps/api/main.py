@@ -7,65 +7,103 @@ Uses Fonoster + FreeSWITCH instead of Twilio for cost efficiency.
 
 from __future__ import annotations
 
-import os
-import uuid
+import asyncio
+import hashlib
+import hmac
 import json
 import logging
-import hmac
-import hashlib
-from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Dict, Any
+import os
+import uuid
 from contextlib import asynccontextmanager
-from enum import Enum
-import asyncio
+from datetime import UTC, datetime, timedelta
+from typing import Any
 
 import redis.asyncio as redis
-import httpx
+from dotenv import load_dotenv
 from fastapi import (
-    FastAPI,
-    HTTPException,
+    BackgroundTasks,
     Depends,
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+    Request,
     WebSocket,
     WebSocketDisconnect,
-    BackgroundTasks,
-    Request,
-    Query,
-    Header,
 )
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator
-from pydantic import ConfigDict
-
-# Database
-import asyncpg
-
-# Configuration
-from dotenv import load_dotenv
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 load_dotenv()
 
+from fastapi.responses import JSONResponse
+
+from apps.api.middleware.audit import AuditMiddleware
+from apps.api.middleware.security import SecurityHeadersMiddleware
+from apps.api.routers import (
+    agent,
+    auth,
+    campaign,
+    engine,
+    protocols,
+    realtime,
+    saas,
+    voice,
+    voice_cloning,
+)
+from apps.api.routers.agent import agent_cache
+from apps.api.services.auth import (
+    WebSocketAuthMiddleware,
+    verify_api_key,
+    verify_tenant_access,
+)
 from apps.api.services.database import (
-    get_pg_pool, close_pg_pool, init_pg_schema, get_tenant_db,
-    create_tenant as create_tenant_db, create_agent as create_agent_db,
-    get_agent_db, list_agents as list_agents_db,
-    update_agent_status, update_agent_db, delete_agent_db,
-    get_available_agents, create_call_session,
-    get_call_session, list_calls as list_calls_db, get_usage_stats,
-    get_billing_summary, enqueue_call, dequeue_call, log_audit_event,
-    USE_POSTGRES, encrypt_val, decrypt_val,
+    USE_POSTGRES,
+    close_pg_pool,
+    create_call_session,
+    delete_agent_db,
+    enqueue_call,
+    get_agent_db,
+    get_available_agents,
+    get_billing_summary,
+    get_call_session,
+    get_pg_pool,
+    get_tenant_db,
+    get_usage_stats,
+    init_pg_schema,
+    log_audit_event,
+    update_agent_db,
+    update_agent_status,
+)
+from apps.api.services.database import (
+    create_agent as create_agent_db,
+)
+from apps.api.services.database import (
+    create_tenant as create_tenant_db,
+)
+from apps.api.services.database import (
+    list_agents as list_agents_db,
+)
+from apps.api.services.database import (
+    list_calls as list_calls_db,
+)
+from apps.api.services.database import (
     update_call_status as db_update_call_status,
 )
-from apps.api.services.auth import verify_api_key, verify_tenant_access, generate_access_token
+from apps.api.services.db_errors import (
+    DatabaseError,
+    NotFoundError,
+    PoolNotAvailableError,
+)
+from apps.api.services.rate_limit import RateLimitMiddleware
 
 # =============================================================================
 # Fonster HTTP Client (replaces SDK)
 # =============================================================================
 
-FonsterHTTPClient = None  # Imported lazily to avoid circular deps
 
-
-def get_fonster_client() -> Optional[Any]:
+def get_fonster_client() -> Any | None:
     """Get or create Fonster HTTP client."""
     global FonsterHTTPClient
     if FonsterHTTPClient is None:
@@ -252,10 +290,6 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-from fastapi.responses import JSONResponse
-from apps.api.services.db_errors import DatabaseError, NotFoundError, PoolNotAvailableError
-
-
 @app.exception_handler(NotFoundError)
 async def not_found_handler(request, exc: NotFoundError):
     return JSONResponse(
@@ -291,8 +325,6 @@ app.add_middleware(
 # =============================================================================
 # API Routers
 # =============================================================================
-from apps.api.routers import voice, agent, realtime, engine, saas, protocols, campaign, voice_cloning, auth
-from apps.api.routers.agent import agent_cache, hub as agent_hub
 
 app.include_router(voice.router)
 app.include_router(voice_cloning.router)
@@ -312,10 +344,6 @@ app.include_router(auth.router, prefix="/api/v1")
 # =============================================================================
 # Middleware (HIPAA/GDPR Compliance)
 # =============================================================================
-from apps.api.middleware.audit import AuditMiddleware
-from apps.api.services.auth import WebSocketAuthMiddleware
-from apps.api.services.rate_limit import RateLimitMiddleware
-from apps.api.middleware.security import SecurityHeadersMiddleware
 
 # Rate limiting middleware
 app.add_middleware(RateLimitMiddleware)
@@ -337,8 +365,8 @@ app.add_middleware(SecurityHeadersMiddleware)
 class TenantCreate(BaseModel):
     name: str = Field(..., min_length=3, max_length=255, description="Business name")
     email: str = Field(..., max_length=255, description="Business email")
-    phone: Optional[str] = Field(None, max_length=20, description="Business phone")
-    plan_id: Optional[str] = Field(None, description="Subscription plan ID")
+    phone: str | None = Field(None, max_length=20, description="Business phone")
+    plan_id: str | None = Field(None, description="Subscription plan ID")
     gdpr_consent: bool = Field(default=False, description="GDPR consent status")
 
     model_config = ConfigDict(
@@ -357,7 +385,7 @@ class TenantResponse(BaseModel):
     id: str
     name: str
     email: str
-    phone: Optional[str]
+    phone: str | None
     plan_name: str
     status: str
     settings: dict
@@ -367,10 +395,10 @@ class TenantResponse(BaseModel):
 
 class AgentCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=255, description="Agent display name")
-    display_name: Optional[str] = Field(None, description="Public-facing name")
+    display_name: str | None = Field(None, description="Public-facing name")
     agent_type: str = Field(default="ai", pattern=r"^(ai|human|hybrid)$", description="Agent type")
-    skills: List[str] = Field(default_factory=list, description="Agent skills for routing")
-    config: Dict[str, Any] = Field(default_factory=dict, description="AI model and behavior config")
+    skills: list[str] = Field(default_factory=list, description="Agent skills for routing")
+    config: dict[str, Any] = Field(default_factory=dict, description="AI model and behavior config")
 
     @field_validator("skills", mode="before")
     @classmethod
@@ -399,8 +427,8 @@ class AgentResponse(BaseModel):
     display_name: str
     agent_type: str
     status: str
-    skills: List[str]
-    sip_extension: Optional[str]
+    skills: list[str]
+    sip_extension: str | None
     total_calls: int
     total_talk_time_seconds: int
     avg_rating: float
@@ -409,34 +437,34 @@ class AgentResponse(BaseModel):
 
 class AgentStatusUpdate(BaseModel):
     status: str = Field(..., pattern=r"^(offline|online|available|busy|on_call|paused|training)$", description="New status")
-    session_ref: Optional[str] = Field(None, description="Fonoster session reference")
+    session_ref: str | None = Field(None, description="Fonoster session reference")
 
 
 class CallCreate(BaseModel):
-    agent_id: Optional[str] = Field(None, description="Target agent ID")
+    agent_id: str | None = Field(None, description="Target agent ID")
     caller_number: str = Field(..., description="Caller phone number")
-    called_number: Optional[str] = Field(None, description="Called number")
+    called_number: str | None = Field(None, description="Called number")
     call_direction: str = Field(default="inbound", pattern=r"^(inbound|outbound)$", description="Call direction")
-    intent: Optional[str] = Field(None, description="Detected caller intent")
+    intent: str | None = Field(None, description="Detected caller intent")
 
 
 class CallAction(BaseModel):
     action: str = Field(..., pattern=r"^(answer|hangup|mute|unmute|hold|unhold|transfer|record|gather|say|play|dtmf)$", description="Action to perform")
-    target: Optional[str] = Field(None, description="Target for transfer or dial")
-    data: Optional[Dict[str, Any]] = Field(None, description="Additional data for the action")
+    target: str | None = Field(None, description="Target for transfer or dial")
+    data: dict[str, Any] | None = Field(None, description="Additional data for the action")
 
 
 class CallResponse(BaseModel):
     id: str
     tenant_id: str
-    agent_id: Optional[str]
+    agent_id: str | None
     caller_number: str
     call_direction: str
     call_status: str
     duration_seconds: int
     cost: float
-    sip_call_id: Optional[str]
-    intent_detected: Optional[str]
+    sip_call_id: str | None
+    intent_detected: str | None
     created_at: datetime
 
 
@@ -449,15 +477,15 @@ class UsageResponse(BaseModel):
     avg_call_duration: float
     queue_depth: int
     total_cost: float
-    by_agent: List[dict]
-    by_day: List[dict]
+    by_agent: list[dict]
+    by_day: list[dict]
 
 
 class HealthCheck(BaseModel):
     status: str
     timestamp: datetime
     version: str
-    services: Dict[str, str]
+    services: dict[str, str]
     fonster_connected: bool
     database_connected: bool
 
@@ -465,7 +493,7 @@ class HealthCheck(BaseModel):
 class WebhookConfig(BaseModel):
     tenant_id: str
     url: str
-    events: List[str]
+    events: list[str]
     secret: str
     active: bool = True
 
@@ -480,7 +508,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
     """Create JWT access token"""
     import jwt
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(hours=24))
+    expire = datetime.now(UTC) + (expires_delta or timedelta(hours=24))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, JWT_SECRET, algorithm="HS256")
 
@@ -494,9 +522,9 @@ async def get_current_user(
         payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
         return payload
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
+        raise HTTPException(status_code=401, detail="Token expired") from None
     except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        raise HTTPException(status_code=401, detail="Invalid token") from None
 
 
 # =============================================================================
@@ -529,7 +557,7 @@ async def health_check():
 
     return HealthCheck(
         status=overall,
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         version="1.0.0",
         services={
             "fonster": fonster_status,
@@ -610,7 +638,7 @@ async def create_tenant_endpoint(tenant: TenantCreate, _=Depends(verify_api_key)
             "timezone": "America/New_York",
         },
         gdpr_consent=tenant.gdpr_consent,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -630,7 +658,7 @@ async def get_tenant(tenant_id: str, _=Depends(verify_tenant_access)):
         status="active" if db_tenant.get("is_active") else "inactive",
         settings=db_tenant.get("settings") or {},
         gdpr_consent=db_tenant.get("gdpr_consent", False),
-        created_at=db_tenant.get("created_at") or datetime.now(timezone.utc),
+        created_at=db_tenant.get("created_at") or datetime.now(UTC),
     )
 
 
@@ -682,7 +710,7 @@ async def create_agent(tenant_id: str, agent: AgentCreate, _=Depends(verify_tena
         total_calls=0,
         total_talk_time_seconds=0,
         avg_rating=0.0,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -713,7 +741,7 @@ async def list_agents(tenant_id: str, _=Depends(verify_tenant_access)):
             total_calls=a.get("total_calls", 0) or 0,
             total_talk_time_seconds=a.get("total_talk_time_seconds", 0) or 0,
             avg_rating=float(a.get("avg_rating", 0) or 0),
-            created_at=a.get("created_at") or datetime.now(timezone.utc),
+            created_at=a.get("created_at") or datetime.now(UTC),
         ))
     return result
 
@@ -746,7 +774,7 @@ async def get_agent(tenant_id: str, agent_id: str, _=Depends(verify_tenant_acces
         total_calls=agent.get("total_calls", 0) or 0,
         total_talk_time_seconds=agent.get("total_talk_time_seconds", 0) or 0,
         avg_rating=float(agent.get("avg_rating", 0) or 0),
-        created_at=agent.get("created_at") or datetime.now(timezone.utc),
+        created_at=agent.get("created_at") or datetime.now(UTC),
     )
 
 
@@ -782,7 +810,7 @@ async def update_agent(tenant_id: str, agent_id: str, agent: AgentCreate, _=Depe
         total_calls=updated.get("total_calls", 0) or 0,
         total_talk_time_seconds=updated.get("total_talk_time_seconds", 0) or 0,
         avg_rating=float(updated.get("avg_rating", 0) or 0),
-        created_at=updated.get("created_at") or datetime.now(timezone.utc),
+        created_at=updated.get("created_at") or datetime.now(UTC),
     )
 
 
@@ -819,7 +847,7 @@ async def handle_update_agent_status(
             "agent_id": agent_id,
             "status": status.status,
             "session_ref": status.session_ref,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
     )
 
@@ -839,13 +867,12 @@ async def create_call(call: CallCreate, tenant_id: str = Depends(verify_tenant_a
 
     # Find available agent or queue
     agent_id = call.agent_id
-    sip_extension = None
 
     if agent_id:
         agent = await get_agent_db(agent_id)
         if not agent:
             raise HTTPException(status_code=404, detail="Agent not found")
-        sip_extension = agent.get("sip_extension", "30001")
+        agent.get("sip_extension", "30001")
         await create_call_session(
             tenant_id=tenant_id,
             agent_id=agent_id,
@@ -861,7 +888,6 @@ async def create_call(call: CallCreate, tenant_id: str = Depends(verify_tenant_a
         available = await get_available_agents(tenant_id, skills)
         if available:
             agent_id = available[0]["id"]
-            sip_extension = available[0].get("sip_extension", "30001")
             await create_call_session(
                 tenant_id=tenant_id,
                 agent_id=agent_id,
@@ -906,7 +932,7 @@ async def create_call(call: CallCreate, tenant_id: str = Depends(verify_tenant_a
         cost=0.0,
         sip_call_id=call_id,
         intent_detected=call.intent,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
 
@@ -995,14 +1021,14 @@ async def get_call(call_id: str, tenant_id: str = Depends(verify_tenant_access))
         cost=float(call.get("total_cost", 0) or 0),
         sip_call_id=call.get("sip_call_id"),
         intent_detected=call.get("intent_detected"),
-        created_at=call.get("created_at") or datetime.now(timezone.utc),
+        created_at=call.get("created_at") or datetime.now(UTC),
     )
 
 
 @app.get("/api/v1/calls")
 async def list_calls(
     tenant_id: str = Depends(verify_tenant_access),
-    status: Optional[str] = None,
+    status: str | None = None,
 ):
     """List calls for a tenant"""
     calls = await list_calls_db(tenant_id, status)
@@ -1018,7 +1044,7 @@ async def list_calls(
             cost=float(c.get("total_cost", 0) or 0),
             sip_call_id=c.get("sip_call_id"),
             intent_detected=c.get("intent_detected"),
-            created_at=c.get("created_at") or datetime.now(timezone.utc),
+            created_at=c.get("created_at") or datetime.now(UTC),
         )
         for c in calls
     ]
@@ -1082,7 +1108,7 @@ async def handle_fonster_webhook(call_id: str, status: str, session_ref: str = N
             "call_id": call_id,
             "status": status,
             "session_ref": session_ref,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         })
     )
 
@@ -1102,7 +1128,7 @@ async def get_usage(
     # Use verify_tenant_access for authorization
 
     # Default to last 7 days if not specified
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if period_start is None:
         period_start = now - timedelta(days=7)
     if period_end is None:
@@ -1154,7 +1180,7 @@ async def get_billing(
     # Use verify_tenant_access for authorization
 
     # Default to last 7 days if not specified
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if period_start is None:
         period_start = now - timedelta(days=7)
     if period_end is None:
@@ -1210,15 +1236,16 @@ async def websocket_agent(websocket: WebSocket, agent_id: str):
     """WebSocket for agents to receive call assignments"""
     await websocket.accept()
 
+    pubsub = None
     try:
         if redis_client:
             await redis_client.sadd("online_agents", agent_id)
+            pubsub = redis_client.pubsub()
+            await pubsub.subscribe(f"agent:{agent_id}:assignments")
 
         while True:
-            pubsub = redis_client.pubsub() if redis_client else None
             if pubsub:
                 try:
-                    await pubsub.subscribe(f"agent:{agent_id}:assignments")
                     message = await pubsub.get_message(timeout=30.0)
 
                     if message and message["type"] == "message":
@@ -1227,20 +1254,39 @@ async def websocket_agent(websocket: WebSocket, agent_id: str):
                             "type": "call_assignment",
                             **call_data
                         })
-                finally:
-                    await pubsub.unsubscribe(f"agent:{agent_id}:assignments")
+                except TimeoutError:
+                    continue
             else:
                 await asyncio.sleep(1)
 
     except WebSocketDisconnect:
         logger.info(f"Agent {agent_id} disconnected")
+    finally:
         if redis_client:
             await redis_client.srem("online_agents", agent_id)
+        if pubsub:
+            try:
+                await pubsub.unsubscribe(f"agent:{agent_id}:assignments")
+                await pubsub.close()
+            except Exception:
+                pass
 
 
 # =============================================================================
 # Utility Endpoints
 # =============================================================================
+
+# Sentry initialization
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+    try:
+        import sentry_sdk
+        sentry_sdk.init(dsn=sentry_dsn, traces_sample_rate=0.1)
+        logger.info("Sentry initialized")
+    except Exception as e:
+        logger.warning(f"Sentry init failed: {e}")
+
+
 @app.get("/api/v1/health/ready")
 async def readiness_probe():
     """Kubernetes readiness probe"""
@@ -1251,3 +1297,10 @@ async def readiness_probe():
 async def liveness_probe():
     """Kubernetes liveness probe"""
     return {"status": "alive"}
+
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    """Prometheus metrics endpoint"""
+    from apps.api.middleware.metrics import metrics_endpoint as metrics_handler
+    return await metrics_handler()

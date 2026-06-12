@@ -1,12 +1,12 @@
-import os
-import uuid
 import json
+import os
 import time
-import asyncio
+import uuid
+
 import aiohttp
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Header
-from fastapi.responses import JSONResponse
 import structlog
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+
 from apps.api.services.auth import verify_api_key
 from apps.api.services.voice_profile_store import VoiceProfileStore
 
@@ -107,7 +107,7 @@ async def clone_voice(
         raise
     except Exception as e:
         logger.error("voice_clone_failed", error=str(e))
-        raise HTTPException(status_code=500, detail=f"Voice cloning failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Voice cloning failed: {str(e)}") from e
     finally:
         # Always clean up temp file, even on error
         if temp_path and os.path.exists(temp_path):
@@ -200,7 +200,7 @@ async def list_voice_clones():
                             "engine": profile.get("engine"),
                             "status": "ready"
                         })
-                except (json.JSONDecodeError, IOError):
+                except (OSError, json.JSONDecodeError):
                     pass
     except OSError:
         pass  # Directory might not exist yet

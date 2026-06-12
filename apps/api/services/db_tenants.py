@@ -1,11 +1,12 @@
 import json
 import secrets
 import uuid
+from datetime import UTC, datetime
+
 import structlog
-from datetime import datetime, timezone
 
 from apps.api.services.db_config import USE_POSTGRES
-from apps.api.services.db_pool import get_pg_pool, _get_sqlite_conn
+from apps.api.services.db_pool import _get_sqlite_conn, get_pg_pool
 
 logger = structlog.get_logger()
 
@@ -17,14 +18,14 @@ logger = structlog.get_logger()
 async def create_tenant(name, email, slug, phone=None, plan_id=None, settings=None, gdpr_consent=False):
     tenant_id = str(uuid.uuid4())
     api_key = secrets.token_urlsafe(32)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
             await pool.execute("""
                 INSERT INTO tenants (id, name, slug, email, phone, plan_id, settings, gdpr_consent, gdpr_consented_at, api_key, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, NOW(), NOW())
-            """, tenant_id, name, slug, phone, plan_id, json.dumps(settings or {}), gdpr_consent, api_key)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW(), NOW())
+            """, tenant_id, name, slug, email, phone, plan_id, json.dumps(settings or {}), gdpr_consent, gdpr_consent, api_key)
             return await pool.fetchrow("SELECT * FROM tenants WHERE id = $1", tenant_id)
     else:
         conn = _get_sqlite_conn()
@@ -111,7 +112,7 @@ async def create_agent(tenant_id, name, display_name, agent_type="ai", skills=No
             conn.execute("""
                 INSERT INTO agents (id, tenant_id, name, display_name, agent_type, skills, config, phone, email, sip_extension, status, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'offline', ?, ?)
-            """, (agent_id, tenant_id, name, display_name or name, agent_type, json.dumps(skills or []), json.dumps(config or {}), phone, email, sip_extension, datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat()))
+            """, (agent_id, tenant_id, name, display_name or name, agent_type, json.dumps(skills or []), json.dumps(config or {}), phone, email, sip_extension, datetime.now(UTC).isoformat(), datetime.now(UTC).isoformat()))
             conn.commit()
             row = conn.execute("SELECT * FROM agents WHERE id = ?", (agent_id,)).fetchone()
             return row
@@ -153,7 +154,7 @@ async def update_agent_status(agent_id, status, session_ref=None):
             return json.loads(result) if result else {"success": False, "error": "function returned null"}
     else:
         conn = _get_sqlite_conn()
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         conn.execute("UPDATE agents SET status = ?, last_seen_at = ?, updated_at = ? WHERE id = ?",
                      (status, now, now, agent_id))
         agent_row = conn.execute("SELECT tenant_id, status FROM agents WHERE id = ?", (agent_id,)).fetchone()
@@ -185,7 +186,7 @@ async def update_agent_db(agent_id, tenant_id, name=None, display_name=None, age
             if config is not None:
                 fields.append(f"config = ${idx}"); values.append(json.dumps(config)); idx += 1
             if fields:
-                fields.append(f"updated_at = NOW()")
+                fields.append("updated_at = NOW()")
                 values.extend([agent_id, tenant_id])
                 query = f"UPDATE agents SET {', '.join(fields)} WHERE id = ${idx} AND tenant_id = ${idx+1}"
                 await pool.execute(query, *values)
@@ -205,7 +206,7 @@ async def update_agent_db(agent_id, tenant_id, name=None, display_name=None, age
         if config is not None:
             fields.append("config = ?"); values.append(json.dumps(config))
         if fields:
-            fields.append("updated_at = ?"); values.append(datetime.now(timezone.utc).isoformat())
+            fields.append("updated_at = ?"); values.append(datetime.now(UTC).isoformat())
             values.extend([agent_id, tenant_id])
             conn.execute(f"UPDATE agents SET {', '.join(fields)} WHERE id = ? AND tenant_id = ?", values)
             conn.commit()

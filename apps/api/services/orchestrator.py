@@ -13,10 +13,18 @@ import structlog
 from apps.api.services.actions import Actions
 from apps.api.services.security_guard import detect_prompt_injection, redact_pii
 
-# Initialize AgentOps for Observability (Checklist Section 5)
 AGENTOPS_API_KEY = os.getenv("AGENTOPS_API_KEY")
-if AGENTOPS_API_KEY:
-    agentops.init(AGENTOPS_API_KEY, default_tags=["aetherdesk-saas"])
+_agentops_initialized = False
+
+
+def _ensure_agentops():
+    global _agentops_initialized
+    if AGENTOPS_API_KEY and not _agentops_initialized:
+        try:
+            agentops.init(AGENTOPS_API_KEY, default_tags=["aetherdesk-saas"])
+            _agentops_initialized = True
+        except Exception as e:
+            logger.warning("agentops_init_failed", error=str(e))
 
 
 @dataclass
@@ -61,7 +69,7 @@ class ReActAgent:
         self.host = OLLAMA_HOST
 
     async def _execute_tool(self, tool_name: str, tool_input: str, tenant_id: str) -> str:
-        # Optimization: Track tool execution in AgentOps
+        _ensure_agentops()
         tool_event = agentops.ToolEvent(name=tool_name, params={"input": tool_input})
 
         if tool_name not in self.tools:
@@ -106,13 +114,18 @@ class ReActAgent:
 
     async def step(self, history: list[dict[str, str]], user_input: str, tenant_id: str) -> AgentResponse:
         start_ts = time.time()
+        _ensure_agentops()
 
-        # Start AgentOps Session for this specific interaction
-        ao_session = agentops.start_session(tags=[tenant_id, self.name])
+        ao_session = None
+        try:
+            if _agentops_initialized:
+                ao_session = agentops.start_session(tags=[tenant_id, self.name])
+        except Exception:
+            pass
 
         try:
             # Load profile for settings
-            from apps.api.services.database import db_context, USE_POSTGRES
+            from apps.api.services.database import USE_POSTGRES, db_context
 
             async with db_context() as conn:
                 if USE_POSTGRES:
@@ -174,7 +187,11 @@ class ReActAgent:
 
                         if "response" in parsed:
                             latency = (time.time() - start_ts) * 1000
-                            ao_session.end_session(end_state="Success")
+                            if ao_session:
+                                try:
+                                    ao_session.end_session(end_state="Success")
+                                except Exception:
+                                    pass
                             return AgentResponse(
                                 text=parsed["response"],
                                 sources=[],
@@ -213,7 +230,9 @@ class ReActAgent:
                             tool_result = await self._execute_tool(tool_name, tool_input, tenant_id)
                             # Push real-time alert if handoff is happening
                             if tool_name in ("handoff_to_human", "escalate_to_supervisor"):
-                                from apps.api.routers.campaign import push_escalation_alert
+                                from apps.api.routers.campaign import (
+                                    push_escalation_alert,
+                                )
                                 asyncio.create_task(push_escalation_alert(
                                     call_sid="LIVE", reason=f"Agent requested {tool_name}: {tool_input}", agent_name=self.name
                                 ))
@@ -240,17 +259,17 @@ class ReActAgent:
             ))
             return AgentResponse(text="I need to transfer you to an agent as this is taking too long.", sources=[], needs_agent=True)
         finally:
-            # Ensure AgentOps session is ended
-            try:
-                ao_session.end_session(end_state="Success")
-            except Exception:
-                pass
+            if ao_session:
+                try:
+                    ao_session.end_session(end_state="Success")
+                except Exception:
+                    pass
 
     async def record_session(self, session_id: str, history: list[dict], tenant_id: str):
         # Quality Assurance & Benchmarking
         import uuid
 
-        from apps.api.services.database import db_context, USE_POSTGRES
+        from apps.api.services.database import USE_POSTGRES, db_context
 
         async with db_context() as conn:
             if USE_POSTGRES:
@@ -311,7 +330,7 @@ class TenantAgent(ReActAgent):
     async def _ensure_initialized(self):
         if self._initialized:
             return
-        from apps.api.services.database import db_context, USE_POSTGRES
+        from apps.api.services.database import USE_POSTGRES, db_context
 
         async with db_context() as conn:
             if USE_POSTGRES:
@@ -452,7 +471,7 @@ class Orchestrator:
 
         try:
             # ENFORCEMENT: Check active rentals
-            from apps.api.services.database import db_context, USE_POSTGRES
+            from apps.api.services.database import USE_POSTGRES, db_context
 
             rental = None
             async with db_context() as conn:

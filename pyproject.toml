@@ -75,6 +75,8 @@ select = [
 ]
 ignore = [
     "E501",  # line too long (handled by black)
+    "E402",  # module-level import after load_dotenv() intentionally
+    "E702",  # semicolons for inline list building in dynamic SQL
     "B008",  # do not perform function calls in argument defaults
 ]
 
