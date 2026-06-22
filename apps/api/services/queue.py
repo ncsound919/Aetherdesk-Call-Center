@@ -11,9 +11,12 @@ SESSION_KEY = "session:{sid}"
 
 
 class InMemoryQueue:
+    MAX_QUEUE_ITEMS = 10000
+
     def __init__(self):
         self._queues: dict[str, list[dict]] = {}
         self._sessions: dict[str, dict] = {}
+        self._session_expiry: dict[str, float] = {}
         self._lock = Lock()
 
     def lpush(self, key: str, value: str):
@@ -21,6 +24,8 @@ class InMemoryQueue:
             if key not in self._queues:
                 self._queues[key] = []
             self._queues[key].insert(0, value)
+            if len(self._queues[key]) > self.MAX_QUEUE_ITEMS:
+                self._queues[key] = self._queues[key][:self.MAX_QUEUE_ITEMS]
 
     def rpop(self, key: str) -> str | None:
         with self._lock:
@@ -43,14 +48,23 @@ class InMemoryQueue:
 
     def get(self, key: str) -> str | None:
         with self._lock:
+            if key in self._session_expiry and time.time() > self._session_expiry[key]:
+                del self._sessions[key]
+                del self._session_expiry[key]
+                return None
             return self._sessions.get(key)
 
     def setex(self, key: str, ttl: int, value: str):
         with self._lock:
             self._sessions[key] = value
+            self._session_expiry[key] = time.time() + ttl
 
     def exists(self, key: str) -> bool:
         with self._lock:
+            if key in self._session_expiry and time.time() > self._session_expiry[key]:
+                del self._sessions[key]
+                del self._session_expiry[key]
+                return False
             return key in self._sessions
 
     def delete(self, key: str) -> int:
@@ -58,6 +72,7 @@ class InMemoryQueue:
             removed = 0
             if key in self._sessions:
                 del self._sessions[key]
+                self._session_expiry.pop(key, None)
                 removed += 1
             if key in self._queues:
                 del self._queues[key]

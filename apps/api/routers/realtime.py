@@ -20,7 +20,17 @@ class ConnectionManager:
     def __init__(self, store: TranscriptStore | None = None):
         self.active_connections: dict[str, WebSocket] = {}
         self.voice_connections: dict[str, tuple[WebSocket, str]] = {} # call_sid -> (ws, stream_sid)
+        self._locks: dict[WebSocket, asyncio.Lock] = {}
         self._store = store or _default_store
+
+    def _get_lock(self, ws: WebSocket) -> asyncio.Lock:
+        if ws not in self._locks:
+            self._locks[ws] = asyncio.Lock()
+        return self._locks[ws]
+
+    async def safe_send_json(self, ws: WebSocket, message: dict):
+        async with self._get_lock(ws):
+            await ws.send_json(message)
 
     async def connect(self, websocket: WebSocket, agent_id: str):
         await websocket.accept()
@@ -52,7 +62,7 @@ class ConnectionManager:
                 # Convert to mulaw
                 mulaw = audioop.lin2ulaw(pcm8, 2)
 
-                await ws.send_json({
+                await self.safe_send_json(ws, {
                     "event": "media",
                     "streamSid": stream_sid,
                     "media": {
@@ -65,23 +75,32 @@ class ConnectionManager:
     async def send_to_agent(self, agent_id: str, message: dict):
         if agent_id in self.active_connections:
             try:
-                await self.active_connections[agent_id].send_json(message)
+                await self.safe_send_json(self.active_connections[agent_id], message)
             except Exception as e:
                 logger.error("send_to_agent_error", agent_id=agent_id, error=str(e))
 
     async def broadcast_to_queue(self, queue: str, message: dict):
         # Use list() to create a copy of items to avoid "dictionary changed size during iteration"
         for _agent_id, ws in list(self.active_connections.items()):
-            try:
-                await ws.send_json(message)
-            except Exception:
-                pass
+                try:
+                    await self.safe_send_json(ws, message)
+                except Exception as e:
+                    logger.warning("broadcast_send_failed", error=str(e))
 
 manager = ConnectionManager()
 
 
 @router.websocket("/agent/{agent_id}")
 async def agent_websocket(websocket: WebSocket, agent_id: str):
+    from apps.api.services.auth import verify_websocket_token
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001, reason="Missing authentication token")
+        return
+    token_data = await verify_websocket_token(token)
+    if not token_data:
+        await websocket.close(code=4003, reason="Invalid or expired token")
+        return
     await manager.connect(websocket, agent_id)
 
     try:
@@ -94,13 +113,13 @@ async def agent_websocket(websocket: WebSocket, agent_id: str):
             if msg_type == "subscribe_call":
                 call_sid = message.get("call_sid")
                 _default_store.get_or_create(call_sid)
-                await websocket.send_json({
+                await manager.safe_send_json(websocket, {
                     "type": "subscribed",
                     "call_sid": call_sid
                 })
 
                 for transcript in _default_store.get_transcripts(call_sid):
-                    await websocket.send_json(transcript)
+                    await manager.safe_send_json(websocket, transcript)
 
             elif msg_type == "send_message":
                 call_sid = message.get("call_sid")
@@ -115,7 +134,7 @@ async def agent_websocket(websocket: WebSocket, agent_id: str):
 
                 _default_store.touch(call_sid)
 
-                await websocket.send_json({
+                await manager.safe_send_json(websocket, {
                     "type": "message_sent",
                     "call_sid": call_sid
                 })
@@ -127,7 +146,7 @@ async def agent_websocket(websocket: WebSocket, agent_id: str):
                     # Optimization: Silencing AI agent in Redis for emergency takeover
                     qm.session_set(f"takeover_{call_sid}", "true")
                     logger.info("emergency_takeover_activated", call_sid=call_sid)
-                await websocket.send_json({"type": "takeover_active", "call_sid": call_sid})
+                await manager.safe_send_json(websocket, {"type": "takeover_active", "call_sid": call_sid})
 
             elif msg_type == "agent_audio":
                 call_sid = message.get("call_sid")
@@ -165,13 +184,22 @@ def broadcast_transcript(call_sid: str, transcript_entry: dict, store: Transcrip
 
 @router.websocket("/call/{call_sid}")
 async def call_websocket(websocket: WebSocket, call_sid: str):
+    from apps.api.services.auth import verify_websocket_token
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001, reason="Missing authentication token")
+        return
+    token_data = await verify_websocket_token(token)
+    if not token_data:
+        await websocket.close(code=4003, reason="Invalid or expired token")
+        return
     await websocket.accept()
 
     _default_store.get_or_create(call_sid)
 
     try:
         for transcript in _default_store.get_transcripts(call_sid):
-            await websocket.send_json(transcript)
+            await manager.safe_send_json(websocket, transcript)
 
         while True:
             data = await websocket.receive_text()

@@ -152,27 +152,25 @@ async def list_campaign_calls(outcome: str | None = None, tenant_id: str = Depen
 async def campaign_stats(tenant_id: str = Depends(verify_api_key)):
     with db_context_sync() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) AS cnt FROM leads WHERE tenant_id = ?", (tenant_id,))
-        total_leads = (cursor.fetchone() or {}).get("cnt", 0)
+        cursor.execute("""
+            SELECT
+                (SELECT COUNT(*) FROM leads WHERE tenant_id = ?) AS total_leads,
+                (SELECT COUNT(*) FROM leads WHERE tenant_id = ? AND status = 'new') AS new_leads,
+                (SELECT COUNT(*) FROM campaign_calls WHERE tenant_id = ?) AS total_calls,
+                (SELECT COUNT(*) FROM campaign_calls WHERE tenant_id = ? AND outcome = 'interested') AS interested,
+                (SELECT COUNT(*) FROM campaign_calls WHERE tenant_id = ? AND needs_human_follow_up = 1) AS needs_human
+        """, (tenant_id, tenant_id, tenant_id, tenant_id, tenant_id))
+        row = cursor.fetchone() or {}
 
-        cursor.execute("SELECT COUNT(*) AS cnt FROM leads WHERE tenant_id = ? AND status = 'new'", (tenant_id,))
-        new_leads = (cursor.fetchone() or {}).get("cnt", 0)
-
-        cursor.execute("SELECT COUNT(*) AS cnt FROM campaign_calls WHERE tenant_id = ?", (tenant_id,))
-        total_calls = (cursor.fetchone() or {}).get("cnt", 0)
-
-        cursor.execute("SELECT COUNT(*) AS cnt FROM campaign_calls WHERE tenant_id = ? AND outcome = 'interested'", (tenant_id,))
-        interested = (cursor.fetchone() or {}).get("cnt", 0)
-
-        cursor.execute("SELECT COUNT(*) AS cnt FROM campaign_calls WHERE tenant_id = ? AND needs_human_follow_up = 1", (tenant_id,))
-        needs_human = (cursor.fetchone() or {}).get("cnt", 0)
+    total_calls = row.get("total_calls", 0) or 0
+    interested = row.get("interested", 0) or 0
 
     return {
-        "total_leads": total_leads,
-        "untouched_leads": new_leads,
+        "total_leads": row.get("total_leads", 0) or 0,
+        "untouched_leads": row.get("new_leads", 0) or 0,
         "total_calls_made": total_calls,
         "interested": interested,
-        "needs_human_follow_up": needs_human,
+        "needs_human_follow_up": row.get("needs_human", 0) or 0,
         "conversion_rate": f"{(interested / total_calls * 100):.1f}%" if total_calls > 0 else "0%"
     }
 

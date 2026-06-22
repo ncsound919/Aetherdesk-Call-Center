@@ -5,9 +5,12 @@ import threading
 import time
 from typing import Any
 
+import structlog
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
 
 from apps.api.services.queue import QueueManager
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -86,8 +89,8 @@ class Hub:
         if ws:
             try:
                 await ws.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("hub_disconnect_failed", agent_id=agent_id, error=str(e))
 
     async def send(self, agent_id: str, payload: dict):
         with self._lock:
@@ -95,8 +98,8 @@ class Hub:
         if ws:
             try:
                 await ws.send_json(payload)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("hub_send_failed", agent_id=agent_id, error=str(e))
 
     async def broadcast(self, payload: dict):
         with self._lock:
@@ -104,8 +107,8 @@ class Hub:
         for ws in sockets_copy:
             try:
                 await ws.send_json(payload)
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("hub_broadcast_failed", error=str(e))
 
 
 hub = Hub()
@@ -132,19 +135,28 @@ async def claim_next(request: Request, queue: str, agent_id: str):
     return {"ok": True, "item": item}
 
 @router.post("/disposition")
-def disposition(request: Request, session_id: str, code: str, notes: str = ""):
+async def disposition(request: Request, session_id: str, code: str, notes: str = ""):
     r = request.app.state.redis
     if not session_id.isalnum() and "_" not in session_id:
         return {"ok": False, "error": "Invalid session ID format"}
     if not hasattr(request.app.state, 'call_sessions') or session_id not in request.app.state.call_sessions:
-        if not r.exists(f"log:{session_id}"):
+        if not await r.exists(f"log:{session_id}"):
             # We allow disposition if the log already exists or the session is active.
             return {"ok": False, "error": "Session not found"}
-    r.rpush(f"log:{session_id}", json.dumps({"event":"disposition","code":code,"notes":notes,"ts":time.time()}))
+    await r.rpush(f"log:{session_id}", json.dumps({"event":"disposition","code":code,"notes":notes,"ts":time.time()}))
     return {"ok": True}
 
 @router.websocket("/ws")
 async def ws_agent(websocket: WebSocket):
+    from apps.api.services.auth import verify_websocket_token
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001, reason="Missing authentication token")
+        return
+    token_data = await verify_websocket_token(token)
+    if not token_data:
+        await websocket.close(code=4003, reason="Invalid or expired token")
+        return
     await websocket.accept()
     agent_id = websocket.query_params.get("agent_id") or f"agent-{int(time.time())}"
     await hub.connect(agent_id, websocket)

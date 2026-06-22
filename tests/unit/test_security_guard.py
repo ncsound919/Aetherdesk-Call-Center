@@ -1,5 +1,16 @@
 import pytest
+from unittest.mock import patch
 from apps.api.services.security_guard import detect_prompt_injection, redact_pii
+
+
+@pytest.fixture(autouse=True)
+def _force_regex_fallback():
+    """Force regex fallback for both prompt injection and PII redaction."""
+    with patch("apps.api.services.security_guard.analyzer", None), \
+         patch("apps.api.services.security_guard.anonymizer", None), \
+         patch("apps.api.services.security_guard.prompt_classifier", None), \
+         patch("apps.api.services.security_guard.init_security_modules"):
+        yield
 
 
 class TestDetectPromptInjection:
