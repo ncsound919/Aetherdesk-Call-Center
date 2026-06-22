@@ -63,7 +63,7 @@ class InputSanitizer:
 
             if isinstance(value, str):
                 result = cls.sanitize_string(value, sanitized_key)
-                sanitized_key = result.sanitized_value if result.is_valid else key
+                sanitized[sanitized_key] = result.sanitized_value
             elif isinstance(value, dict):
                 sanitized[sanitized_key] = cls.sanitize_dict(value, max_depth + 1)
             elif isinstance(value, list):

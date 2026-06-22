@@ -41,6 +41,7 @@ from fastapi.responses import JSONResponse
 
 from apps.api.middleware.audit import AuditMiddleware
 from apps.api.middleware.security import SecurityHeadersMiddleware
+from apps.api.services.connection_pool import http_pool
 from apps.api.routers import (
     agent,
     auth,
@@ -51,6 +52,7 @@ from apps.api.routers import (
     saas,
     voice,
     voice_cloning,
+    webhooks_twilio,
 )
 from apps.api.routers.agent import agent_cache
 from apps.api.services.auth import (
@@ -103,24 +105,43 @@ from apps.api.services.rate_limit import RateLimitMiddleware
 # =============================================================================
 
 
-def get_fonster_client() -> Any | None:
-    """Get or create Fonster HTTP client."""
-    global FonsterHTTPClient
-    if FonsterHTTPClient is None:
+def get_voice_client() -> Any | None:
+    """Create the best available voice client.
+
+    Preference order:
+      1. Fonoster (Docker/FreeSWITCH) — production
+      2. Twilio (cloud API, no Docker needed) — dev/staging
+      3. MockVoiceClient — last resort, logs calls (dev/demo)
+    """
+    fonster_key = os.getenv("FONOSTER_API_KEY", "")
+    if fonster_key and fonster_key != "your-fonoster-api-key":
         try:
-            from apps.api.fonster_client import FonsterHTTPClient as FC
+            from apps.api.fonoster_client import FonosterHTTPClient as FC
             fonster_url = os.getenv("FONOSTER_URL", "http://aetherdesk-fonoster:50062")
-            fonster_key = os.getenv("FONOSTER_API_KEY", "")
             fonster_secret = os.getenv("FONOSTER_API_SECRET", "")
-            FonsterHTTPClient = FC(
-                base_url=fonster_url,
-                api_key=fonster_key,
-                api_secret=fonster_secret,
-            )
+            client = FC(base_url=fonster_url, api_key=fonster_key, api_secret=fonster_secret)
+            logging.info("Using Fonoster voice client")
+            return client
         except Exception as e:
-            logging.error(f"Failed to create Fonster client: {e}")
-            FonsterHTTPClient = None
-    return FonsterHTTPClient
+            logging.debug(f"Fonoster client failed: {e}")
+
+    twilio_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
+    if twilio_sid:
+        try:
+            from apps.api.twilio_client import TwilioVoiceClient
+            client = TwilioVoiceClient()
+            logging.info("Using Twilio voice client")
+            return client
+        except Exception as e:
+            logging.error(f"Twilio client failed: {e}")
+
+    try:
+        from apps.api.mock_voice_client import MockVoiceClient
+        logging.warning("No real voice client — MockVoiceClient active (calls logged, not placed)")
+        return MockVoiceClient()
+    except Exception:
+        logging.error("Failed to create MockVoiceClient")
+        return None
 
 
 # =============================================================================
@@ -150,11 +171,37 @@ SALT_ROUNDS = int(os.getenv("SALT_ROUNDS", "12"))
 # =============================================================================
 # Logging (HIPAA-compliant - no PHI in logs)
 # =============================================================================
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler()],
-)
+LOG_FORMAT = os.getenv("LOG_FORMAT", "json")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+if LOG_FORMAT == "json":
+    import structlog
+    structlog.configure(
+        processors=[
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.JSONRenderer(),
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+    logging.basicConfig(
+        level=getattr(logging, LOG_LEVEL.upper(), logging.INFO),
+        handlers=[logging.StreamHandler()],
+    )
+else:
+    logging.basicConfig(
+        level=getattr(logging, LOG_LEVEL.upper(), logging.INFO),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler()],
+    )
 logger = logging.getLogger(__name__)
 
 # =============================================================================
@@ -204,12 +251,12 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
 
-    # Fonster HTTP Client
-    fonster_client = get_fonster_client()
+    # Voice Client (Fonoster > Twilio > Mock)
+    fonster_client = get_voice_client()
     if fonster_client:
-        logger.info(f"Fonster client connected to {FONOSTER_URL}")
+        logger.info("Voice client initialized")
     else:
-        logger.warning("Fonster client not available - running in dev mode")
+        logger.warning("Voice client not available - running in dev mode")
 
     # Agent cache cleanup background task
     cleanup_task = asyncio.create_task(agent_cache.start_cleanup_loop())
@@ -232,23 +279,55 @@ async def lifespan(app: FastAPI):
     # Start stale transcript cleanup
     transcript_cleanup_task = asyncio.create_task(app.state.transcript_store.cleanup_stale_loop())
 
+    # Start data retention cleanup (GDPR compliance — purge expired recordings, sessions)
+    async def _retention_cleanup_loop():
+        while True:
+            await asyncio.sleep(3600)
+            try:
+                retention_days = int(os.getenv("CALL_RECORDING_RETENTION_DAYS", "365"))
+                if USE_POSTGRES:
+                    pool = await get_pg_pool()
+                    if pool:
+                        cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+                        await pool.execute(
+                            "UPDATE recordings SET pii_redacted = TRUE, retention_until = NOW() WHERE created_at < $1 AND pii_redacted = FALSE",
+                            cutoff
+                        )
+                        logger.info("retention_cleanup_completed", purged_before=cutoff.isoformat())
+                else:
+                    import datetime as dt
+
+                    from apps.api.services.database import _get_sqlite_conn
+                    conn = _get_sqlite_conn()
+                    try:
+                        cutoff = (dt.datetime.now(dt.UTC) - dt.timedelta(days=retention_days)).isoformat()
+                        conn.execute(
+                            "UPDATE recordings SET pii_redacted = 1, retention_until = ? WHERE created_at < ? AND pii_redacted = 0",
+                            (dt.datetime.now(dt.UTC).isoformat(), cutoff)
+                        )
+                        conn.commit()
+                        logger.info("retention_cleanup_completed")
+                    finally:
+                        conn.close()
+            except Exception as e:
+                logger.error("retention_cleanup_failed", error=str(e))
+
+    retention_task = asyncio.create_task(_retention_cleanup_loop())
+
     yield
 
     logger.info("Shutting down AetherDesk services...")
-    cleanup_task.cancel()
-    try:
-        await cleanup_task
-    except asyncio.CancelledError:
-        pass
-    transcript_cleanup_task.cancel()
-    try:
-        await transcript_cleanup_task
-    except asyncio.CancelledError:
-        pass
+    for bg_task in [cleanup_task, transcript_cleanup_task, retention_task]:
+        bg_task.cancel()
+        try:
+            await bg_task
+        except asyncio.CancelledError:
+            pass
     if fonster_client:
         await fonster_client.close()
     if redis_client:
         await redis_client.close()
+    await http_pool.close()
     await close_pg_pool()
 
 
@@ -314,27 +393,27 @@ async def database_error_handler(request, exc: DatabaseError):
     )
 
 
+cors_origin_env = os.getenv("CORS_ORIGIN", "http://127.0.0.1:3001,http://localhost:3001,https://app.aetherdesk.com")
+cors_origins = [origin.strip() for origin in cors_origin_env.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[os.getenv("CORS_ORIGIN", "https://app.aetherdesk.com")],
+    allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Request-ID", "X-API-Key"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# =============================================================================
-# API Routers
-# =============================================================================
-
-app.include_router(voice.router)
-app.include_router(voice_cloning.router)
-app.include_router(agent.router)
+app.include_router(voice.router, prefix="/api/v1")
+app.include_router(voice_cloning.router, prefix="/api/v1")
+app.include_router(agent.router, prefix="/api/v1")
 app.include_router(realtime.router)
 app.include_router(engine.router)
-app.include_router(saas.router)
+app.include_router(saas.router, prefix="/api/v1")
 app.include_router(protocols.router)
 app.include_router(campaign.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(webhooks_twilio.router)
 
 
 # =============================================================================
@@ -505,26 +584,20 @@ security = HTTPBearer()
 
 
 def create_access_token(data: dict, expires_delta: timedelta = None):
-    """Create JWT access token"""
-    import jwt
-    to_encode = data.copy()
-    expire = datetime.now(UTC) + (expires_delta or timedelta(hours=24))
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, JWT_SECRET, algorithm="HS256")
+    """Create JWT access token signed with RS256."""
+    from apps.api.services.jwt_utils import create_access_token as _create_rs256_token
+    return _create_rs256_token(data, expires_delta)
 
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """Verify JWT token and return user payload"""
-    import jwt
-    try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=["HS256"])
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired") from None
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Invalid token") from None
+    from apps.api.services.jwt_utils import verify_access_token as _verify_rs256_token
+    payload = _verify_rs256_token(credentials.credentials)
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return payload
 
 
 # =============================================================================
@@ -542,7 +615,7 @@ async def health_check():
             hc = await fonster_client.health_check()
             fonster_status = "healthy" if hc.get("healthy") else "unhealthy"
         except Exception:
-            fonster_status = "disconnected"
+            fonster_status = "disconnected"  # Health check — expected if Fonster is down
 
     try:
         if USE_POSTGRES:
@@ -551,7 +624,7 @@ async def health_check():
                 await pool.fetchval("SELECT 1")
                 db_status = "connected"
     except Exception:
-        db_status = "disconnected"
+        db_status = "disconnected"  # Health check — expected if DB is unavailable
 
     overall = "healthy" if fonster_status == "healthy" and db_status == "connected" else "degraded"
 
@@ -622,7 +695,7 @@ async def create_tenant_endpoint(tenant: TenantCreate, _=Depends(verify_api_key)
                 if plan:
                     plan_name = plan["name"]
             except Exception:
-                pass
+                pass  # Best-effort plan name lookup, defaults to "Starter"
 
     return TenantResponse(
         id=actual_tenant_id,

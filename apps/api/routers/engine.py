@@ -1,6 +1,9 @@
 import json
 
+import structlog
 from fastapi import APIRouter, Form, Request
+
+logger = structlog.get_logger()
 from fastapi.responses import Response
 
 from apps.api.services import loader, validators
@@ -85,12 +88,12 @@ async def inbound_sms(request: Request, From: str = Form(...), Body: str = Form(
         else:
             prompt = "..."
     else:
-        state = vm.step(state, Body.strip())
+        state = await vm.step(state, Body.strip())
         prompt = prompt_for(state)
 
     try:
         r.setex(f"session:{sid}", 1800, json.dumps(state.__dict__))
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("session_save_failed", error=str(e))
 
     return Response(content=build_xml_response(prompt), media_type="application/xml")

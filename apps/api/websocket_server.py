@@ -6,6 +6,7 @@ Real-time communication for agent dashboard and call monitoring
 import asyncio
 import json
 import logging
+import os
 from datetime import UTC, datetime
 
 import redis.asyncio as redis
@@ -19,6 +20,9 @@ redis_client = None
 
 # Connected clients
 connected_clients = {}
+
+# Track fire-and-forget tasks
+_background_tasks: set = set()
 
 
 async def register_client(websocket, path):
@@ -52,7 +56,7 @@ async def handle_message(websocket, message, client_id):
             tenant_id = data.get("tenant_id")
             token = data.get("token")
 
-            if verify_token(token):
+            if await verify_token(token):
                 connected_clients[client_id]["tenant_id"] = tenant_id
                 await websocket.send(json.dumps({
                     "type": "auth_success",
@@ -99,8 +103,10 @@ async def handle_message(websocket, message, client_id):
         logger.error(f"Error handling message: {e}", exc_info=True)
         try:
             await websocket.send(json.dumps({"type": "error", "message": "Internal error"}))
-        except Exception:
-            pass
+        except websockets.exceptions.ConnectionClosed:
+            pass  # Client already disconnected
+        except Exception as e:
+            logger.warning("error_notification_failed", error=str(e))
 
 
 async def process_call_action(call_id, action):
@@ -123,7 +129,7 @@ async def process_call_action(call_id, action):
         "timestamp": datetime.now(UTC).isoformat()
     })
 
-    for _client_id, client in connected_clients.items():
+    for _client_id, client in list(connected_clients.items()):
         if "call_updates" in client.get("subscriptions", []):
             try:
                 await client["websocket"].send(message)
@@ -131,17 +137,10 @@ async def process_call_action(call_id, action):
                 pass
 
 
-def verify_token(token):
-    """Verify JWT token (simplified for example)"""
-    # In production, use proper JWT verification
-    import os
-
-    import jwt
-    try:
-        jwt.decode(token, os.getenv("JWT_SECRET", "your-jwt-secret-key"), algorithms=["HS256"])
-        return True
-    except jwt.InvalidTokenError:
-        return False
+async def verify_token(token):
+    """Verify JWT token using RS256 (with HS256 fallback)."""
+    from apps.api.services.jwt_utils import verify_access_token
+    return verify_access_token(token) is not None
 
 
 async def redis_listener():
@@ -158,7 +157,7 @@ async def redis_listener():
             event_type = message["channel"].decode()
 
             # Broadcast to all connected clients
-            for _client_id, client in connected_clients.items():
+            for _client_id, client in list(connected_clients.items()):
                 try:
                     await client["websocket"].send(json.dumps({
                         "type": event_type,
@@ -195,15 +194,18 @@ async def main():
     )
 
     # Start Redis listener
-    asyncio.create_task(redis_listener())
+    redis_task = asyncio.create_task(redis_listener())
+    _background_tasks.add(redis_task)
 
     # Start health monitor
-    asyncio.create_task(health_monitor())
+    health_task = asyncio.create_task(health_monitor())
+    _background_tasks.add(health_task)
 
     # Start WebSocket server
+    ws_host = os.getenv("WS_HOST", "0.0.0.0" if os.getenv("APP_ENV") == "production" else "127.0.0.1")
     async with serve(
         handle_message,
-        "0.0.0.0",
+        ws_host,
         8765,
         ping_interval=20,
         ping_timeout=10,

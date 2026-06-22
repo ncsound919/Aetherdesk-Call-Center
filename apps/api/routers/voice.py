@@ -114,6 +114,15 @@ async def handle_media_stream(websocket: WebSocket):
     WebSocket endpoint for real-time media stream processing.
     Handles audio chunks from Fonster/FreeSWITCH for AI processing.
     """
+    from apps.api.services.auth import verify_websocket_token
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=4001, reason="Missing authentication token")
+        return
+    token_data = await verify_websocket_token(token)
+    if not token_data:
+        await websocket.close(code=4003, reason="Invalid or expired token")
+        return
     await websocket.accept()
 
     session_id = None
@@ -282,8 +291,8 @@ async def synthesize_text(request: dict):
 @router.post("/outbound", dependencies=[Depends(verify_api_key)])
 async def trigger_outbound_call(request: dict):
     """
-    Trigger an outbound call via Fonster.
-    Uses the shared Fonster HTTP client from main.py.
+    Trigger an outbound call via Fonoster or Twilio.
+    Uses the shared voice client from main.py.
     """
     to_phone = request.get("to_phone")
     agent_profile_id = request.get("profile_id", "PROF-META-SALES")
@@ -291,22 +300,24 @@ async def trigger_outbound_call(request: dict):
     if not to_phone:
         raise HTTPException(status_code=400, detail="Missing to_phone")
 
-    from apps.api.main import fonster_client as shared_fonster_client
-    fonster = shared_fonster_client
-    if not fonster:
-        raise HTTPException(status_code=503, detail="Fonster client not available")
+    from apps.api.main import fonster_client as voice_client
+    if not voice_client:
+        raise HTTPException(status_code=503, detail="Voice client not available")
 
     try:
-        result = await fonster.create_application({
+        caller_id = os.getenv("TWILIO_FROM_NUMBER") or os.getenv("SIP_TRUNK_FROM", "")
+        payload = {
             "name": f"Outbound-{to_phone}",
             "type": "EXTERNAL",
             "endpoint": "tcp://aetherdesk-voice:50061",
             "variables": {
-                "outbound_caller_id": os.getenv("SIP_TRUNK_FROM", ""),
+                "outbound_caller_id": caller_id,
                 "outbound_number": to_phone,
                 "profile_id": agent_profile_id,
             },
-        })
+        }
+
+        result = await voice_client.create_application(payload)
 
         logger.info(
             "outbound_call_triggered",

@@ -24,7 +24,7 @@ class TranscriptStore:
         transcripts = self._transcripts[call_sid]
         transcripts.append(entry)
         if len(transcripts) > self._max_per_call:
-            self._transcripts[call_sid] = transcripts[-self._max_per_call:]
+            del transcripts[:len(transcripts) - self._max_per_call]
 
     def get_transcripts(self, call_sid: str) -> list:
         return list(self._transcripts.get(call_sid, []))

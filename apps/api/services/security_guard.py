@@ -57,6 +57,9 @@ def detect_prompt_injection(text: str) -> tuple[bool, float]:
     Checks the user prompt using an advanced ML classifier if available,
     falling back to strict regex heuristics.
     """
+    if not text or not text.strip():
+        return False, 0.0
+
     if analyzer is None:
         init_security_modules()
     if prompt_classifier:

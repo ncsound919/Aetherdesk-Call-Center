@@ -20,7 +20,7 @@ class ProtocolVM:
         self.validators = validators
         self.actions = actions
 
-    def step(self, state: VMState, user_input: str) -> VMState:
+    async def step(self, state: VMState, user_input: str) -> VMState:
         if user_input.strip().lower() in ["0","agent","help","operator"]:
             return self._advance(state, "agent_handoff", "escape_hatch")
 
@@ -48,7 +48,7 @@ class ProtocolVM:
             return self._advance(state, target, f"option_selected:{user_input}")
 
         if "action" in node:
-            result = self.actions.run(node["action"], state.fields)
+            result = await self.actions.run(node["action"], state.fields)
             nxt = node.get("on_ok" if result.get("success") else "on_fail", "agent_handoff")
             return self._advance(state, nxt, f"action:{node['action']}")
 

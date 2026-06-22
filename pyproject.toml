@@ -33,6 +33,7 @@ dependencies = [
     "gtts>=2.3.0",
     "pydantic>=2.5.0",
     "sqlalchemy>=2.0.0",
+    "alembic>=1.12.0",
     "psycopg2-binary>=2.9.0",
     "pgvector>=0.2.0",
     "aiocircuitbreaker>=1.0.0",
@@ -101,6 +102,7 @@ warn_unreachable = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+asyncio_default_fixture_loop_scope = "function"
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = "-v --cov=apps --cov-report=term-missing --cov-report=html"

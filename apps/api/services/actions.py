@@ -25,7 +25,7 @@ class Actions:
 
         if url:
             # Enhanced SSRF Protection (v2)
-            if not self._is_url_safe(url):
+            if not await self._is_url_safe(url):
                 logger.error("ssrf_blocked", url=url, error="URL failed safety check")
                 return
 
@@ -47,7 +47,7 @@ class Actions:
             except Exception as e:
                 logger.error("webhook_failed", url=url, error=str(e))
 
-    def _is_url_safe(self, url: str) -> bool:
+    async def _is_url_safe(self, url: str) -> bool:
         """Comprehensive SSRF protection with IPv6, metadata endpoint, and DNS rebinding checks."""
         import ipaddress
         import socket
@@ -120,8 +120,8 @@ class Actions:
                         return False
 
             # 5. DNS rebinding protection: resolve again after a delay and compare
-            import time
-            time.sleep(0.1)  # Small delay to catch fast-changing DNS
+            import asyncio
+            await asyncio.sleep(0.1)  # Small delay to catch fast-changing DNS
 
             try:
                 addrinfos2 = socket.getaddrinfo(
