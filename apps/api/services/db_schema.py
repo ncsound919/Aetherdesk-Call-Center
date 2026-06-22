@@ -29,6 +29,27 @@ CREATE TABLE IF NOT EXISTS plans (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Users
+CREATE TABLE IF NOT EXISTS users (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    email_verified BOOLEAN DEFAULT FALSE,
+    verification_token VARCHAR(255),
+    reset_token VARCHAR(255),
+    reset_token_expires TIMESTAMP,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE SET NULL,
+    role VARCHAR(50) DEFAULT 'owner',
+    avatar_url VARCHAR(500),
+    onboarding_completed BOOLEAN DEFAULT FALSE,
+    onboarding_step INT DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
+
 -- Tenants
 CREATE TABLE IF NOT EXISTS tenants (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -178,6 +199,33 @@ CREATE TABLE IF NOT EXISTS transcriptions (
     segments JSONB DEFAULT '[]',
     speaker_diarization JSONB DEFAULT '[]',
     pii_redacted BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Scripts
+CREATE TABLE IF NOT EXISTS scripts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    content JSONB NOT NULL DEFAULT '{}',
+    variables JSONB DEFAULT '[]',
+    is_active BOOLEAN DEFAULT FALSE,
+    version INT DEFAULT 1,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_scripts_tenant ON scripts(tenant_id);
+
+-- Script Templates
+CREATE TABLE IF NOT EXISTS script_templates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    industry VARCHAR(100),
+    content JSONB NOT NULL DEFAULT '{}',
+    variables JSONB DEFAULT '[]',
+    is_public BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -445,9 +493,9 @@ CREATE TRIGGER trg_transcriptions_updated BEFORE UPDATE ON transcriptions FOR EA
 
 -- Seed default plans
 INSERT INTO plans (name, description, price_per_hour, price_per_day, price_per_week, price_per_month, max_concurrent_calls, max_agents, max_recordings_mb, features) VALUES
-('Starter', 'Small business plan', 2.50, 20.00, 80.00, 299.00, 2, 2, 500, '["basic_ivr","call_recording","basic_analytics"]'),
-('Pro', 'Growing business plan', 4.00, 35.00, 120.00, 499.00, 5, 5, 2000, '["smart_routing","ai_assistant","advanced_analytics","multi_channel"]'),
-('Enterprise', 'Large scale operations', 6.50, 55.00, 200.00, 999.00, 20, 20, 10000, '["custom_ai","predictive_routing","real_time_monitoring","api_access","dedicated_support"]')
+('Starter', 'Entry plan — small teams', 8.00, 30.00, 100.00, 49.00, 2, 2, 500, '["basic_scripts","csv_import","email_support"]'),
+('Pro', 'Growing teams', 20.00, 70.00, 250.00, 149.00, 10, 10, 2000, '["templates","ab_testing","analytics","priority_support"]'),
+('Enterprise', 'Large scale operations', 60.00, 200.00, 700.00, 499.00, 50, 50, 10000, '["custom_scripts","api_access","dedicated_support","sla"]')
 ON CONFLICT (name) DO NOTHING;
 """
 
@@ -477,15 +525,32 @@ CREATE TABLE IF NOT EXISTS plans (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS agents (
-    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name TEXT NOT NULL, display_name TEXT, email TEXT, phone TEXT,
-    agent_type TEXT NOT NULL DEFAULT 'ai', status TEXT NOT NULL DEFAULT 'offline',
-    skills TEXT DEFAULT '[]', config TEXT DEFAULT '{}', sip_extension TEXT UNIQUE,
-    sip_password TEXT, encryption_key TEXT, total_calls INTEGER DEFAULT 0,
-    total_talk_time_seconds INTEGER DEFAULT 0, avg_rating REAL DEFAULT 0.0,
-    is_active BOOLEAN DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_seen_at TIMESTAMP
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    full_name TEXT NOT NULL,
+    email_verified INTEGER DEFAULT 0,
+    verification_token TEXT,
+    reset_token TEXT,
+    reset_token_expires TEXT,
+    tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL,
+    role TEXT DEFAULT 'owner',
+    avatar_url TEXT,
+    onboarding_completed INTEGER DEFAULT 0,
+    onboarding_step INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
+CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
+
+CREATE TABLE IF NOT EXISTS script_templates (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+    description TEXT, industry TEXT,
+    content TEXT DEFAULT '{}', variables TEXT DEFAULT '[]',
+    is_public INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS call_sessions (
@@ -560,10 +625,21 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 -- Agent Profiles (for AI agent configurations)
-CREATE TABLE IF NOT EXISTS agent_profiles (
+CREATE TABLE IF NOT EXISTS scripts (
     id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    name TEXT NOT NULL, prompt TEXT, parameters TEXT DEFAULT '{}',
-    is_active INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    name TEXT NOT NULL, content TEXT DEFAULT '{}',
+    variables TEXT DEFAULT '[]', is_active INTEGER DEFAULT 0,
+    version INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_scripts_tenant ON scripts(tenant_id);
+
+-- Script Templates
+CREATE TABLE IF NOT EXISTS script_templates (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE,
+    description TEXT, industry TEXT,
+    content TEXT DEFAULT '{}', variables TEXT DEFAULT '[]',
+    is_public INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -601,10 +677,12 @@ CREATE TABLE IF NOT EXISTS rentals (
 -- Leads (for campaign/outreach)
 CREATE TABLE IF NOT EXISTS leads (
     id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
-    company_name TEXT NOT NULL, contact_name TEXT, phone TEXT NOT NULL,
-    email TEXT, industry TEXT, notes TEXT, priority INTEGER DEFAULT 5,
-    status TEXT DEFAULT 'new', last_called_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    company_name TEXT, contact_name TEXT, first_name TEXT, last_name TEXT,
+    phone TEXT NOT NULL, email TEXT, industry TEXT, notes TEXT,
+    priority INTEGER DEFAULT 5, status TEXT DEFAULT 'new', score REAL DEFAULT 0.0,
+    source TEXT, imported_at TIMESTAMP, last_called_at TIMESTAMP,
+    custom_fields TEXT DEFAULT '{}', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Campaign Calls (call tracking)
@@ -652,9 +730,9 @@ CREATE TABLE IF NOT EXISTS orders (
 );
 
 INSERT OR IGNORE INTO plans (id, name, description, price_per_hour, price_per_day, price_per_week, price_per_month, max_concurrent_calls, max_agents, max_recordings_mb, features) VALUES
-('PLAN-STARTER', 'Starter', 'Small business plan', 2.50, 20.00, 80.00, 299.00, 2, 2, 500, '["basic_ivr","call_recording","basic_analytics"]'),
-('PLAN-PRO', 'Pro', 'Growing business plan', 4.00, 35.00, 120.00, 499.00, 5, 5, 2000, '["smart_routing","ai_assistant","advanced_analytics","multi_channel"]'),
-('PLAN-ENTERPRISE', 'Enterprise', 'Large scale operations', 6.50, 55.00, 200.00, 999.00, 20, 20, 10000, '["custom_ai","predictive_routing","real_time_monitoring","api_access","dedicated_support"]');
+('PLAN-STARTER', 'Starter', 'Entry plan — small teams', 8.00, 30.00, 100.00, 49.00, 2, 2, 500, '["basic_scripts","csv_import","email_support"]'),
+('PLAN-PRO', 'Pro', 'Growing teams', 20.00, 70.00, 250.00, 149.00, 10, 10, 2000, '["templates","ab_testing","analytics","priority_support"]'),
+('PLAN-ENTERPRISE', 'Enterprise', 'Large scale operations', 60.00, 200.00, 700.00, 499.00, 50, 50, 10000, '["custom_scripts","api_access","dedicated_support","sla"]');
 
 INSERT OR IGNORE INTO customers (id, tenant_id, name, email, phone, company, status) VALUES
 ('CUST-001', 'TENANT-001', 'Acme Corp', 'billing@acme.com', '555-0100', 'Acme Corp', 'active'),
@@ -671,19 +749,51 @@ INSERT OR IGNORE INTO orders (id, tenant_id, customer_id, status, total, expecte
 
 
 async def init_pg_schema(pool: asyncpg.Pool):
+    """Initialize PostgreSQL schema using Alembic migrations.
+
+    Falls back to raw SQL if Alembic fails (e.g., first-run migration
+    hasn't been created yet).
+    """
+    from apps.api.services.db_migrations import run_alembic_migrations, stamp_db
+    try:
+        ok = await run_alembic_migrations()
+        if ok:
+            return
+    except Exception as e:
+        logger.warning("Alembic migration failed, falling back to raw SQL", error=str(e))
+
     async with pool.acquire() as conn:
         try:
             await conn.execute(SCHEMA_SQL)
-            logger.info("PostgreSQL schema initialized successfully")
+            logger.info("PostgreSQL schema initialized via raw SQL (fallback)")
         except Exception as e:
             logger.error("PostgreSQL schema initialization failed", error=str(e))
             raise e
 
 
 def init_sqlite_schema():
+    """Initialize SQLite schema using Alembic migrations.
+
+    Falls back to raw SQL if Alembic fails.
+    """
+    from apps.api.services.db_migrations import run_alembic_migrations
+    import asyncio
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            loop.create_task(run_alembic_migrations())
+            logger.info("Delegated SQLite schema migration to running event loop")
+            return
+        else:
+            ok = loop.run_until_complete(run_alembic_migrations())
+            if ok:
+                return
+    except Exception as e:
+        logger.warning("Alembic migration failed, falling back to raw SQL", error=str(e))
+
     from apps.api.services.db_pool import _get_sqlite_conn
     conn = _get_sqlite_conn()
     conn.executescript(SQLITE_SCHEMA_SQL)
     conn.commit()
     conn.close()
-    logger.info("SQLite schema initialized")
+    logger.info("SQLite schema initialized via raw SQL (fallback)")
