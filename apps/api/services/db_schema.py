@@ -497,6 +497,42 @@ INSERT INTO plans (name, description, price_per_hour, price_per_day, price_per_w
 ('Pro', 'Growing teams', 20.00, 70.00, 250.00, 149.00, 10, 10, 2000, '["templates","ab_testing","analytics","priority_support"]'),
 ('Enterprise', 'Large scale operations', 60.00, 200.00, 700.00, 499.00, 50, 50, 10000, '["custom_scripts","api_access","dedicated_support","sla"]')
 ON CONFLICT (name) DO NOTHING;
+
+-- Seed script templates
+INSERT INTO script_templates (id, name, description, industry, content, variables, is_public) VALUES
+('TPL-B2B-SAAS', 'B2B SaaS Sales', 'Cold outreach to software decision makers', 'sales',
+ '{"blocks": [{"type": "greeting", "text": "Hi {{first_name}}, this is {{agent_name}} from {{company}}. Got 60 seconds?"}, {"type": "pitch", "text": "We help {{industry}} companies cut call volume by 40% with AI agents. {{company}} already sees ROI in week one."}, {"type": "branch", "condition": "industry == ''tech''", "true_block": "tech_pitch", "false_block": "generic_pitch"}, {"type": "objection", "trigger": "no_need", "response": "Most customers said that before. Worth a 5-min demo to see?"}, {"type": "close", "text": "Can I schedule a quick demo this week?"}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "company", "type": "string", "source": "lead"}, {"name": "industry", "type": "string", "source": "lead"}, {"name": "agent_name", "type": "string", "default": "Alex"}]',
+ TRUE),
+('TPL-HEALTHCARE', 'Healthcare Outreach', 'Patient appointment reminders and follow-ups', 'healthcare',
+ '{"blocks": [{"type": "greeting", "text": "Hello, this is {{agent_name}} calling from {{company}} on behalf of Dr. {{doctor_name}}."}, {"type": "verify", "text": "Am I speaking with {{patient_name}}?"}, {"type": "purpose", "text": "We are calling to confirm your appointment on {{appointment_date}}."}, {"type": "reschedule", "trigger": "need_reschedule", "response": "I can help reschedule. What day works better for you?"}, {"type": "close", "text": "Thank you. See you on {{appointment_date}}."}]}',
+ '[{"name": "patient_name", "type": "string", "source": "lead"}, {"name": "doctor_name", "type": "string", "default": ""}, {"name": "appointment_date", "type": "string", "source": "custom"}]',
+ TRUE),
+('TPL-REAL-ESTATE', 'Real Estate Follow-up', 'Property inquiry follow-up', 'real_estate',
+ '{"blocks": [{"type": "greeting", "text": "Hi {{first_name}}, {{agent_name}} from {{company}}. Following up on your interest in {{property_address}}."}, {"type": "qualify", "text": "Are you still looking, or has anything changed?"}, {"type": "pitch", "text": "We have similar properties in {{area}} that might fit your needs."}, {"type": "close", "text": "Want to schedule a viewing this weekend?"}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "property_address", "type": "string", "source": "custom"}, {"name": "area", "type": "string", "default": ""}]',
+ TRUE),
+('TPL-INSURANCE', 'Insurance Quotes', 'Quote delivery and follow-up', 'insurance',
+ '{"blocks": [{"type": "greeting", "text": "Hi {{first_name}}, calling about your {{insurance_type}} quote from {{company}}."}, {"type": "recap", "text": "Your monthly premium would be {{premium}}, with {{coverage}} coverage."}, {"type": "objection", "trigger": "too_expensive", "response": "We can adjust the deductible to lower your premium."}, {"type": "close", "text": "Ready to enroll today?"}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "insurance_type", "type": "string", "default": "auto"}, {"name": "premium", "type": "string", "source": "custom"}, {"name": "coverage", "type": "string", "source": "custom"}]',
+ TRUE),
+('TPL-APPOINTMENT', 'Appointment Setting', 'Schedule appointments with prospects', 'sales',
+ '{"blocks": [{"type": "greeting", "text": "Hi {{first_name}}, this is {{agent_name}}. Got a minute?"}, {"type": "intro", "text": "I am reaching out about {{topic}}. We help companies like {{company}} achieve {{benefit}}."}, {"type": "qualify", "text": "Is solving {{pain_point}} a priority for you right now?"}, {"type": "close", "text": "Can we schedule a 15-minute call to explore this further?"}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "company", "type": "string", "source": "lead"}, {"name": "topic", "type": "string", "default": ""}, {"name": "benefit", "type": "string", "default": ""}, {"name": "pain_point", "type": "string", "default": ""}]',
+ TRUE),
+('TPL-SUPPORT', 'Technical Support', 'Tier 1 technical support triage', 'support',
+ '{"blocks": [{"type": "greeting", "text": "Thank you for calling {{company}} support. This is {{agent_name}}."}, {"type": "verify", "text": "Can I get your account email or phone number?"}, {"type": "diagnose", "text": "I am sorry you are experiencing {{issue}}. Let me help troubleshoot."}, {"type": "escalate", "trigger": "complex_issue", "response": "Let me transfer you to a specialist who can better assist."}, {"type": "close", "text": "Is there anything else I can help with today?"}]}',
+ '[{"name": "company", "type": "string", "default": ""}, {"name": "agent_name", "type": "string", "default": "Sam"}, {"name": "issue", "type": "string", "source": "call"}]',
+ TRUE),
+('TPL-DEBT', 'Debt Collection', 'Friendly debt collection outreach', 'finance',
+ '{"blocks": [{"type": "greeting", "text": "Hello {{first_name}}, this is {{agent_name}} calling from {{company}} regarding your account."}, {"type": "verify", "text": "Can you confirm your date of birth for security?"}, {"type": "purpose", "text": "You have an outstanding balance of {{balance}} that is now {{days_overdue}} days overdue."}, {"type": "options", "text": "We can offer a payment plan or settlement. Which works better?"}, {"type": "close", "text": "I will send confirmation to your email. Thank you."}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "balance", "type": "string", "source": "custom"}, {"name": "days_overdue", "type": "string", "source": "custom"}]',
+ TRUE),
+('TPL-EVENT', 'Event Promotion', 'Webinar or event registration', 'marketing',
+ '{"blocks": [{"type": "greeting", "text": "Hi {{first_name}}, this is {{agent_name}} from {{company}}."}, {"type": "intro", "text": "We are hosting {{event_name}} on {{event_date}} and thought you would be interested."}, {"type": "pitch", "text": "You will learn {{benefit_1}}, {{benefit_2}}, and {{benefit_3}}."}, {"type": "close", "text": "Can I register you? It is free and only takes a minute."}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "event_name", "type": "string", "default": ""}, {"name": "event_date", "type": "string", "default": ""}, {"name": "benefit_1", "type": "string", "default": ""}, {"name": "benefit_2", "type": "string", "default": ""}, {"name": "benefit_3", "type": "string", "default": ""}]',
+ TRUE)
+ON CONFLICT (id) DO NOTHING;
 """
 
 
@@ -745,6 +781,41 @@ INSERT OR IGNORE INTO invoices (id, tenant_id, customer_id, amount, status, due_
 INSERT OR IGNORE INTO orders (id, tenant_id, customer_id, status, total, expected_delivery) VALUES
 ('ORD-9001', 'TENANT-001', 'CUST-001', 'Processing', 99.99, '2026-06-10'),
 ('ORD-9002', 'TENANT-001', 'CUST-002', 'Shipped', 249.99, '2026-06-05');
+
+-- Seed script templates
+INSERT OR IGNORE INTO script_templates (id, name, description, industry, content, variables, is_public) VALUES
+('TPL-B2B-SAAS', 'B2B SaaS Sales', 'Cold outreach to software decision makers', 'sales',
+ '{"blocks": [{"type": "greeting", "text": "Hi {{first_name}}, this is {{agent_name}} from {{company}}. Got 60 seconds?"}, {"type": "pitch", "text": "We help {{industry}} companies cut call volume by 40% with AI agents. {{company}} already sees ROI in week one."}, {"type": "branch", "condition": "industry == ''tech''", "true_block": "tech_pitch", "false_block": "generic_pitch"}, {"type": "objection", "trigger": "no_need", "response": "Most customers said that before. Worth a 5-min demo to see?"}, {"type": "close", "text": "Can I schedule a quick demo this week?"}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "company", "type": "string", "source": "lead"}, {"name": "industry", "type": "string", "source": "lead"}, {"name": "agent_name", "type": "string", "default": "Alex"}]',
+ 1),
+('TPL-HEALTHCARE', 'Healthcare Outreach', 'Patient appointment reminders and follow-ups', 'healthcare',
+ '{"blocks": [{"type": "greeting", "text": "Hello, this is {{agent_name}} calling from {{company}} on behalf of Dr. {{doctor_name}}."}, {"type": "verify", "text": "Am I speaking with {{patient_name}}?"}, {"type": "purpose", "text": "We are calling to confirm your appointment on {{appointment_date}}."}, {"type": "reschedule", "trigger": "need_reschedule", "response": "I can help reschedule. What day works better for you?"}, {"type": "close", "text": "Thank you. See you on {{appointment_date}}."}]}',
+ '[{"name": "patient_name", "type": "string", "source": "lead"}, {"name": "doctor_name", "type": "string", "default": ""}, {"name": "appointment_date", "type": "string", "source": "custom"}]',
+ 1),
+('TPL-REAL-ESTATE', 'Real Estate Follow-up', 'Property inquiry follow-up', 'real_estate',
+ '{"blocks": [{"type": "greeting", "text": "Hi {{first_name}}, {{agent_name}} from {{company}}. Following up on your interest in {{property_address}}."}, {"type": "qualify", "text": "Are you still looking, or has anything changed?"}, {"type": "pitch", "text": "We have similar properties in {{area}} that might fit your needs."}, {"type": "close", "text": "Want to schedule a viewing this weekend?"}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "property_address", "type": "string", "source": "custom"}, {"name": "area", "type": "string", "default": ""}]',
+ 1),
+('TPL-INSURANCE', 'Insurance Quotes', 'Quote delivery and follow-up', 'insurance',
+ '{"blocks": [{"type": "greeting", "text": "Hi {{first_name}}, calling about your {{insurance_type}} quote from {{company}}."}, {"type": "recap", "text": "Your monthly premium would be {{premium}}, with {{coverage}} coverage."}, {"type": "objection", "trigger": "too_expensive", "response": "We can adjust the deductible to lower your premium."}, {"type": "close", "text": "Ready to enroll today?"}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "insurance_type", "type": "string", "default": "auto"}, {"name": "premium", "type": "string", "source": "custom"}, {"name": "coverage", "type": "string", "source": "custom"}]',
+ 1),
+('TPL-APPOINTMENT', 'Appointment Setting', 'Schedule appointments with prospects', 'sales',
+ '{"blocks": [{"type": "greeting", "text": "Hi {{first_name}}, this is {{agent_name}}. Got a minute?"}, {"type": "intro", "text": "I am reaching out about {{topic}}. We help companies like {{company}} achieve {{benefit}}."}, {"type": "qualify", "text": "Is solving {{pain_point}} a priority for you right now?"}, {"type": "close", "text": "Can we schedule a 15-minute call to explore this further?"}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "company", "type": "string", "source": "lead"}, {"name": "topic", "type": "string", "default": ""}, {"name": "benefit", "type": "string", "default": ""}, {"name": "pain_point", "type": "string", "default": ""}]',
+ 1),
+('TPL-SUPPORT', 'Technical Support', 'Tier 1 technical support triage', 'support',
+ '{"blocks": [{"type": "greeting", "text": "Thank you for calling {{company}} support. This is {{agent_name}}."}, {"type": "verify", "text": "Can I get your account email or phone number?"}, {"type": "diagnose", "text": "I am sorry you are experiencing {{issue}}. Let me help troubleshoot."}, {"type": "escalate", "trigger": "complex_issue", "response": "Let me transfer you to a specialist who can better assist."}, {"type": "close", "text": "Is there anything else I can help with today?"}]}',
+ '[{"name": "company", "type": "string", "default": ""}, {"name": "agent_name", "type": "string", "default": "Sam"}, {"name": "issue", "type": "string", "source": "call"}]',
+ 1),
+('TPL-DEBT', 'Debt Collection', 'Friendly debt collection outreach', 'finance',
+ '{"blocks": [{"type": "greeting", "text": "Hello {{first_name}}, this is {{agent_name}} calling from {{company}} regarding your account."}, {"type": "verify", "text": "Can you confirm your date of birth for security?"}, {"type": "purpose", "text": "You have an outstanding balance of {{balance}} that is now {{days_overdue}} days overdue."}, {"type": "options", "text": "We can offer a payment plan or settlement. Which works better?"}, {"type": "close", "text": "I will send confirmation to your email. Thank you."}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "balance", "type": "string", "source": "custom"}, {"name": "days_overdue", "type": "string", "source": "custom"}]',
+ 1),
+('TPL-EVENT', 'Event Promotion', 'Webinar or event registration', 'marketing',
+ '{"blocks": [{"type": "greeting", "text": "Hi {{first_name}}, this is {{agent_name}} from {{company}}."}, {"type": "intro", "text": "We are hosting {{event_name}} on {{event_date}} and thought you would be interested."}, {"type": "pitch", "text": "You will learn {{benefit_1}}, {{benefit_2}}, and {{benefit_3}}."}, {"type": "close", "text": "Can I register you? It is free and only takes a minute."}]}',
+ '[{"name": "first_name", "type": "string", "source": "lead"}, {"name": "event_name", "type": "string", "default": ""}, {"name": "event_date", "type": "string", "default": ""}, {"name": "benefit_1", "type": "string", "default": ""}, {"name": "benefit_2", "type": "string", "default": ""}, {"name": "benefit_3", "type": "string", "default": ""}]',
+ 1);
 """
 
 
