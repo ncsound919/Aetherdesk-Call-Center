@@ -250,13 +250,11 @@ async def import_leads(
 
     if not req.rows:
         raise HTTPException(status_code=400, detail="No rows to import")
-    if not req.mapping:
-        raise HTTPException(status_code=400, detail="No column mapping provided")
     if len(req.rows) > 10000:
         raise HTTPException(status_code=400, detail="Too many rows (max 10,000)")
 
-    # Auto-suggest mapping if user didn't provide one
-    if not req.mapping and req.rows:
+    # Auto-suggest mapping if user didn't provide one (None or empty)
+    if not req.mapping or len(req.mapping) == 0:
         sample = req.rows[0]
         auto_map = {}
         for col in sample.keys():
