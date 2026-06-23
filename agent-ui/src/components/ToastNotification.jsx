@@ -4,7 +4,7 @@ const ToastNotification = ({ message, type = 'info', onClose }) => {
   return (
     <div className={`toast toast-${type}`}>
       {message}
-      <button onClick={onClose}>X</button>
+      {onClose && <button onClick={onClose}>X</button>}
     </div>
   );
 };

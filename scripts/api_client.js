@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { mapApiError } from './error_handling';
 
-const isProd = import.meta?.env?.PROD ?? process.env.NODE_ENV === 'production';
+const isProd = process.env.NODE_ENV === 'production';
 
 const apiClient = axios.create({ baseURL: '/api' });
 
