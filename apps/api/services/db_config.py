@@ -4,11 +4,13 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL",
     None
 )
+import logging
+
 if not DATABASE_URL:
     if os.getenv("USE_POSTGRES", "false").lower() == "true":
         raise RuntimeError("DATABASE_URL environment variable must be set for production.")
     else:
-        print("DATABASE_URL not set. Running with SQLite fallback.")
+        logging.warning("DATABASE_URL not set. Running with SQLite fallback.")
 USE_POSTGRES = os.getenv("USE_POSTGRES", "false").lower() == "true"
 
 SQLITE_PATH = os.getenv("SQLITE_PATH", "aetherdesk.db")

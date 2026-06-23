@@ -670,14 +670,7 @@ CREATE TABLE IF NOT EXISTS scripts (
 );
 CREATE INDEX IF NOT EXISTS idx_scripts_tenant ON scripts(tenant_id);
 
--- Script Templates
-CREATE TABLE IF NOT EXISTS script_templates (
-    id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE,
-    description TEXT, industry TEXT,
-    content TEXT DEFAULT '{}', variables TEXT DEFAULT '[]',
-    is_public INTEGER DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+
 
 -- Tenant Settings
 CREATE TABLE IF NOT EXISTS tenant_settings (
