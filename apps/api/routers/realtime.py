@@ -4,14 +4,85 @@ import json
 import time
 
 import structlog
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 
+from apps.api.services.auth import verify_tenant_access
 from apps.api.services.queue import QueueManager
 from apps.api.services.transcript_store import TranscriptStore
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/realtime", tags=["realtime"])
+ws_router = APIRouter()
+
+@ws_router.websocket("/ws/calls/{tenant_id}")
+async def websocket_calls(websocket: WebSocket, tenant_id: str, _=Depends(verify_tenant_access)):
+    """WebSocket for real-time call status updates"""
+    await websocket.accept()
+    pubsub = None
+
+    redis_client = getattr(websocket.app.state, "redis", None)
+
+    try:
+        if redis_client:
+            pubsub = redis_client.pubsub()
+            await pubsub.subscribe(f"calls:{tenant_id}")
+
+        while True:
+            if pubsub:
+                message = await pubsub.get_message(timeout=1.0)
+                if message and message["type"] == "message":
+                    await websocket.send_json(json.loads(message["data"]))
+            else:
+                await asyncio.sleep(1)
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for tenant {tenant_id}")
+    finally:
+        if pubsub:
+            await pubsub.unsubscribe(f"calls:{tenant_id}")
+
+
+@ws_router.websocket("/ws/agent/{agent_id}")
+async def websocket_agent(websocket: WebSocket, agent_id: str):
+    """WebSocket for agents to receive call assignments"""
+    await websocket.accept()
+    
+    redis_client = getattr(websocket.app.state, "redis", None)
+
+    pubsub = None
+    try:
+        if redis_client:
+            await redis_client.sadd("online_agents", agent_id)
+            pubsub = redis_client.pubsub()
+            await pubsub.subscribe(f"agent:{agent_id}:assignments")
+
+        while True:
+            if pubsub:
+                try:
+                    message = await pubsub.get_message(timeout=30.0)
+
+                    if message and message["type"] == "message":
+                        call_data = json.loads(message["data"])
+                        await websocket.send_json({
+                            "type": "call_assignment",
+                            **call_data
+                        })
+                except TimeoutError:
+                    continue
+            else:
+                await asyncio.sleep(1)
+
+    except WebSocketDisconnect:
+        logger.info(f"Agent {agent_id} disconnected")
+    finally:
+        if redis_client:
+            await redis_client.srem("online_agents", agent_id)
+        if pubsub:
+            try:
+                await pubsub.unsubscribe(f"agent:{agent_id}:assignments")
+                await pubsub.close()
+            except Exception:
+                pass
 
 _default_store = TranscriptStore()
 

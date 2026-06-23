@@ -60,7 +60,9 @@ from apps.api.routers import (
     voice,
     voice_cloning,
     webhooks_twilio,
+    webhooks_fonster,
     calls,
+    usage,
 )
 from apps.api.routers.agent import agent_cache
 from apps.api.services.auth import (
@@ -424,8 +426,10 @@ app.include_router(onboarding.router, prefix="/api/v1")
 app.include_router(leads.router, prefix="/api/v1")
 app.include_router(scripts.router, prefix="/api/v1")
 app.include_router(webhooks_twilio.router)
+app.include_router(webhooks_fonster.router)
 app.include_router(calls.router)
 app.include_router(health.router)
+app.include_router(usage.router, prefix="/api/v1")
 
 
 # =============================================================================
@@ -479,231 +483,16 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 
 # =============================================================================
 
-# =============================================================================
-# Webhook Handler for Fonster Events
-# =============================================================================
 
 
-# =============================================================================
-# Webhook Handler for Fonster Events
-# =============================================================================
-@app.post("/api/v1/webhooks/fonster")
-async def fonster_webhook(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    x_fonoster_signature: str = Header(default=None),
-):
-    """Handle Fonster call events (call.answered, call.completed, call.failed)"""
-    # HMAC signature verification
-    fonster_webhook_secret = os.getenv("FONOSTER_WEBHOOK_SECRET")
-    if fonster_webhook_secret and x_fonoster_signature:
-        raw_body = await request.body()
-        expected_sig = hmac.new(
-            fonster_webhook_secret.encode(),
-            raw_body,
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(expected_sig, x_fonoster_signature):
-            raise HTTPException(status_code=401, detail="Invalid webhook signature")
-    elif fonster_webhook_secret and not x_fonoster_signature:
-        # Secret is configured but no signature sent — reject in non-dev mode
-        if os.getenv("APP_ENV", "development") == "production":
-            raise HTTPException(status_code=401, detail="Missing webhook signature")
-
-    payload = await request.json()
-    event_type = payload.get("event_type")
-    call_id = payload.get("call_id")
-    session_ref = payload.get("session_ref")
-
-    logger.info(f"Fonster webhook: {event_type} for call {call_id}")
-
-    if event_type == "call.answered":
-        background_tasks.add_task(handle_fonster_webhook, call_id, "active", session_ref)
-    elif event_type == "call.completed":
-        background_tasks.add_task(handle_fonster_webhook, call_id, "completed")
-    elif event_type == "call.failed":
-        background_tasks.add_task(handle_fonster_webhook, call_id, "failed")
-
-    return {"status": "ok"}
 
 
-async def handle_fonster_webhook(call_id: str, status: str, session_ref: str = None):
-    """Update call status in DB and notify via WebSocket/Redis"""
-    logger.info(f"Call {call_id} status updated to {status}")
-
-    try:
-        await db_update_call_status(call_id, status)
-    except Exception as e:
-        logger.error(f"Call status DB update failed: {e}")
-
-    await safe_redis_publish(
-        f"call:{call_id}:status",
-        json.dumps({
-            "call_id": call_id,
-            "status": status,
-            "session_ref": session_ref,
-            "timestamp": datetime.now(UTC).isoformat(),
-        })
-    )
 
 
-# =============================================================================
-# Usage Analytics
-# =============================================================================
-@app.get("/api/v1/usage", response_model=UsageResponse)
-async def get_usage(
-    tenant_id: str = Query(default="TENANT-001", description="Tenant ID"),
-    x_api_key: str = Header(default="dev-api-key"),
-    period_start: datetime = Query(default=None),
-    period_end: datetime = Query(default=None),
-    _=Depends(verify_tenant_access),
-):
-    """Get usage analytics for a tenant"""
-    # Use verify_tenant_access for authorization
-
-    # Default to last 7 days if not specified
-    now = datetime.now(UTC)
-    if period_start is None:
-        period_start = now - timedelta(days=7)
-    if period_end is None:
-        period_end = now
-
-    stats = await get_usage_stats(tenant_id)
-
-    # Guard against division by zero
-    active = stats.get("active_agents", 0) or 0
-    avg_duration = (
-        round(stats["total_minutes"] / active, 2)
-        if active > 0 else 0.0
-    )
-
-    pool = await get_pg_pool()
-    queue_depth = 0
-    if pool:
-        queue_depth = await pool.fetchval(
-            "SELECT COUNT(*) FROM call_queue WHERE tenant_id = $1 AND status = 'waiting'",
-            tenant_id
-        )
-
-    return UsageResponse(
-        total_agents=stats["total_agents"],
-        active_agents=stats["active_agents"],
-        total_calls=stats["total_calls"],
-        active_calls=stats["active_calls"],
-        total_minutes=stats["total_minutes"],
-        avg_call_duration=avg_duration,
-        queue_depth=queue_depth,
-        total_cost=stats["total_minutes"] * 0.015,
-        by_agent=[],
-        by_day=[],
-    )
 
 
-# =============================================================================
-# Billing
-# =============================================================================
-@app.get("/api/v1/billing")
-async def get_billing(
-    tenant_id: str = Query(default="TENANT-001", description="Tenant ID"),
-    x_api_key: str = Header(default="dev-api-key"),
-    period_start: datetime = Query(default=None),
-    period_end: datetime = Query(default=None),
-    _=Depends(verify_tenant_access),
-):
-    """Get billing summary"""
-    # Use verify_tenant_access for authorization
-
-    # Default to last 7 days if not specified
-    now = datetime.now(UTC)
-    if period_start is None:
-        period_start = now - timedelta(days=7)
-    if period_end is None:
-        period_end = now
-
-    summary = await get_billing_summary(tenant_id, period_start, period_end)
-    return {
-        "total_calls": summary["total_calls"],
-        "total_minutes": summary["total_minutes"],
-        "total_cost": summary["total_cost"],
-        "currency": summary["currency"],
-        "breakdown": {
-            "per_minute": 0.015,
-            "ai_minutes": summary["total_minutes"] * 0.5,
-            "standard_minutes": summary["total_minutes"] * 0.5,
-        },
-    }
 
 
-# =============================================================================
-# Real-Time WebSocket
-# =============================================================================
-@app.websocket("/ws/calls/{tenant_id}")
-async def websocket_calls(websocket: WebSocket, tenant_id: str, _=Depends(verify_tenant_access)):
-    """WebSocket for real-time call status updates"""
-    await websocket.accept()
-    pubsub = None
-
-    try:
-        if redis_client:
-            pubsub = redis_client.pubsub()
-            await pubsub.subscribe(f"calls:{tenant_id}")
-
-        while True:
-            if pubsub:
-                message = await pubsub.get_message(timeout=1.0)
-                if message and message["type"] == "message":
-                    await websocket.send_json(json.loads(message["data"]))
-            else:
-                await asyncio.sleep(1)
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected for tenant {tenant_id}")
-    finally:
-        if pubsub:
-            await pubsub.unsubscribe(f"calls:{tenant_id}")
-
-
-# =============================================================================
-# Agent WebSocket
-# =============================================================================
-@app.websocket("/ws/agent/{agent_id}")
-async def websocket_agent(websocket: WebSocket, agent_id: str):
-    """WebSocket for agents to receive call assignments"""
-    await websocket.accept()
-
-    pubsub = None
-    try:
-        if redis_client:
-            await redis_client.sadd("online_agents", agent_id)
-            pubsub = redis_client.pubsub()
-            await pubsub.subscribe(f"agent:{agent_id}:assignments")
-
-        while True:
-            if pubsub:
-                try:
-                    message = await pubsub.get_message(timeout=30.0)
-
-                    if message and message["type"] == "message":
-                        call_data = json.loads(message["data"])
-                        await websocket.send_json({
-                            "type": "call_assignment",
-                            **call_data
-                        })
-                except TimeoutError:
-                    continue
-            else:
-                await asyncio.sleep(1)
-
-    except WebSocketDisconnect:
-        logger.info(f"Agent {agent_id} disconnected")
-    finally:
-        if redis_client:
-            await redis_client.srem("online_agents", agent_id)
-        if pubsub:
-            try:
-                await pubsub.unsubscribe(f"agent:{agent_id}:assignments")
-                await pubsub.close()
-            except Exception:
-                pass
 
 
 # =============================================================================
