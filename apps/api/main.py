@@ -176,6 +176,8 @@ SALT_ROUNDS = int(os.getenv("SALT_ROUNDS", "12"))
 # =============================================================================
 # Logging (HIPAA-compliant - no PHI in logs)
 # =============================================================================
+logger = logging.getLogger(__name__)
+
 LOG_FORMAT = os.getenv("LOG_FORMAT", "json")
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
@@ -207,7 +209,6 @@ else:
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[logging.StreamHandler()],
     )
-logger = logging.getLogger(__name__)
 
 # =============================================================================
 # Lifespan Manager
