@@ -9,7 +9,8 @@ module.exports = {
     '^react-dom/client$': '<rootDir>/node_modules/react-dom/client',
     '^react/jsx-runtime$': '<rootDir>/node_modules/react/jsx-runtime',
     '^react/jsx-dev-runtime$': '<rootDir>/node_modules/react/jsx-dev-runtime',
-    '^react-router-dom$': '<rootDir>/agent-ui/node_modules/react-router-dom'
+    '^react-router-dom$': '<rootDir>/agent-ui/node_modules/react-router-dom',
+    '^sonner$': '<rootDir>/agent-ui/node_modules/sonner'
   },
   transformIgnorePatterns: [
     '/node_modules/(?!(@testing-library)/)'
