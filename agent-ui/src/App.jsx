@@ -62,6 +62,9 @@ function AppContent() {
           <Route path="/leads/import" element={<LeadImportPage />} />
           <Route path="/scripts" element={<ScriptsPage />} />
           <Route path="/scripts/:id" element={<ScriptEditorPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/verify-email" element={<VerifyEmailPage />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </main>
