@@ -17,8 +17,7 @@ export default function Settings() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    // In production, update tenant settings via API
-    console.log('Settings updated:', formData)
+    // TODO: Update tenant settings via API
   }
 
   const tabs = [

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CallDetail } from './CallDetail';
+import { api } from '../lib/api';
 import { 
   LayoutDashboard, 
   Activity, 
@@ -98,61 +99,38 @@ export const SaasDashboard: React.FC = () => {
 
   const handleApprove = async (id: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/saas/approvals/${id}?status=approved`, {
-        method: 'POST',
-        headers: { 'X-API-Key': 'dev-api-key' }
-      });
-      if (res.ok) {
-        setApprovals(prev => prev.filter(a => a.id !== id));
-        fetchData();
-      }
+      await api.approveSaasRequest(id);
+      setApprovals(prev => prev.filter(a => a.id !== id));
+      fetchData();
     } catch (e) { console.error("Approval failed", e); }
   };
 
   const handleReject = async (id: string) => {
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/saas/approvals/${id}?status=rejected`, {
-        method: 'POST',
-        headers: { 'X-API-Key': 'dev-api-key' }
-      });
-      if (res.ok) {
-        setApprovals(prev => prev.filter(a => a.id !== id));
-        fetchData();
-      }
+      await api.rejectSaasRequest(id);
+      setApprovals(prev => prev.filter(a => a.id !== id));
+      fetchData();
     } catch (e) { console.error("Rejection failed", e); }
   };
 
   const handleTakeover = (callSid: string) => {
-    // This would typically send a WS message to the server
-    console.log("Taking over call:", callSid);
     alert(`Initiating takeover for call ${callSid}...`);
-    // Example: ws.send(JSON.stringify({type: 'takeover_call', call_sid: callSid}));
   };
 
   const fetchData = async () => {
     try {
-      const dRes = await fetch("http://localhost:8000/api/v1/saas/dashboard");
-      const dJson = await dRes.json();
+      const dJson = await api.getDashboard();
       setData(dJson);
       if (dJson.rentals.length === 0) setShowOnboarding(true);
 
-      const aRes = await fetch("http://localhost:8000/api/v1/saas/approvals");
-      setApprovals(await aRes.json());
+      setApprovals(await api.getSaasApprovals());
+      setRecordings(await api.getSaasRecordings());
+      setSettings(await api.getSaasSettings());
 
-      const rRes = await fetch("http://localhost:8000/api/v1/saas/recordings");
-      setRecordings(await rRes.json());
-
-      const sRes = await fetch("http://localhost:8000/api/v1/saas/settings");
-      setSettings(await sRes.json());
-
-      // Campaign data
       try {
-        const csRes = await fetch("http://localhost:8000/api/v1/campaign/stats", {headers: {'X-API-Key': 'dev-api-key'}});
-        setCampaignStats(await csRes.json());
-        const lRes = await fetch("http://localhost:8000/api/v1/campaign/leads", {headers: {'X-API-Key': 'dev-api-key'}});
-        setLeads(await lRes.json());
-        const ccRes = await fetch("http://localhost:8000/api/v1/campaign/calls", {headers: {'X-API-Key': 'dev-api-key'}});
-        setCampaignCalls(await ccRes.json());
+        setCampaignStats(await api.getCampaignStats());
+        setLeads(await api.getCampaignLeads());
+        setCampaignCalls(await api.getCampaignCalls());
       } catch(e) { console.warn('Campaign data fetch skipped', e); }
     } catch (e) {
       console.error("Fetch failed", e);
@@ -165,11 +143,7 @@ export const SaasDashboard: React.FC = () => {
 
   const handleCreateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch(`http://localhost:8000/api/v1/saas/profile?name=${profileName}&prompt=${profilePrompt}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ tools: ["lookup_invoice", "search_knowledge_base"] })
-    });
+    await api.createSaasProfile(profileName, profilePrompt);
     setProfileName(""); setProfilePrompt("");
     fetchData();
   };
@@ -178,12 +152,7 @@ export const SaasDashboard: React.FC = () => {
     setIsGenerating(true);
     try {
       const promptGoal = `Objective: ${scriptGoal}. Tone/Template: ${selectedTemplate}.`;
-      const res = await fetch("http://localhost:8000/api/v1/saas/generate-script", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ objective: promptGoal })
-      });
-      const json = await res.json();
+      const json = await api.generateScript(promptGoal);
       setProfilePrompt(json.script);
     } catch (e) {
       alert("Failed to generate script.");
@@ -193,11 +162,7 @@ export const SaasDashboard: React.FC = () => {
   };
 
   const handleUpdateSettings = async () => {
-    await fetch("http://localhost:8000/api/v1/saas/settings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(settings)
-    });
+    await api.updateSaasSettings(settings);
     alert("Settings Saved");
   };
 
@@ -235,8 +200,7 @@ export const SaasDashboard: React.FC = () => {
         <div className={`sidebar-item ${activeTab === "settings" ? "active" : ""}`} onClick={async () => {
           setActiveTab("settings");
           try {
-            const sRes = await fetch("http://localhost:8000/api/v1/saas/settings");
-            setSettings(await sRes.json());
+            setSettings(await api.getSaasSettings());
           } catch {}
         }}>
           <Settings size={18}/> Integrations
@@ -646,11 +610,7 @@ export const SaasDashboard: React.FC = () => {
             <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem'}}>
               <h2>B2B Outreach Campaign</h2>
               <button className="btn-primary" onClick={async () => {
-                const res = await fetch("http://localhost:8000/api/v1/campaign/launch", {
-                  method: "POST", headers: {'Content-Type': 'application/json', 'X-API-Key': 'dev-api-key'},
-                  body: JSON.stringify({profile_id: "PROF-META-SALES", max_concurrent: 3, delay_between_calls: 5})
-                });
-                const d = await res.json();
+                const d = await api.launchCampaign({profile_id: "PROF-META-SALES", max_concurrent: 3, delay_between_calls: 5});
                 alert(`Campaign ${d.status}: ${d.leads_queued || 0} leads queued`);
                 fetchData();
               }}>🚀 Launch Campaign</button>
@@ -698,10 +658,7 @@ export const SaasDashboard: React.FC = () => {
                 </div>
                 <button className="btn-primary" style={{height: '42px'}} onClick={async () => {
                   if (!newLeadCompany || !newLeadPhone) return alert('Company and Phone required');
-                  await fetch("http://localhost:8000/api/v1/campaign/leads", {
-                    method: "POST", headers: {'Content-Type': 'application/json', 'X-API-Key': 'dev-api-key'},
-                    body: JSON.stringify({company_name: newLeadCompany, contact_name: newLeadContact, phone: newLeadPhone, industry: newLeadIndustry})
-                  });
+                  await api.addCampaignLead({company_name: newLeadCompany, contact_name: newLeadContact, phone: newLeadPhone, industry: newLeadIndustry});
                   setNewLeadCompany(''); setNewLeadContact(''); setNewLeadPhone(''); setNewLeadIndustry('');
                   fetchData();
                 }}>Add</button>
