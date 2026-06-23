@@ -6,6 +6,9 @@ export default function Sidebar({ open, onClose }) {
     { icon: '👥', label: 'Agents', path: '/agents' },
     { icon: '📞', label: 'Call Logs', path: '/calls' },
     { icon: '🎙️', label: 'Voice Cloning', path: '/voice-cloning' },
+    { icon: '💳', label: 'Billing', path: '/billing' },
+    { icon: '📋', label: 'Leads', path: '/leads' },
+    { icon: '📝', label: 'Scripts', path: '/scripts' },
     { icon: '⚙️', label: 'Settings', path: '/settings' },
   ]
 

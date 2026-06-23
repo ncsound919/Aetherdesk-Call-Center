@@ -10,7 +10,7 @@ export function SocketProvider({ children }) {
 
   const connectWebSocket = useCallback(() => {
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000'
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
     const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/agent/' + (user?.agentId || '')
 
     // Clean up existing connection
