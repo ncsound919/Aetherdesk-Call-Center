@@ -1,13 +1,18 @@
 # Python
 __pycache__/
 *.py[cod]
+*.pyo
 *.egg-info/
 dist/
 build/
 
-# Environment
+# Environment and secrets
 .env
+.env.*
+!.env.example
 *.db
+*.sqlite
+*.sqlite3
 
 # Test artifacts
 .pytest_cache/
@@ -16,11 +21,22 @@ htmlcov/
 .screenshots/
 .sixth/
 
+# Coverage and build artifacts
+coverage/
+agent-ui/dist/
+agent-ui/coverage/
+
 # Logs
 *.log
 *.err
 server_log.txt
 server-error.log
+logs/
+
+# Debug artifacts
+debug_screenshot.png
+bandit_results.json
+security_validation_results.json
 
 # OS
 .DS_Store
