@@ -11,10 +11,15 @@ const sanitize = (value) => {
 };
 
 export const mapApiError = (error) => {
+  // Handle null/undefined error
+  if (!error) {
+    return { title: 'An Unexpected Error Occurred', message: 'Please contact support if the problem persists.' };
+  }
+
   // ------------------------------------------------------------------
   // 1. Network-level errors (axios sets error.request, no error.response)
   // ------------------------------------------------------------------
-  if (error && !error.response) {
+  if (!error.response) {
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       return { title: 'Request Timed Out', message: 'The server took too long to respond. Please try again.' };
     }
