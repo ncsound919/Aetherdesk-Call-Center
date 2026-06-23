@@ -4,7 +4,7 @@ import time
 from datetime import UTC
 
 import structlog
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from passlib.context import CryptContext
 
@@ -186,13 +186,18 @@ class WebSocketAuthMiddleware:
         })
 
 
-security = HTTPBearer(auto_error=False)
+security = HTTPBearer()
 
 
-async def get_optional_token(credentials: HTTPAuthorizationCredentials = None) -> str | None:
-    if credentials:
-        return credentials.credentials
-    return None
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """Verify JWT token and return user payload"""
+    from apps.api.services.jwt_utils import verify_access_token as _verify_rs256_token
+    payload = _verify_rs256_token(credentials.credentials)
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return payload
 
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
 if not INTERNAL_API_KEY:

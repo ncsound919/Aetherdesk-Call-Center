@@ -1,3 +1,3 @@
-from . import agent, campaign, engine, protocols, realtime, saas, tenants, voice
+from . import agent, agents, campaign, engine, protocols, realtime, saas, tenants, voice
 
-__all__ = ["voice", "agent", "realtime", "saas", "engine", "protocols", "campaign", "tenants"]
+__all__ = ["voice", "agent", "agents", "realtime", "saas", "engine", "protocols", "campaign", "tenants"]
