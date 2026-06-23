@@ -48,6 +48,7 @@ from apps.api.routers import (
     billing,
     campaign,
     engine,
+    health,
     leads,
     onboarding,
     protocols,
@@ -257,6 +258,7 @@ async def lifespan(app: FastAPI):
 
     # Voice Client (Fonoster > Twilio > Mock)
     fonster_client = get_voice_client()
+    app.state.fonster_client = fonster_client
     if fonster_client:
         logger.info("Voice client initialized")
     else:
@@ -422,6 +424,7 @@ app.include_router(onboarding.router, prefix="/api/v1")
 app.include_router(leads.router, prefix="/api/v1")
 app.include_router(scripts.router, prefix="/api/v1")
 app.include_router(webhooks_twilio.router)
+app.include_router(health.router)
 
 
 # =============================================================================
@@ -455,7 +458,6 @@ from apps.api.models.dto import (
     CallAction,
     CallCreate,
     CallResponse,
-    HealthCheck,
     TenantCreate,
     TenantResponse,
     UsageResponse,
@@ -484,49 +486,6 @@ async def get_current_user(
     if payload is None:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
     return payload
-
-
-# =============================================================================
-# Health Check
-# =============================================================================
-@app.get("/api/v1/health", response_model=HealthCheck)
-@app.get("/health", response_model=HealthCheck)
-async def health_check():
-    """Health check endpoint with service status"""
-    fonster_status = "unknown"
-    db_status = "disconnected"
-
-    if fonster_client:
-        try:
-            hc = await fonster_client.health_check()
-            fonster_status = "healthy" if hc.get("healthy") else "unhealthy"
-        except Exception:
-            fonster_status = "disconnected"  # Health check — expected if Fonster is down
-
-    try:
-        if USE_POSTGRES:
-            pool = await get_pg_pool()
-            if pool:
-                await pool.fetchval("SELECT 1")
-                db_status = "connected"
-    except Exception:
-        db_status = "disconnected"  # Health check — expected if DB is unavailable
-
-    overall = "healthy" if fonster_status == "healthy" and db_status == "connected" else "degraded"
-
-    return HealthCheck(
-        status=overall,
-        timestamp=datetime.now(UTC),
-        version="1.0.0",
-        services={
-            "fonster": fonster_status,
-            "freeswitch": "connected",
-            "redis": "connected" if redis_client else "disconnected",
-            "database": db_status,
-        },
-        fonster_connected=fonster_status == "healthy",
-        database_connected=db_status == "connected",
-    )
 
 
 # =============================================================================
@@ -1244,22 +1203,3 @@ if sentry_dsn:
         logger.info("Sentry initialized")
     except Exception as e:
         logger.warning(f"Sentry init failed: {e}")
-
-
-@app.get("/api/v1/health/ready")
-async def readiness_probe():
-    """Kubernetes readiness probe"""
-    return {"status": "ready"}
-
-
-@app.get("/api/v1/health/live")
-async def liveness_probe():
-    """Kubernetes liveness probe"""
-    return {"status": "alive"}
-
-
-@app.get("/metrics")
-async def metrics_endpoint():
-    """Prometheus metrics endpoint"""
-    from apps.api.middleware.metrics import metrics_endpoint as metrics_handler
-    return await metrics_handler()
