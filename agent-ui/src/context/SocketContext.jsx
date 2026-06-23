@@ -29,9 +29,7 @@ export function SocketProvider({ children }) {
 
     const tenantSocket = new WebSocket(tenantWsUrl)
 
-    tenantSocket.onopen = () => {
-      console.log('Tenant WebSocket connected')
-    }
+    tenantSocket.onopen = () => {}
 
     tenantSocket.onmessage = (event) => {
       try {
@@ -48,7 +46,6 @@ export function SocketProvider({ children }) {
     }
 
     tenantSocket.onclose = () => {
-      console.log('Tenant WebSocket disconnected')
       // Reconnect after delay
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = setTimeout(connectWebSocket, 5000)
@@ -65,8 +62,6 @@ export function SocketProvider({ children }) {
       const agentSocket = new WebSocket(wsUrl)
 
       agentSocket.onopen = () => {
-        console.log('Agent WebSocket connected, authenticating...')
-        // Send auth token
         agentSocket.send(JSON.stringify({ type: 'auth', token: user.token }))
       }
 
@@ -74,7 +69,6 @@ export function SocketProvider({ children }) {
         try {
           const data = JSON.parse(event.data)
           if (data.type === 'auth_success') {
-            console.log('Agent WebSocket authenticated')
           } else if (data.type === 'call_assignment') {
             window.dispatchEvent(new CustomEvent('call:assigned', { detail: data }))
           }
@@ -87,9 +81,7 @@ export function SocketProvider({ children }) {
         console.error('Agent WebSocket error:', error)
       }
 
-      agentSocket.onclose = () => {
-        console.log('Agent WebSocket disconnected')
-      }
+      agentSocket.onclose = () => {}
 
       socketRef.current.agentSocket = agentSocket
     }

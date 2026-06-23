@@ -6,15 +6,24 @@ from datetime import UTC
 import structlog
 from fastapi import Header, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from passlib.context import CryptContext
 
 logger = structlog.get_logger()
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
 
 SECRET_KEY = os.getenv("JWT_SECRET")
 if not SECRET_KEY:
     env = os.getenv("APP_ENV", "development")
     if env == "production":
         raise RuntimeError("JWT_SECRET environment variable must be set for production.")
-    SECRET_KEY = "dev-jwt-secret-do-not-use-in-production"
+    SECRET_KEY = "dev-jwt-secret-do-not-use-in-production"  # nosec B105 — dev fallback, never used in production
 TOKEN_EXPIRY_SECONDS = 3600
 
 
@@ -34,6 +43,7 @@ class TokenStore:
         else:
             if not hasattr(self, "_fallback_tokens"):
                 self._fallback_tokens = {}
+            self.cleanup_expired()
             self._fallback_tokens[token] = token_data
         return token
 
@@ -83,28 +93,33 @@ async def generate_websocket_token(user_id: str, metadata: dict = None) -> str:
 
 
 def generate_access_token(data: dict, expires_delta_seconds: int = 3600) -> str:
-    """Generate JWT access token (for API authentication)."""
-    from datetime import datetime, timedelta
+    """Generate JWT access token signed with RS256."""
+    from datetime import timedelta
 
-    import jwt
-    to_encode = data.copy()
-    expire = datetime.now(UTC) + timedelta(seconds=expires_delta_seconds)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
+    from apps.api.services.jwt_utils import create_access_token as _create_rs256_token
+    return _create_rs256_token(data, timedelta(seconds=expires_delta_seconds))
+
+
+_fallback_blocklist: set[str] = set()
 
 
 async def verify_access_token(token: str) -> dict | None:
-    """Verify JWT access token."""
-    from datetime import datetime
-
-    import jwt
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
-        if payload.get("exp", 0) < datetime.now(UTC).timestamp():
-            return None
-        return payload
-    except jwt.InvalidTokenError:
+    """Verify JWT access token (supports RS256 and legacy HS256) and check blocklist."""
+    from apps.api.services.jwt_utils import verify_access_token as _verify_rs256_token
+    payload = _verify_rs256_token(token)
+    if not payload:
         return None
+    jti = payload.get("jti")
+    if jti:
+        from apps.api.main import redis_client
+        if redis_client:
+            is_blocked = await redis_client.get(f"jwt_blocklist:{jti}")
+            if is_blocked:
+                return None
+        else:
+            if jti in _fallback_blocklist:
+                return None
+    return payload
 
 
 async def verify_websocket_token(token: str) -> dict | None:
@@ -123,14 +138,25 @@ class WebSocketAuthMiddleware:
 
         path = scope.get("path", "")
 
-        if any(path.startswith(exclude) for exclude in self.exclude_paths):
-            await self.app(scope, receive, send)
-            return
+        for exclude in self.exclude_paths:
+            if exclude == "/" and path == "/":
+                await self.app(scope, receive, send)
+                return
+            elif exclude != "/" and path.startswith(exclude):
+                await self.app(scope, receive, send)
+                return
 
         query_params = scope.get("query_string", b"").decode()
         token = None
 
-        if "token=" in query_params:
+        # Prefer Authorization header (sec-websocket-protocol) over query string
+        headers = dict(scope.get("headers", []))
+        auth_header = headers.get(b"authorization", b"").decode()
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+
+        # Fallback: query string (deprecated, kept for backward compat)
+        if not token and "token=" in query_params:
             for param in query_params.split("&"):
                 if param.startswith("token="):
                     token = param[6:]

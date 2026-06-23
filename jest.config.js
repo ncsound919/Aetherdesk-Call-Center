@@ -16,6 +16,8 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/tests/unit/setup.js'],
   collectCoverageFrom: [
     'scripts/**/*.{js,jsx}',
-    '!scripts/**/*.test.{js,jsx}'
+    'agent-ui/src/**/*.{js,jsx,tsx,ts}',
+    '!scripts/**/*.test.{js,jsx}',
+    '!agent-ui/src/**/*.test.{js,jsx,tsx,ts}'
   ]
 };

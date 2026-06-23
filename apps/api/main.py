@@ -45,11 +45,15 @@ from apps.api.services.connection_pool import http_pool
 from apps.api.routers import (
     agent,
     auth,
+    billing,
     campaign,
     engine,
+    leads,
+    onboarding,
     protocols,
     realtime,
     saas,
+    scripts,
     voice,
     voice_cloning,
     webhooks_twilio,
@@ -155,7 +159,7 @@ if not DATABASE_URL:
     if os.getenv("USE_POSTGRES", "false").lower() == "true":
         raise RuntimeError("DATABASE_URL environment variable must be set for production.")
     else:
-        print("DATABASE_URL not set. Running with SQLite fallback.")
+        logger.warning("database_url_not_set_using_sqlite")
 REDIS_URL = os.getenv("REDIS_URL", "redis://aetherdesk-redis:6379")
 FONOSTER_URL = os.getenv("FONOSTER_URL", "http://aetherdesk-fonoster:50062")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
@@ -413,6 +417,10 @@ app.include_router(saas.router, prefix="/api/v1")
 app.include_router(protocols.router)
 app.include_router(campaign.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
+app.include_router(billing.router, prefix="/api/v1")
+app.include_router(onboarding.router, prefix="/api/v1")
+app.include_router(leads.router, prefix="/api/v1")
+app.include_router(scripts.router, prefix="/api/v1")
 app.include_router(webhooks_twilio.router)
 
 
@@ -603,7 +611,7 @@ async def get_current_user(
 # =============================================================================
 # Health Check
 # =============================================================================
-@app.get("/api/v1/health")
+@app.get("/api/v1/health", response_model=HealthCheck)
 @app.get("/health", response_model=HealthCheck)
 async def health_check():
     """Health check endpoint with service status"""
