@@ -1,5 +1,7 @@
 import React, { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { settingsApi } from '../services/api'
+import { toast } from 'sonner'
 
 export default function Settings() {
   const { tenant, user, logout } = useAuth()
@@ -15,9 +17,21 @@ export default function Settings() {
     hipaaConsent: true,
   })
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    // TODO: Update tenant settings via API
+    if (!tenant?.id) return
+    try {
+      await settingsApi.updateTenant(tenant.id, {
+        name: formData.companyName,
+        settings: {
+          timezone: formData.timezone,
+          max_concurrent_calls: parseInt(formData.maxConcurrentCalls),
+        }
+      })
+      toast.success('Settings saved successfully')
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Failed to save settings')
+    }
   }
 
   const tabs = [
