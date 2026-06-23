@@ -28,6 +28,37 @@ async def safe_redis_publish(request: Request, channel: str, message: str) -> bo
         logger.error(f"redis_publish_failed: channel={channel} error={e}")
         return False
 
+
+async def build_agent_response(agent_data: dict, tenant_id: str | None = None) -> dict:
+    """Convert a raw agent DB row to an AgentResponse-compatible dict.
+
+    Extracted from route handlers so tests can call it directly.
+    """
+    skills_raw = agent_data.get("skills", "[]")
+    if isinstance(skills_raw, str):
+        try:
+            skills_parsed = json.loads(skills_raw)
+        except json.JSONDecodeError:
+            skills_parsed = []
+    else:
+        skills_parsed = skills_raw or []
+
+    return {
+        "id": agent_data["id"],
+        "tenant_id": agent_data.get("tenant_id", tenant_id),
+        "name": agent_data["name"],
+        "display_name": agent_data.get("display_name") or agent_data["name"],
+        "agent_type": agent_data.get("agent_type", "ai"),
+        "status": agent_data.get("status", "offline"),
+        "skills": skills_parsed,
+        "sip_extension": agent_data.get("sip_extension"),
+        "total_calls": agent_data.get("total_calls", 0) or 0,
+        "total_talk_time_seconds": agent_data.get("total_talk_time_seconds", 0) or 0,
+        "avg_rating": float(agent_data.get("avg_rating", 0) or 0),
+        "created_at": agent_data.get("created_at") or datetime.now(UTC),
+    }
+
+
 @router.post("/tenants/{tenant_id}/agents", response_model=AgentResponse, status_code=201)
 async def create_agent(request: Request, tenant_id: str, agent: AgentCreate, _=Depends(verify_tenant_access)):
     """Create a new agent with SIP extension and Fonster integration"""
@@ -62,20 +93,21 @@ async def create_agent(request: Request, tenant_id: str, agent: AgentCreate, _=D
         except Exception as e:
             logger.warning(f"Fonster agent app creation failed (non-fatal): {e}")
 
-    return AgentResponse(
-        id=agent_id,
-        tenant_id=tenant_id,
-        name=agent.name,
-        display_name=agent.display_name or agent.name,
-        agent_type=agent.agent_type,
-        status="offline",
-        skills=agent.skills,
-        sip_extension=sip_extension,
-        total_calls=0,
-        total_talk_time_seconds=0,
-        avg_rating=0.0,
-        created_at=datetime.now(UTC),
-    )
+    agent_data = {
+        "id": agent_id,
+        "tenant_id": tenant_id,
+        "name": agent.name,
+        "display_name": agent.display_name,
+        "agent_type": agent.agent_type,
+        "status": "offline",
+        "skills": agent.skills,
+        "sip_extension": sip_extension,
+        "total_calls": 0,
+        "total_talk_time_seconds": 0,
+        "avg_rating": 0.0,
+        "created_at": datetime.now(UTC),
+    }
+    return await build_agent_response(agent_data, tenant_id)
 
 
 @router.get("/tenants/{tenant_id}/agents")
@@ -84,29 +116,7 @@ async def list_agents(tenant_id: str, _=Depends(verify_tenant_access)):
     agents = await list_agents_db(tenant_id)
     result = []
     for a in agents:
-        skills_raw = a.get("skills", "[]")
-        if isinstance(skills_raw, str):
-            try:
-                skills_parsed = json.loads(skills_raw)
-            except json.JSONDecodeError:
-                skills_parsed = []
-        else:
-            skills_parsed = skills_raw or []
-
-        result.append(AgentResponse(
-            id=a["id"],
-            tenant_id=a["tenant_id"],
-            name=a["name"],
-            display_name=a.get("display_name") or a["name"],
-            agent_type=a.get("agent_type", "ai"),
-            status=a.get("status", "offline"),
-            skills=skills_parsed,
-            sip_extension=a.get("sip_extension"),
-            total_calls=a.get("total_calls", 0) or 0,
-            total_talk_time_seconds=a.get("total_talk_time_seconds", 0) or 0,
-            avg_rating=float(a.get("avg_rating", 0) or 0),
-            created_at=a.get("created_at") or datetime.now(UTC),
-        ))
+        result.append(await build_agent_response(a, tenant_id))
     return result
 
 
@@ -117,29 +127,7 @@ async def get_agent(tenant_id: str, agent_id: str, _=Depends(verify_tenant_acces
     if not agent:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    skills_raw = agent.get("skills", "[]")
-    if isinstance(skills_raw, str):
-        try:
-            skills_parsed = json.loads(skills_raw)
-        except json.JSONDecodeError:
-            skills_parsed = []
-    else:
-        skills_parsed = skills_raw or []
-
-    return AgentResponse(
-        id=agent["id"],
-        tenant_id=agent["tenant_id"],
-        name=agent["name"],
-        display_name=agent.get("display_name") or agent["name"],
-        agent_type=agent.get("agent_type", "ai"),
-        status=agent.get("status", "offline"),
-        skills=skills_parsed,
-        sip_extension=agent.get("sip_extension"),
-        total_calls=agent.get("total_calls", 0) or 0,
-        total_talk_time_seconds=agent.get("total_talk_time_seconds", 0) or 0,
-        avg_rating=float(agent.get("avg_rating", 0) or 0),
-        created_at=agent.get("created_at") or datetime.now(UTC),
-    )
+    return await build_agent_response(agent, tenant_id)
 
 
 @router.put("/tenants/{tenant_id}/agents/{agent_id}", response_model=AgentResponse)
@@ -154,28 +142,7 @@ async def update_agent(tenant_id: str, agent_id: str, agent: AgentCreate, _=Depe
     if not updated:
         raise HTTPException(status_code=404, detail="Agent not found")
 
-    skills_raw = updated.get("skills", "[]")
-    if isinstance(skills_raw, str):
-        try:
-            skills_parsed = json.loads(skills_raw)
-        except json.JSONDecodeError:
-            skills_parsed = []
-    else:
-        skills_parsed = skills_raw or []
-
-    return AgentResponse(
-        id=updated["id"], tenant_id=updated["tenant_id"],
-        name=updated["name"],
-        display_name=updated.get("display_name") or updated["name"],
-        agent_type=updated.get("agent_type", "ai"),
-        status=updated.get("status", "offline"),
-        skills=skills_parsed,
-        sip_extension=updated.get("sip_extension"),
-        total_calls=updated.get("total_calls", 0) or 0,
-        total_talk_time_seconds=updated.get("total_talk_time_seconds", 0) or 0,
-        avg_rating=float(updated.get("avg_rating", 0) or 0),
-        created_at=updated.get("created_at") or datetime.now(UTC),
-    )
+    return await build_agent_response(updated, tenant_id)
 
 
 @router.delete("/tenants/{tenant_id}/agents/{agent_id}")
