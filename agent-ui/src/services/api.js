@@ -1,10 +1,9 @@
 import axios from 'axios'
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000'
-
 const api = axios.create({
-  baseURL: `${API_BASE_URL}/api/v1`,
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
   timeout: 30000,
+  headers: { 'Content-Type': 'application/json' }
 })
 
 api.interceptors.request.use((config) => {
@@ -27,48 +26,55 @@ api.interceptors.response.use(
   }
 )
 
-// Auth
-export const authAPI = {
+export const authApi = {
   login: (data) => api.post('/auth/login', data),
-  logout: () => api.post('/auth/logout'),
+  signup: (data) => api.post('/auth/signup', data),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }),
+  verifyEmail: (token) => api.post('/auth/verify-email', { token }),
 }
 
-// Tenants
-export const tenantAPI = {
-  create: (data) => api.post('/tenants', data),
-  get: (id) => api.get(`/tenants/${id}`),
-  list: () => api.get('/tenants'),
-}
-
-// Agents
-export const agentAPI = {
+export const agentApi = {
   list: (tenantId) => api.get(`/tenants/${tenantId}/agents`),
   create: (tenantId, data) => api.post(`/tenants/${tenantId}/agents`, data),
-  get: (tenantId, agentId) => api.get(`/tenants/${tenantId}/agents/${agentId}`),
-  updateStatus: (agentId, status) => api.patch(`/agents/${agentId}/status`, status),
+  update: (tenantId, agentId, data) => api.put(`/tenants/${tenantId}/agents/${agentId}`, data),
+  delete: (tenantId, agentId) => api.delete(`/tenants/${tenantId}/agents/${agentId}`),
+  updateStatus: (agentId, status) => api.patch(`/agents/${agentId}/status`, { status }),
 }
 
-// Calls
-export const callAPI = {
-  create: (data) => api.post('/calls', data),
+export const callApi = {
+  list: (tenantId, params) => api.get('/calls', { params: { tenant_id: tenantId, ...params } }),
   get: (callId) => api.get(`/calls/${callId}`),
-  list: (tenantId, params) => api.get(`/calls?tenant_id=${tenantId}&${new URLSearchParams(params)}`),
-  action: (callId, action) => api.post(`/calls/${callId}/action`, action),
+  create: (data) => api.post('/calls', data),
+  action: (callId, action) => api.post(`/calls/${callId}/action`, { action }),
 }
 
-// Recordings
-export const recordingAPI = {
-  get: (recordingId) => api.get(`/recordings/${recordingId}`),
+export const billingApi = {
+  getSummary: (tenantId) => api.get('/billing', { params: { tenant_id: tenantId } }),
 }
 
-// Usage
-export const usageAPI = {
-  get: (tenantId, period) => api.get('/usage', { params: { tenant_id: tenantId, ...period } }),
+export const leadApi = {
+  list: (tenantId, params) => api.get('/leads', { params: { tenant_id: tenantId, ...params } }),
+  create: (tenantId, data) => api.post('/leads', { tenant_id: tenantId, ...data }),
+  import: (tenantId, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('tenant_id', tenantId)
+    return api.post('/leads/import', formData, { headers: { 'Content-Type': 'multipart/form-data' } })
+  },
 }
 
-// Health
-export const healthAPI = {
-  check: () => api.get('/health'),
+export const scriptApi = {
+  list: (tenantId) => api.get('/scripts', { params: { tenant_id: tenantId } }),
+  get: (scriptId) => api.get(`/scripts/${scriptId}`),
+  create: (tenantId, data) => api.post('/scripts', { tenant_id: tenantId, ...data }),
+  update: (scriptId, data) => api.put(`/scripts/${scriptId}`, data),
+  delete: (scriptId) => api.delete(`/scripts/${scriptId}`),
+}
+
+export const settingsApi = {
+  getTenant: (tenantId) => api.get(`/tenants/${tenantId}`),
+  updateTenant: (tenantId, data) => api.put(`/tenants/${tenantId}`, data),
 }
 
 export default api
