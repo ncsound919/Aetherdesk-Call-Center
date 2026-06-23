@@ -16,14 +16,11 @@ class TestCheckout:
     async def test_checkout_creates_session(self, auth_bearer):
         from apps.api.routers.billing import create_checkout, CheckoutRequest
 
-        with patch("apps.api.services.stripe_service.get_price_id", return_value="price_test"), \
-             patch("apps.api.services.stripe_service.create_checkout_session") as mock_session, \
-             patch("apps.api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.services.db_tenants.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant, \
-             patch("apps.api.services.db_tenants.update_tenant_subscription_db", new_callable=AsyncMock):
+        with patch("apps.api.routers.billing.get_price_id", return_value="price_test"), \
+             patch("apps.api.routers.billing.create_checkout_session", new_callable=AsyncMock) as mock_session, \
+             patch("apps.api.routers.billing.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant:
 
-            mock_verify.return_value = {"tenant_id": "tenant-1", "email": "user@test.com"}
-            mock_get_tenant.return_value = {}
+            mock_get_tenant.return_value = {"id": "tenant-1"}
             mock_session.return_value = {"id": "cs_test", "url": "https://checkout.stripe.com/test", "mock": True}
 
             result = await create_checkout(CheckoutRequest(plan="pro"), credentials=auth_bearer)
@@ -36,10 +33,8 @@ class TestCheckout:
         from apps.api.routers.billing import create_checkout, CheckoutRequest
         from fastapi import HTTPException
 
-        with patch("apps.api.services.stripe_service.get_price_id", return_value=None), \
-             patch("apps.api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_verify:
-            mock_verify.return_value = {"tenant_id": "tenant-1", "email": "user@test.com"}
-
+        with patch("apps.api.routers.billing.get_price_id", return_value=None), \
+             patch("apps.api.routers.billing.get_tenant_db", new_callable=AsyncMock):
             with pytest.raises(HTTPException) as exc:
                 await create_checkout(CheckoutRequest(plan="bogus"), credentials=auth_bearer)
             assert exc.value.status_code == 400
@@ -59,11 +54,9 @@ class TestPortal:
     async def test_portal_creates_session(self, auth_bearer):
         from apps.api.routers.billing import create_portal
 
-        with patch("apps.api.services.stripe_service.create_portal_session") as mock_portal, \
-             patch("apps.api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.services.db_tenants.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant:
+        with patch("apps.api.routers.billing.create_portal_session", new_callable=AsyncMock) as mock_portal, \
+             patch("apps.api.routers.billing.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant:
 
-            mock_verify.return_value = {"tenant_id": "tenant-1"}
             mock_get_tenant.return_value = {"stripe_customer_id": "cus_test"}
             mock_portal.return_value = {"url": "https://billing.stripe.com/test", "mock": True}
 
@@ -76,9 +69,7 @@ class TestPortal:
         from apps.api.routers.billing import create_portal
         from fastapi import HTTPException
 
-        with patch("apps.api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.services.db_tenants.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant:
-            mock_verify.return_value = {"tenant_id": "tenant-1"}
+        with patch("apps.api.routers.billing.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant:
             mock_get_tenant.return_value = {}
 
             with pytest.raises(HTTPException) as exc:
@@ -97,9 +88,9 @@ class TestWebhook:
     async def test_webhook_handles_checkout_completed(self, mock_request):
         from apps.api.routers.billing import stripe_webhook
 
-        with patch("apps.api.services.stripe_service.verify_webhook_signature") as mock_verify, \
-             patch("apps.api.services.db_tenants.get_tenant_by_stripe_customer_db", new_callable=AsyncMock) as mock_lookup, \
-             patch("apps.api.services.db_tenants.update_tenant_subscription_db", new_callable=AsyncMock) as mock_update:
+        with patch("apps.api.routers.billing.verify_webhook_signature") as mock_verify, \
+             patch("apps.api.routers.billing.get_tenant_by_stripe_customer_db", new_callable=AsyncMock) as mock_lookup, \
+             patch("apps.api.routers.billing.update_tenant_subscription_db", new_callable=AsyncMock) as mock_update:
 
             mock_verify.return_value = {
                 "type": "checkout.session.completed",
@@ -116,9 +107,9 @@ class TestWebhook:
     async def test_webhook_handles_subscription_deleted(self, mock_request):
         from apps.api.routers.billing import stripe_webhook
 
-        with patch("apps.api.services.stripe_service.verify_webhook_signature") as mock_verify, \
-             patch("apps.api.services.db_tenants.get_tenant_by_stripe_customer_db", new_callable=AsyncMock) as mock_lookup, \
-             patch("apps.api.services.db_tenants.update_tenant_subscription_db", new_callable=AsyncMock) as mock_update:
+        with patch("apps.api.routers.billing.verify_webhook_signature") as mock_verify, \
+             patch("apps.api.routers.billing.get_tenant_by_stripe_customer_db", new_callable=AsyncMock) as mock_lookup, \
+             patch("apps.api.routers.billing.update_tenant_subscription_db", new_callable=AsyncMock) as mock_update:
 
             mock_verify.return_value = {
                 "type": "customer.subscription.deleted",
@@ -136,7 +127,7 @@ class TestWebhook:
         from apps.api.routers.billing import stripe_webhook
         from fastapi import HTTPException
 
-        with patch("apps.api.services.stripe_service.verify_webhook_signature", return_value=None):
+        with patch("apps.api.routers.billing.verify_webhook_signature", return_value=None):
             with pytest.raises(HTTPException) as exc:
                 await stripe_webhook(mock_request, stripe_signature="invalid")
             assert exc.value.status_code == 400
@@ -147,11 +138,9 @@ class TestSubscription:
     async def test_subscription_returns_plan(self, auth_bearer):
         from apps.api.routers.billing import get_subscription
 
-        with patch("apps.api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.services.db_tenants.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant, \
-             patch("apps.api.services.db_tenants.get_tenant_plan_db", new_callable=AsyncMock) as mock_get_plan:
+        with patch("apps.api.routers.billing.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant, \
+             patch("apps.api.routers.billing.get_tenant_plan_db", new_callable=AsyncMock) as mock_get_plan:
 
-            mock_verify.return_value = {"tenant_id": "tenant-1"}
             mock_get_tenant.return_value = {"stripe_subscription_id": "sub_test"}
             mock_get_plan.return_value = {"plan_name": "pro", "max_concurrent_calls": 10, "max_agents": 10}
 
@@ -164,11 +153,9 @@ class TestSubscription:
     async def test_subscription_defaults_to_free(self, auth_bearer):
         from apps.api.routers.billing import get_subscription
 
-        with patch("apps.api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.services.db_tenants.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant, \
-             patch("apps.api.services.db_tenants.get_tenant_plan_db", new_callable=AsyncMock) as mock_get_plan:
+        with patch("apps.api.routers.billing.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant, \
+             patch("apps.api.routers.billing.get_tenant_plan_db", new_callable=AsyncMock) as mock_get_plan:
 
-            mock_verify.return_value = {"tenant_id": "tenant-1"}
             mock_get_tenant.return_value = None
             mock_get_plan.return_value = None
 
@@ -182,10 +169,7 @@ class TestUsage:
     async def test_usage_recorded(self, auth_bearer):
         from apps.api.routers.billing import report_usage, UsageRequest
 
-        with patch("apps.api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.services.db_tenants.record_usage_db", new_callable=AsyncMock) as mock_record:
-
-            mock_verify.return_value = {"tenant_id": "tenant-1"}
+        with patch("apps.api.routers.billing.record_usage_db", new_callable=AsyncMock) as mock_record:
 
             result = await report_usage(UsageRequest(metric="agent_minutes", quantity=42.5), credentials=auth_bearer)
             assert result["recorded"] is True
