@@ -165,4 +165,5 @@ async def ws_agent(websocket: WebSocket):
             msg = await websocket.receive_text()
             await websocket.send_text(msg)
     except WebSocketDisconnect:
+        logger.info(f"Agent {agent_id} disconnected")
         await hub.disconnect(agent_id)
