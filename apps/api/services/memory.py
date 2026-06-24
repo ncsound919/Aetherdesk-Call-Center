@@ -75,7 +75,7 @@ class MemoryService:
         """Create a unique ID for a memory"""
         timestamp = str(time.time())
         raw = f"{session_id}:{content}:{timestamp}"
-        return hashlib.md5(raw.encode()).hexdigest()
+        return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
     async def add_memory(
         self,
@@ -195,3 +195,5 @@ class MemoryService:
 
 
 memory_service = MemoryService()
+
+

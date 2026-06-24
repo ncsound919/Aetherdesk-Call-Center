@@ -71,3 +71,133 @@ class TestStripeService:
             result = report_usage("si_test", 42)
             assert result["mock"] is True
             assert result["quantity"] == 42
+
+    def test_create_customer_with_real_stripe_enabled(self):
+        from apps.api.services.stripe_service import create_customer
+
+        mock_customer = MagicMock()
+        mock_customer.to_dict.return_value = {"id": "cus_real", "email": "test@example.com", "mock": False}
+
+        with patch("apps.api.services.stripe_service.is_stripe_enabled", return_value=True), \
+             patch("apps.api.services.stripe_service._stripe") as mock_stripe:
+            mock_stripe.Customer.create.return_value = mock_customer
+            result = create_customer("test@example.com", name="Test User")
+            mock_stripe.Customer.create.assert_called_once_with(email="test@example.com", name="Test User", metadata={})
+            assert result == {"id": "cus_real", "email": "test@example.com", "mock": False}
+
+    def test_create_customer_missing_email(self):
+        from apps.api.services.stripe_service import create_customer
+
+        mock_customer = MagicMock()
+        mock_customer.to_dict.return_value = {"id": "cus_noemail", "mock": False}
+
+        with patch("apps.api.services.stripe_service.is_stripe_enabled", return_value=True), \
+             patch("apps.api.services.stripe_service._stripe") as mock_stripe:
+            mock_stripe.Customer.create.return_value = mock_customer
+            result = create_customer("")
+            mock_stripe.Customer.create.assert_called_once_with(email="", name=None, metadata={})
+            assert result == {"id": "cus_noemail", "mock": False}
+
+    def test_report_usage_with_real_stripe(self):
+        from apps.api.services.stripe_service import report_usage
+
+        mock_usage = MagicMock()
+        mock_usage.to_dict.return_value = {"id": "mbur_real", "quantity": 10, "mock": False}
+
+        with patch("apps.api.services.stripe_service.is_stripe_enabled", return_value=True), \
+             patch("apps.api.services.stripe_service._stripe") as mock_stripe:
+            mock_stripe.SubscriptionItem.create_usage_record.return_value = mock_usage
+            result = report_usage("si_test", 10, timestamp=1234567890)
+            mock_stripe.SubscriptionItem.create_usage_record.assert_called_once_with(
+                "si_test", quantity=10, timestamp=1234567890
+            )
+            assert result == {"id": "mbur_real", "quantity": 10, "mock": False}
+
+    def test_report_usage_no_subscription_item(self):
+        from apps.api.services.stripe_service import report_usage
+
+        mock_usage = MagicMock()
+        mock_usage.to_dict.return_value = {"id": "mbur_empty", "quantity": 0, "mock": False}
+
+        with patch("apps.api.services.stripe_service.is_stripe_enabled", return_value=True), \
+             patch("apps.api.services.stripe_service._stripe") as mock_stripe:
+            mock_stripe.SubscriptionItem.create_usage_record.return_value = mock_usage
+            result = report_usage("", 0)
+            mock_stripe.SubscriptionItem.create_usage_record.assert_called_once_with(
+                "", quantity=0, timestamp=None
+            )
+            assert result == {"id": "mbur_empty", "quantity": 0, "mock": False}
+
+    def test_verify_webhook_with_real_stripe(self):
+        from apps.api.services.stripe_service import verify_webhook_signature
+
+        mock_event = MagicMock()
+        payload = b'{"type": "checkout.session.completed"}'
+
+        with patch("apps.api.services.stripe_service.is_stripe_enabled", return_value=True), \
+             patch("apps.api.services.stripe_service._stripe") as mock_stripe:
+            mock_stripe.Webhook.construct_event.return_value = mock_event
+            result = verify_webhook_signature(payload, "sig_header", "secret")
+            mock_stripe.Webhook.construct_event.assert_called_once_with(payload, "sig_header", "secret")
+            assert result == mock_event
+
+    def test_verify_webhook_signature_error(self):
+        from apps.api.services.stripe_service import verify_webhook_signature
+
+        class _SignatureVerificationError(Exception):
+            pass
+
+        with patch("apps.api.services.stripe_service.is_stripe_enabled", return_value=True), \
+             patch("apps.api.services.stripe_service._stripe") as mock_stripe:
+            mock_stripe.Webhook.construct_event.side_effect = _SignatureVerificationError("sig mismatch")
+            result = verify_webhook_signature(b"payload", "sig", "secret")
+            assert result is None
+
+    def test_verify_webhook_generic_error(self):
+        from apps.api.services.stripe_service import verify_webhook_signature
+
+        with patch("apps.api.services.stripe_service.is_stripe_enabled", return_value=True), \
+             patch("apps.api.services.stripe_service._stripe") as mock_stripe:
+            mock_stripe.Webhook.construct_event.side_effect = Exception("something went wrong")
+            result = verify_webhook_signature(b"payload", "sig", "secret")
+            assert result is None
+
+    def test_create_checkout_session_real(self):
+        from apps.api.services.stripe_service import create_checkout_session
+
+        mock_session = MagicMock()
+        mock_session.id = "cs_real"
+        mock_session.url = "https://checkout.stripe.com/test"
+
+        with patch("apps.api.services.stripe_service.is_stripe_enabled", return_value=True), \
+             patch("apps.api.services.stripe_service._stripe") as mock_stripe:
+            mock_stripe.checkout.Session.create.return_value = mock_session
+            result = create_checkout_session(
+                "cus_test", "price_pro", "https://success.url", "https://cancel.url",
+                metadata={"order": "123"},
+            )
+            mock_stripe.checkout.Session.create.assert_called_once_with(
+                customer="cus_test",
+                mode="subscription",
+                line_items=[{"price": "price_pro", "quantity": 1}],
+                success_url="https://success.url",
+                cancel_url="https://cancel.url",
+                metadata={"order": "123"},
+            )
+            assert result == {"id": "cs_real", "url": "https://checkout.stripe.com/test", "mock": False}
+
+    def test_create_portal_session_real(self):
+        from apps.api.services.stripe_service import create_portal_session
+
+        mock_portal = MagicMock()
+        mock_portal.id = "ps_real"
+        mock_portal.url = "https://billing.stripe.com/test"
+
+        with patch("apps.api.services.stripe_service.is_stripe_enabled", return_value=True), \
+             patch("apps.api.services.stripe_service._stripe") as mock_stripe:
+            mock_stripe.billing_portal.Session.create.return_value = mock_portal
+            result = create_portal_session("cus_test", "https://return.url")
+            mock_stripe.billing_portal.Session.create.assert_called_once_with(
+                customer="cus_test", return_url="https://return.url"
+            )
+            assert result == {"id": "ps_real", "url": "https://billing.stripe.com/test", "mock": False}

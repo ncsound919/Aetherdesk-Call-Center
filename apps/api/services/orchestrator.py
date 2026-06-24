@@ -682,3 +682,5 @@ class Orchestrator:
         except Exception as e:
             logger.error("orchestrator_error", error=str(e))
             return AgentResponse(text="I'm sorry, I'm having trouble connecting to my brain right now.", sources=[], needs_agent=True)
+
+

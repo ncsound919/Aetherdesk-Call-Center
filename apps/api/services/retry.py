@@ -47,7 +47,7 @@ def exponential_backoff(
                     delay = min(base_delay * (exponential_base ** attempt), max_delay)
                     if jitter:
                         import random
-                        delay = delay * (0.5 + random.random())
+                        delay = delay * (0.5 + random.random())  # nosec B311 — jitter for retry timing, not cryptographic
 
                     logger.warning(
                         "retry_attempt",
@@ -127,3 +127,5 @@ class AsyncRetry:
 retry_default = AsyncRetry(RetryConfig(max_retries=3, base_delay=1.0))
 retry_ollama = AsyncRetry(RetryConfig(max_retries=2, base_delay=1.0, max_delay=10.0))
 retry_rag = AsyncRetry(RetryConfig(max_retries=2, base_delay=0.5, max_delay=10.0))
+
+

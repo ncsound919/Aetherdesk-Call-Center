@@ -46,6 +46,47 @@ class TestInputSanitizer:
         result = InputSanitizer.sanitize_string("${process.env.SECRET}", "tmpl")
         assert result.is_valid is False
 
+    def test_sanitize_dict_non_string_key(self):
+        data = {1: "value", 2: "other"}
+        result = InputSanitizer.sanitize_dict(data)
+        assert 1 not in result
+        assert 2 not in result
+
+    def test_sanitize_transcript(self):
+        transcript = ["hello", "<script>alert(1)</script>", "world"]
+        result = InputSanitizer.sanitize_transcript(transcript)
+        assert len(result) == 3
+        assert result[0] == "hello"
+        assert "&lt;script&gt;" in result[1]
+        assert result[2] == "world"
+
+    def test_sanitize_transcript_filters_non_strings(self):
+        transcript = ["hello", 123, "world"]
+        result = InputSanitizer.sanitize_transcript(transcript)
+        assert len(result) == 2
+        assert result[0] == "hello"
+        assert result[1] == "world"
+
+    def test_sanitize_protocol_fields_required_field_validation_fails(self):
+        fields = {"name": "<script>alert(1)</script>"}
+        result = InputSanitizer.sanitize_protocol_fields(fields, ["name"])
+        assert result.is_valid is False
+        assert any("dangerous pattern" in e for e in result.errors)
+
+    def test_sanitize_protocol_fields_optional_non_string(self):
+        fields = {"required_field": "valid", "optional_num": 42}
+        result = InputSanitizer.sanitize_protocol_fields(fields, ["required_field"])
+        assert result.is_valid is True
+        assert result.sanitized_value["optional_num"] == 42
+        assert result.sanitized_value["required_field"] == "valid"
+
+    def test_sanitize_user_input_function(self):
+        from apps.api.services.sanitizer import sanitize_user_input
+        data = {"name": "Alice", "age": 30}
+        result = sanitize_user_input(data)
+        assert result["name"] == "Alice"
+        assert result["age"] == 30
+
     def test_sanitize_dict_simple(self):
         data = {"name": "Alice", "age": 30}
         result = InputSanitizer.sanitize_dict(data)

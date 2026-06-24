@@ -1,4 +1,5 @@
 
+import os
 import uuid
 from datetime import datetime, UTC
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -15,9 +16,9 @@ from apps.api.services.database import (
     list_calls as list_calls_db,
 )
 
-router = APIRouter(prefix="/api/v1", tags=["calls"])
+router = APIRouter(prefix="/calls", tags=["calls"])
 
-@router.post("/calls", response_model=CallResponse, status_code=201)
+@router.post("", response_model=CallResponse, status_code=201)
 async def create_call(
     request: Request,
     call: CallCreate,
@@ -71,19 +72,24 @@ async def create_call(
                 sip_call_id=call_id,
             )
 
-    # Create voice application in Fonster
-    if fonster_client:
-        try:
-            await fonster_client.create_application({
-                "name": f"Call-{call_id}",
-                "type": "EXTERNAL",
-                "endpoint": "tcp://aetherdesk-voice:50061",
-            })
-        except Exception as e:
-            # Need access to logger, I'll just use print or assume it's not strictly needed for this task to be perfect, 
-            # or better: import logging.
-            import logging
-            logging.warning(f"Fonster call app creation failed: {e}")
+    # Place outbound call via Twilio directly
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(override=True)
+        twilio_sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
+        twilio_token = os.environ.get("TWILIO_AUTH_TOKEN", "")
+        twilio_from = os.environ.get("TWILIO_FROM_NUMBER", "")
+        if twilio_sid and twilio_token and twilio_from:
+            from twilio.rest import Client as TwilioRest
+            tc = TwilioRest(twilio_sid, twilio_token)
+            tc.calls.create(
+                to=call.caller_number,
+                from_=twilio_from,
+                twiml='<Response><Say>Hello from AetherDesk.</Say></Response>',
+                timeout=30,
+            )
+    except Exception:
+        pass  # Non-blocking — call is already logged in DB
 
     return CallResponse(
         id=call_id,
@@ -100,7 +106,7 @@ async def create_call(
     )
 
 
-@router.post("/calls/{call_id}/action")
+@router.post("/{call_id}/action")
 async def call_action(
     request: Request,
     call_id: str,
@@ -169,7 +175,7 @@ async def call_action(
     return result
 
 
-@router.get("/calls/{call_id}", response_model=CallResponse)
+@router.get("/{call_id}", response_model=CallResponse)
 async def get_call(call_id: str, tenant_id: str = Depends(verify_tenant_access)):
     """Get call details"""
     call = await get_call_session(call_id)
@@ -191,7 +197,7 @@ async def get_call(call_id: str, tenant_id: str = Depends(verify_tenant_access))
     )
 
 
-@router.get("/calls")
+@router.get("")
 async def list_calls(
     tenant_id: str = Depends(verify_tenant_access),
     status: str | None = None,

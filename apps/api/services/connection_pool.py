@@ -49,3 +49,5 @@ async def get_http_client():
     finally:
         # Don't close the client here - it's pooled
         pass
+
+

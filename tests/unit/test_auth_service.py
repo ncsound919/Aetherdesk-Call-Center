@@ -25,7 +25,7 @@ from fastapi import HTTPException
 
 _mock_main = ModuleType("apps.api.main")
 _mock_main.redis_client = None  # Will be patched per-test when needed
-sys.modules.setdefault("apps.api.main", _mock_main)
+sys.modules["apps.api.main"] = _mock_main
 
 
 class TestVerifyAccessToken:
@@ -197,3 +197,284 @@ class TestVerifyApiKey:
                 await verify_api_key("completely-bogus-key")
             assert exc_info.value.status_code == 403
             assert "Invalid API Key" in str(exc_info.value.detail)
+
+    # ------------------------------------------------------------------
+    # Production mode with missing key
+    # ------------------------------------------------------------------
+
+    @pytest.mark.asyncio
+    async def test_verify_api_key_production_missing(self):
+        """Production env without API key should raise HTTP 401."""
+        from apps.api.services.auth import verify_api_key
+
+        with patch("os.getenv", return_value="production"):
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_api_key(None)
+            assert exc_info.value.status_code == 401
+            assert "API key required" in str(exc_info.value.detail)
+
+
+class TestVerifyPassword:
+    """Tests for auth.verify_password."""
+
+    def test_verify_password_correct(self):
+        from apps.api.services.auth import verify_password, get_password_hash
+        hashed = get_password_hash("correct-password")
+        assert verify_password("correct-password", hashed) is True
+
+    def test_verify_password_incorrect(self):
+        from apps.api.services.auth import verify_password, get_password_hash
+        hashed = get_password_hash("correct-password")
+        assert verify_password("wrong-password", hashed) is False
+
+
+class TestGetPasswordHash:
+    """Tests for auth.get_password_hash."""
+
+    def test_hash_differs_from_plaintext(self):
+        from apps.api.services.auth import get_password_hash
+        hashed = get_password_hash("my-password")
+        assert hashed != "my-password"
+        assert hashed.startswith("$2")
+
+
+class TestTokenStore:
+    """Tests for TokenStore methods with fallback storage (no Redis)."""
+
+    @pytest.mark.asyncio
+    async def test_create_token_no_redis(self):
+        from apps.api.services.auth import TokenStore
+        store = TokenStore()
+        token = await store.create_token("user-1")
+        assert isinstance(token, str)
+        assert len(token) > 20
+        assert hasattr(store, "_fallback_tokens")
+        assert token in store._fallback_tokens
+
+    @pytest.mark.asyncio
+    async def test_validate_token_fallback(self):
+        from apps.api.services.auth import TokenStore
+        import time
+        store = TokenStore()
+        store._fallback_tokens = {
+            "valid-token": {"user_id": "user-1", "created_at": time.time(), "metadata": {}}
+        }
+        result = await store.validate_token("valid-token")
+        assert result is not None
+        assert result["user_id"] == "user-1"
+
+    @pytest.mark.asyncio
+    async def test_validate_token_expired(self):
+        from apps.api.services.auth import TokenStore, TOKEN_EXPIRY_SECONDS
+        import time
+        store = TokenStore()
+        store._fallback_tokens = {
+            "expired-token": {
+                "user_id": "user-1",
+                "created_at": time.time() - TOKEN_EXPIRY_SECONDS - 10,
+                "metadata": {},
+            }
+        }
+        result = await store.validate_token("expired-token")
+        assert result is None
+        assert "expired-token" not in store._fallback_tokens
+
+    @pytest.mark.asyncio
+    async def test_revoke_token_fallback(self):
+        from apps.api.services.auth import TokenStore
+        import time
+        store = TokenStore()
+        store._fallback_tokens = {
+            "revoke-me": {"user_id": "user-1", "created_at": time.time(), "metadata": {}}
+        }
+        await store.revoke_token("revoke-me")
+        assert "revoke-me" not in store._fallback_tokens
+
+    def test_cleanup_expired(self):
+        from apps.api.services.auth import TokenStore, TOKEN_EXPIRY_SECONDS
+        import time
+        store = TokenStore()
+        now = time.time()
+        store._fallback_tokens = {
+            "expired-1": {
+                "user_id": "u1",
+                "created_at": now - TOKEN_EXPIRY_SECONDS - 100,
+                "metadata": {},
+            },
+            "expired-2": {
+                "user_id": "u2",
+                "created_at": now - TOKEN_EXPIRY_SECONDS - 200,
+                "metadata": {},
+            },
+            "fresh": {"user_id": "u3", "created_at": now, "metadata": {}},
+        }
+        store.cleanup_expired()
+        assert "fresh" in store._fallback_tokens
+        assert "expired-1" not in store._fallback_tokens
+        assert "expired-2" not in store._fallback_tokens
+
+
+class TestGenerateAccessToken:
+    """Tests for auth.generate_access_token."""
+
+    def test_generate_access_token(self):
+        from apps.api.services.auth import generate_access_token
+
+        with patch("apps.api.services.jwt_utils.create_access_token") as mock_create:
+            mock_create.return_value = "signed.jwt.token"
+            result = generate_access_token({"sub": "user-1"})
+            assert result == "signed.jwt.token"
+            mock_create.assert_called_once()
+            args, _ = mock_create.call_args
+            assert args[0] == {"sub": "user-1"}
+            assert args[1].seconds == 3600
+
+
+class TestGetCurrentUser:
+    """Tests for auth.get_current_user."""
+
+    @pytest.mark.asyncio
+    async def test_get_current_user_valid(self):
+        from apps.api.services.auth import get_current_user
+
+        mock_creds = type("Creds", (), {"credentials": "valid.jwt.token"})()
+        with patch("apps.api.services.jwt_utils.verify_access_token") as mock_verify:
+            mock_verify.return_value = {"sub": "user-1", "tenant_id": "T-1"}
+            result = await get_current_user(mock_creds)
+            assert result == {"sub": "user-1", "tenant_id": "T-1"}
+
+    @pytest.mark.asyncio
+    async def test_get_current_user_invalid(self):
+        from apps.api.services.auth import get_current_user
+
+        mock_creds = type("Creds", (), {"credentials": "invalid.jwt.token"})()
+        with patch("apps.api.services.jwt_utils.verify_access_token") as mock_verify:
+            mock_verify.return_value = None
+            with pytest.raises(HTTPException) as exc_info:
+                await get_current_user(mock_creds)
+            assert exc_info.value.status_code == 401
+            assert "Invalid or expired token" in str(exc_info.value.detail)
+
+
+class TestWebSocketAuthMiddleware:
+    """Tests for WebSocketAuthMiddleware."""
+
+    @pytest.mark.asyncio
+    async def test_non_websocket_scope(self):
+        from apps.api.services.auth import WebSocketAuthMiddleware
+
+        mock_app = AsyncMock()
+        scope = {"type": "http", "path": "/some-path"}
+        receive = AsyncMock()
+        send = AsyncMock()
+        middleware = WebSocketAuthMiddleware(mock_app)
+        await middleware(scope, receive, send)
+        mock_app.assert_called_once_with(scope, receive, send)
+
+    @pytest.mark.asyncio
+    async def test_excluded_path(self):
+        from apps.api.services.auth import WebSocketAuthMiddleware
+
+        mock_app = AsyncMock()
+        middleware = WebSocketAuthMiddleware(mock_app)
+        for path in ["/api/v1/voice/incoming/call", "/health", "/"]:
+            mock_app.reset_mock()
+            scope = {"type": "websocket", "path": path, "headers": []}
+            await middleware(scope, AsyncMock(), AsyncMock())
+            mock_app.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_missing_token_rejected(self):
+        from apps.api.services.auth import WebSocketAuthMiddleware
+
+        mock_app = AsyncMock()
+        send = AsyncMock()
+        scope = {
+            "type": "websocket",
+            "path": "/ws/custom",
+            "headers": [],
+            "query_string": b"",
+        }
+        middleware = WebSocketAuthMiddleware(mock_app)
+        await middleware(scope, AsyncMock(), send)
+        mock_app.assert_not_called()
+        send.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_invalid_token_rejected(self):
+        from apps.api.services.auth import WebSocketAuthMiddleware
+
+        mock_app = AsyncMock()
+        send = AsyncMock()
+        headers = [(b"authorization", b"Bearer bad-token")]
+        scope = {
+            "type": "websocket",
+            "path": "/ws/custom",
+            "headers": headers,
+            "query_string": b"",
+        }
+        with patch(
+            "apps.api.services.auth.verify_websocket_token",
+            new_callable=AsyncMock,
+        ) as mock_verify:
+            mock_verify.return_value = None
+            middleware = WebSocketAuthMiddleware(mock_app)
+            await middleware(scope, AsyncMock(), send)
+            mock_app.assert_not_called()
+            send.assert_awaited()
+
+
+class TestVerifyTenantAccess:
+    """Tests for auth.verify_tenant_access."""
+
+    @pytest.mark.asyncio
+    async def test_dev_bypass(self):
+        from apps.api.services.auth import verify_tenant_access
+
+        result = await verify_tenant_access("T-42", x_api_key="dev-api-key")
+        assert result == "T-42"
+
+    @pytest.mark.asyncio
+    async def test_production_valid(self):
+        from apps.api.services.auth import verify_tenant_access
+
+        with patch("os.getenv", return_value="production"), \
+             patch("apps.api.services.auth.INTERNAL_API_KEY", "prod-internal-key"), \
+             patch(
+                 "apps.api.services.database.verify_tenant_api_key",
+                 new_callable=AsyncMock,
+             ) as mock_verify:
+            mock_verify.return_value = True
+            result = await verify_tenant_access("T-42", x_api_key="valid-tenant-key")
+            assert result == "T-42"
+            mock_verify.assert_called_once_with("T-42", "valid-tenant-key")
+
+    @pytest.mark.asyncio
+    async def test_production_invalid(self):
+        from apps.api.services.auth import verify_tenant_access
+
+        with patch("os.getenv", return_value="production"), \
+             patch("apps.api.services.auth.INTERNAL_API_KEY", "prod-internal-key"), \
+             patch(
+                 "apps.api.services.database.verify_tenant_api_key",
+                 new_callable=AsyncMock,
+             ) as mock_verify:
+            mock_verify.return_value = False
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_tenant_access("T-42", x_api_key="invalid-key")
+            assert exc_info.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_db_failure(self):
+        from apps.api.services.auth import verify_tenant_access
+
+        with patch("os.getenv", return_value="production"), \
+             patch("apps.api.services.auth.INTERNAL_API_KEY", "prod-internal-key"), \
+             patch(
+                 "apps.api.services.database.verify_tenant_api_key",
+                 new_callable=AsyncMock,
+             ) as mock_verify:
+            mock_verify.side_effect = Exception("DB connection failed")
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_tenant_access("T-42", x_api_key="any-key")
+            assert exc_info.value.status_code == 403

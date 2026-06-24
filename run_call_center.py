@@ -19,7 +19,7 @@ base = r"C:\Users\User\Desktop\aetherdesk_scaffold"
 ui_base = r"C:\Users\User\Desktop\aetherdesk_scaffold\agent-ui"
 
 # Set environment variables
-os.environ["ENCRYPTION_KEY"] = "REDACTED_ENCRYPTION_KEY_PLEASE_ROTATE="
+os.environ["ENCRYPTION_KEY"] = "rqSRQd2JssHG3nhORTRC3CBaeUjqOqZ3D2BH2FX0l0k="
 os.environ["WEBSOCKET_SECRET_KEY"] = "test-websocket-secret"
 
 # Clean up old processes
@@ -42,7 +42,7 @@ time.sleep(6)
 
 # Start UI server in a visible console window
 print("[3/4] Starting UI Server (visible console)...")
-ui_env_cmd = 'set ENCRYPTION_KEY=REDACTED_ENCRYPTION_KEY_PLEASE_ROTATE= && set WEBSOCKET_SECRET_KEY=test-websocket-secret && npm run dev -- --host 127.0.0.1 --port 3001'
+ui_env_cmd = 'set ENCRYPTION_KEY=rqSRQd2JssHG3nhORTRC3CBaeUjqOqZ3D2BH2FX0l0k= && set WEBSOCKET_SECRET_KEY=test-websocket-secret && npm run dev -- --host 127.0.0.1 --port 3001'
 subprocess.Popen(
     ['cmd', '/c', ui_env_cmd],
     cwd=ui_base,

@@ -133,6 +133,77 @@ class TestHub:
         mock_ws1.send_json.assert_called_once_with({"type": "broadcast", "data": "value"})
         mock_ws2.send_json.assert_called_once_with({"type": "broadcast", "data": "value"})
 
+    @pytest.mark.asyncio
+    async def test_hub_send_success(self):
+        from apps.api.routers.agent import Hub
+
+        hub = Hub()
+        mock_ws = AsyncMock(spec=WebSocket)
+
+        await hub.connect("agent-1", mock_ws)
+        await hub.send("agent-1", {"type": "test", "data": "value"})
+
+        mock_ws.send_json.assert_called_once_with({"type": "test", "data": "value"})
+
+    @pytest.mark.asyncio
+    async def test_hub_send_failure_logs_warning(self):
+        from apps.api.routers.agent import Hub
+
+        hub = Hub()
+        mock_ws = AsyncMock(spec=WebSocket)
+        mock_ws.send_json.side_effect = Exception("send failed")
+
+        await hub.connect("agent-1", mock_ws)
+
+        with patch("apps.api.routers.agent.logger.warning") as mock_warning:
+            await hub.send("agent-1", {"type": "test"})
+
+        mock_warning.assert_called_once()
+        args, _ = mock_warning.call_args
+        assert "hub_send_failed" in args
+
+    @pytest.mark.asyncio
+    async def test_hub_disconnect_failure_logs_warning(self):
+        from apps.api.routers.agent import Hub
+
+        hub = Hub()
+        mock_ws = AsyncMock(spec=WebSocket)
+        mock_ws.close.side_effect = Exception("close failed")
+
+        await hub.connect("agent-1", mock_ws)
+
+        with patch("apps.api.routers.agent.logger.warning") as mock_warning:
+            await hub.disconnect("agent-1")
+
+        mock_warning.assert_called_once()
+        args, _ = mock_warning.call_args
+        assert "hub_disconnect_failed" in args
+
+    @pytest.mark.asyncio
+    async def test_hub_broadcast_continues_on_error(self):
+        from apps.api.routers.agent import Hub
+
+        hub = Hub()
+        mock_ws1 = AsyncMock(spec=WebSocket)
+        mock_ws2 = AsyncMock(spec=WebSocket)
+        mock_ws1.send_json.side_effect = Exception("ws1 failed")
+
+        await hub.connect("agent-1", mock_ws1)
+        await hub.connect("agent-2", mock_ws2)
+
+        await hub.broadcast({"type": "test"})
+
+        mock_ws2.send_json.assert_called_once_with({"type": "test"})
+
+    @pytest.mark.asyncio
+    async def test_hub_disconnect_nonexistent(self):
+        from apps.api.routers.agent import Hub
+
+        hub = Hub()
+
+        # Should not raise exception
+        await hub.disconnect("nonexistent")
+
 
 class TestAgentEndpoints:
     """Tests for agent REST endpoints."""

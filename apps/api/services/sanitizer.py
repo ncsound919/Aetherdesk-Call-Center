@@ -15,6 +15,7 @@ class InputSanitizer:
     MAX_STRING_LENGTH = 10000
     MAX_FIELD_COUNT = 100
     MAX_NESTING_DEPTH = 5
+    MAX_TRANSCRIPT_LENGTH = 1000
 
     DANGEROUS_PATTERNS = [
         r'<script[^>]*>.*?</script>',
@@ -125,3 +126,5 @@ class InputSanitizer:
 
 def sanitize_user_input(data: dict[str, Any]) -> dict[str, Any]:
     return InputSanitizer.sanitize_dict(data)
+
+

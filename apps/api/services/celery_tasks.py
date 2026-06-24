@@ -74,3 +74,5 @@ def process_handoff(queue_name: str, item_json: str, agent_id: str = None):
         item["claimed_by"] = agent_id
         item["claimed_ts"] = time.time()
     logger.info("handoff_processed", queue=queue_name, agent=agent_id, session=item.get("session_id"))
+
+

@@ -1,7 +1,7 @@
 import json
 import secrets
 import uuid
-from datetime import UTC, datetime
+from datetime import timezone, datetime
 from typing import Optional
 
 import structlog
@@ -19,7 +19,7 @@ logger = structlog.get_logger()
 async def create_tenant(name, email, slug, phone=None, plan_id=None, settings=None, gdpr_consent=False):
     tenant_id = str(uuid.uuid4())
     api_key = secrets.token_urlsafe(32)
-    now = datetime.now(UTC)
+    now = datetime.now(timezone.utc)
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
@@ -113,7 +113,7 @@ async def create_agent(tenant_id, name, display_name, agent_type="ai", skills=No
             conn.execute("""
                 INSERT INTO agents (id, tenant_id, name, display_name, agent_type, skills, config, phone, email, sip_extension, status, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'offline', ?, ?)
-            """, (agent_id, tenant_id, name, display_name or name, agent_type, json.dumps(skills or []), json.dumps(config or {}), phone, email, sip_extension, datetime.now(UTC).isoformat(), datetime.now(UTC).isoformat()))
+            """, (agent_id, tenant_id, name, display_name or name, agent_type, json.dumps(skills or []), json.dumps(config or {}), phone, email, sip_extension, datetime.now(timezone.utc).isoformat(), datetime.now(timezone.utc).isoformat()))
             conn.commit()
             row = conn.execute("SELECT * FROM agents WHERE id = ?", (agent_id,)).fetchone()
             return row
@@ -155,7 +155,7 @@ async def update_agent_status(agent_id, status, session_ref=None):
             return json.loads(result) if result else {"success": False, "error": "function returned null"}
     else:
         conn = _get_sqlite_conn()
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         conn.execute("UPDATE agents SET status = ?, last_seen_at = ?, updated_at = ? WHERE id = ?",
                      (status, now, now, agent_id))
         agent_row = conn.execute("SELECT tenant_id, status FROM agents WHERE id = ?", (agent_id,)).fetchone()
@@ -207,7 +207,7 @@ async def update_agent_db(agent_id, tenant_id, name=None, display_name=None, age
         if config is not None:
             fields.append("config = ?"); values.append(json.dumps(config))
         if fields:
-            fields.append("updated_at = ?"); values.append(datetime.now(UTC).isoformat())
+            fields.append("updated_at = ?"); values.append(datetime.now(timezone.utc).isoformat())
             values.extend([agent_id, tenant_id])
             conn.execute(f"UPDATE agents SET {', '.join(fields)} WHERE id = ? AND tenant_id = ?", values)  # nosec B608 — field names are code constants
             conn.commit()
@@ -458,7 +458,7 @@ async def set_password_reset_token_db(email: str):
         row = cursor.fetchone()
         if row:
             from datetime import timedelta
-            expires = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
+            expires = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
             cursor.execute("UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?", (token, expires, row[0]))
             conn.commit()
             return row[0], token
@@ -483,7 +483,7 @@ async def reset_password_db(reset_token: str, new_password_hash: str):
     else:
         conn = _get_sqlite_conn()
         cursor = conn.cursor()
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         cursor.execute(
             "SELECT id FROM users WHERE reset_token = ? AND reset_token_expires > ?",
             (reset_token, now)
@@ -570,7 +570,7 @@ async def get_tenant_by_stripe_customer_db(stripe_customer_id: str):
 async def record_usage_db(tenant_id: str, metric: str, quantity: float, period_start: str, period_end: str):
     """Record metered usage (e.g., agent minutes) for a tenant billing period."""
     record_id = str(uuid.uuid4())
-    now = datetime.now(UTC).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     if USE_POSTGRES:
         pool = await get_pg_pool()
         async with pool.acquire() as conn:
@@ -654,7 +654,7 @@ async def count_active_calls_db(tenant_id: str) -> int:
 async def create_lead_db(tenant_id: str, phone: str, company_name: str = None, contact_name: str = None, first_name: str = None, last_name: str = None, email: str = None, industry: str = None, notes: str = None, priority: int = 5, status: str = "new", score: float = 0.0, source: str = "manual", custom_fields: dict = None):
     """Create a new lead."""
     lead_id = str(uuid.uuid4())
-    now = datetime.now(UTC).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     if USE_POSTGRES:
         pool = await get_pg_pool()
         async with pool.acquire() as conn:
@@ -878,7 +878,7 @@ async def bulk_delete_leads_db(tenant_id: str, lead_ids: list[str]) -> int:
 async def create_script_db(tenant_id: str, name: str, content: dict, variables: list[dict] = None) -> dict:
     """Create a new script."""
     script_id = str(uuid.uuid4())
-    now = datetime.now(UTC).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     if USE_POSTGRES:
         pool = await get_pg_pool()
         async with pool.acquire() as conn:
@@ -1132,7 +1132,7 @@ async def list_script_templates_db(industry: str = None, limit: int = 100, offse
 async def create_script_template_db(name: str, description: str, industry: str, content: dict, variables: list[dict], is_public: bool = True) -> dict:
     """Create a new script template."""
     template_id = str(uuid.uuid4())
-    now = datetime.now(UTC).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     if USE_POSTGRES:
         pool = await get_pg_pool()
         async with pool.acquire() as conn:
@@ -1169,3 +1169,5 @@ async def delete_script_template_db(template_id: str) -> bool:
         conn.commit()
         conn.close()
         return affected > 0
+
+

@@ -8,7 +8,7 @@ from apps.api.services.database import get_pg_pool, get_usage_stats
 
 router = APIRouter(tags=["usage"])
 
-@router.get("/api/v1/usage", response_model=UsageResponse)
+@router.get("/usage", response_model=UsageResponse)
 async def get_usage(
     tenant_id: str = Query(default="TENANT-001", description="Tenant ID"),
     x_api_key: str = Header(default="dev-api-key"),

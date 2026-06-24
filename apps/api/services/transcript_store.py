@@ -48,3 +48,5 @@ class TranscriptStore:
             for sid in stale:
                 self.cleanup(sid)
                 logger.info("stale_transcript_purged", call_sid=sid)
+
+

@@ -283,3 +283,327 @@ class TestRouteResolver:
         
         # Verify route resolver was called
         mock_route.assert_called_once_with("refill", "id_lookup")
+
+
+class TestProtocolVM:
+    def make_vm(self, proto_data=None):
+        mock_loader = MagicMock()
+        mock_loader.load.return_value = proto_data or {}
+        mock_validators = MagicMock()
+        mock_validators.validate.return_value = True
+        mock_actions = MagicMock()
+        mock_actions.run = AsyncMock(return_value={"success": True})
+        from apps.api.services.engine import ProtocolVM
+        return ProtocolVM(mock_loader, mock_validators, mock_actions), mock_loader, mock_validators, mock_actions
+
+    @pytest.mark.asyncio
+    async def test_step_escape_hatch(self):
+        from apps.api.services.engine import VMState
+
+        vm, _, _, _ = self.make_vm()
+        state = VMState(protocol_id="test", node="start", fields={}, transcript=[])
+        result = await vm.step(state, "agent")
+
+        assert result.node == "agent_handoff"
+        assert len(result.transcript) == 1
+        assert result.transcript[0]["reason"] == "escape_hatch"
+
+    @pytest.mark.asyncio
+    async def test_step_escape_hatch_operator(self):
+        from apps.api.services.engine import VMState
+
+        vm, _, _, _ = self.make_vm()
+        state = VMState(protocol_id="test", node="start", fields={}, transcript=[])
+        result = await vm.step(state, "operator")
+
+        assert result.node == "agent_handoff"
+        assert result.transcript[0]["reason"] == "escape_hatch"
+
+    @pytest.mark.asyncio
+    async def test_step_escape_hatch_zero(self):
+        from apps.api.services.engine import VMState
+
+        vm, _, _, _ = self.make_vm()
+        state = VMState(protocol_id="test", node="start", fields={}, transcript=[])
+        result = await vm.step(state, "0")
+
+        assert result.node == "agent_handoff"
+
+    @pytest.mark.asyncio
+    async def test_step_protocol_not_found(self):
+        from apps.api.services.engine import VMState
+
+        vm, mock_loader, _, _ = self.make_vm()
+        mock_loader.load.return_value = None
+        state = VMState(protocol_id="missing", node="start", fields={}, transcript=[])
+        result = await vm.step(state, "hello")
+
+        assert result.node == "agent_handoff"
+        assert result.transcript[0]["reason"] == "protocol_not_found"
+
+    @pytest.mark.asyncio
+    async def test_step_node_not_found(self):
+        from apps.api.services.engine import VMState
+
+        proto = {"nodes": {"other_node": {}}}
+        vm, _, _, _ = self.make_vm(proto)
+        state = VMState(protocol_id="test", node="missing_node", fields={}, transcript=[])
+        result = await vm.step(state, "hello")
+
+        assert result.node == "agent_handoff"
+        assert result.transcript[0]["reason"] == "node_not_found"
+
+    @pytest.mark.asyncio
+    async def test_step_field_node_valid(self):
+        from apps.api.services.engine import VMState
+
+        proto = {
+            "nodes": {
+                "ask_name": {
+                    "field": "name",
+                    "validate": "not_empty",
+                    "next": "ask_age"
+                }
+            }
+        }
+        vm, _, mock_validators, _ = self.make_vm(proto)
+        state = VMState(protocol_id="test", node="ask_name", fields={}, transcript=[])
+        result = await vm.step(state, "John")
+
+        assert result.fields["name"] == "John"
+        assert result.node == "ask_age"
+        assert result.transcript[0]["reason"] == "field_set:name"
+        mock_validators.validate.assert_called_once_with("not_empty", "John")
+
+    @pytest.mark.asyncio
+    async def test_step_field_node_validation_fails(self):
+        from apps.api.services.engine import VMState
+
+        proto = {
+            "nodes": {
+                "ask_name": {
+                    "field": "name",
+                    "validate": "not_empty",
+                    "next": "ask_age"
+                }
+            }
+        }
+        vm, _, mock_validators, _ = self.make_vm(proto)
+        mock_validators.validate.return_value = False
+        state = VMState(protocol_id="test", node="ask_name", fields={}, transcript=[])
+        result = await vm.step(state, "")
+
+        assert result.node == "ask_name"
+        assert result.transcript[0]["reason"] == "validation_failed"
+        assert "name" not in result.fields
+
+    @pytest.mark.asyncio
+    async def test_step_field_node_default_next(self):
+        from apps.api.services.engine import VMState
+
+        proto = {
+            "nodes": {
+                "ask_email": {
+                    "field": "email"
+                }
+            }
+        }
+        vm, _, mock_validators, _ = self.make_vm(proto)
+        mock_validators.validate.return_value = True
+        state = VMState(protocol_id="test", node="ask_email", fields={}, transcript=[])
+        result = await vm.step(state, "a@b.com")
+
+        assert result.fields["email"] == "a@b.com"
+        assert result.node == "agent_handoff"
+
+    @pytest.mark.asyncio
+    async def test_step_options_node_hit(self):
+        from apps.api.services.engine import VMState
+
+        proto = {
+            "nodes": {
+                "choose_color": {
+                    "options": ["red:color_red", "blue:color_blue"]
+                }
+            }
+        }
+        vm, _, _, _ = self.make_vm(proto)
+        state = VMState(protocol_id="test", node="choose_color", fields={}, transcript=[])
+        result = await vm.step(state, "red")
+
+        assert result.node == "color_red"
+        assert result.transcript[0]["reason"] == "option_selected:red"
+
+    @pytest.mark.asyncio
+    async def test_step_options_node_miss(self):
+        from apps.api.services.engine import VMState
+
+        proto = {
+            "nodes": {
+                "choose_color": {
+                    "options": ["red:color_red", "blue:color_blue"]
+                }
+            }
+        }
+        vm, _, _, _ = self.make_vm(proto)
+        state = VMState(protocol_id="test", node="choose_color", fields={}, transcript=[])
+        result = await vm.step(state, "green")
+
+        assert result.node == "choose_color"
+        assert result.transcript[0]["reason"] == "invalid_option"
+
+    @pytest.mark.asyncio
+    async def test_step_action_node_success(self):
+        from apps.api.services.engine import VMState
+
+        proto = {
+            "nodes": {
+                "process": {
+                    "action": "lookup_order",
+                    "on_ok": "success_node",
+                    "on_fail": "fail_node"
+                }
+            }
+        }
+        vm, _, _, mock_actions = self.make_vm(proto)
+        mock_actions.run = AsyncMock(return_value={"success": True, "data": "ok"})
+        state = VMState(protocol_id="test", node="process", fields={"order_id": "ORD-001"}, transcript=[])
+        result = await vm.step(state, "")
+
+        assert result.node == "success_node"
+        assert result.transcript[0]["reason"] == "action:lookup_order"
+        mock_actions.run.assert_called_once_with("lookup_order", {"order_id": "ORD-001"})
+
+    @pytest.mark.asyncio
+    async def test_step_action_node_failure(self):
+        from apps.api.services.engine import VMState
+
+        proto = {
+            "nodes": {
+                "process": {
+                    "action": "lookup_order",
+                    "on_ok": "success_node",
+                    "on_fail": "fail_node"
+                }
+            }
+        }
+        vm, _, _, mock_actions = self.make_vm(proto)
+        mock_actions.run = AsyncMock(return_value={"success": False, "error": "not found"})
+        state = VMState(protocol_id="test", node="process", fields={}, transcript=[])
+        result = await vm.step(state, "")
+
+        assert result.node == "fail_node"
+        assert result.transcript[0]["reason"] == "action:lookup_order"
+
+    @pytest.mark.asyncio
+    async def test_step_no_rule_fallback(self):
+        from apps.api.services.engine import VMState
+
+        proto = {"nodes": {"weird_node": {"unknown_key": "value"}}}
+        vm, _, _, _ = self.make_vm(proto)
+        state = VMState(protocol_id="test", node="weird_node", fields={}, transcript=[])
+        result = await vm.step(state, "hello")
+
+        assert result.node == "agent_handoff"
+        assert result.transcript[0]["reason"] == "no_rule"
+
+    def test_resolve_hit(self):
+        from apps.api.services.engine import ProtocolVM
+
+        vm, _, _, _ = self.make_vm()
+        result = vm._resolve(["1:option_a", "2:option_b"], "2")
+        assert result == "option_b"
+
+    def test_resolve_miss(self):
+        from apps.api.services.engine import ProtocolVM
+
+        vm, _, _, _ = self.make_vm()
+        result = vm._resolve(["1:option_a"], "3")
+        assert result is None
+
+    def test_resolve_case_insensitive(self):
+        from apps.api.services.engine import ProtocolVM
+
+        vm, _, _, _ = self.make_vm()
+        result = vm._resolve(["YES:got_it", "NO:skip"], "yes")
+        assert result == "got_it"
+
+    def test_render_prompt(self):
+        from apps.api.services.engine import ProtocolVM
+
+        vm, _, _, _ = self.make_vm()
+        prompt = "Hello {{ name }}, your order {{ order_id }} is ready."
+        fields = {"name": "Alice", "order_id": "ORD-123"}
+        result = vm._render_prompt(prompt, fields)
+        assert result == "Hello Alice, your order ORD-123 is ready."
+
+    def test_render_prompt_empty(self):
+        from apps.api.services.engine import ProtocolVM
+
+        vm, _, _, _ = self.make_vm()
+        assert vm._render_prompt("", {"k": "v"}) == ""
+        assert vm._render_prompt(None, {"k": "v"}) == ""
+
+    def test_render_prompt_missing_field(self):
+        from apps.api.services.engine import ProtocolVM
+
+        vm, _, _, _ = self.make_vm()
+        prompt = "Hello {{ name }}, your id is {{ missing }}."
+        fields = {"name": "Bob"}
+        result = vm._render_prompt(prompt, fields)
+        assert result == "Hello Bob, your id is ."
+
+    def test_get_prompt(self):
+        proto = {
+            "nodes": {
+                "greet": {
+                    "prompt": "Hello {{ user }}!"
+                }
+            }
+        }
+        from apps.api.services.engine import VMState, ProtocolVM
+
+        mock_loader = MagicMock()
+        mock_loader.load.return_value = proto
+        vm = ProtocolVM(mock_loader, MagicMock(), MagicMock())
+        state = VMState(protocol_id="test", node="greet", fields={"user": "Alice"}, transcript=[])
+        result = vm.get_prompt(state)
+        assert result == "Hello Alice!"
+
+    def test_get_prompt_proto_not_found(self):
+        from apps.api.services.engine import VMState, ProtocolVM
+
+        mock_loader = MagicMock()
+        mock_loader.load.return_value = None
+        vm = ProtocolVM(mock_loader, MagicMock(), MagicMock())
+        state = VMState(protocol_id="missing", node="greet", fields={}, transcript=[])
+        assert vm.get_prompt(state) == ""
+
+    def test_get_prompt_node_not_found(self):
+        proto = {"nodes": {"other": {}}}
+        from apps.api.services.engine import VMState, ProtocolVM
+
+        mock_loader = MagicMock()
+        mock_loader.load.return_value = proto
+        vm = ProtocolVM(mock_loader, MagicMock(), MagicMock())
+        state = VMState(protocol_id="test", node="missing", fields={}, transcript=[])
+        assert vm.get_prompt(state) == ""
+
+    def test_vmstate_dataclass(self):
+        from apps.api.services.engine import VMState
+
+        s = VMState(protocol_id="p1", node="n1", fields={"k": "v"}, transcript=[], route_key="rk", prompt="pr", audio_prompt=b"ap")
+        assert s.protocol_id == "p1"
+        assert s.node == "n1"
+        assert s.fields == {"k": "v"}
+        assert s.route_key == "rk"
+        assert s.prompt == "pr"
+        assert s.audio_prompt == b"ap"
+
+    def test_vmstate_defaults(self):
+        from apps.api.services.engine import VMState
+
+        s = VMState(protocol_id="p1", node="n1", fields={}, transcript=[])
+        assert s.route_key is None
+        assert s.prompt is None
+        assert s.audio_prompt is None

@@ -1,26 +1,6 @@
 """Database layer — re-exports from focused modules."""
 from contextlib import contextmanager
 
-from apps.api.services.db_config import DATABASE_URL, SQLITE_PATH, SQLITE_POOL_SIZE, SQLITE_TIMEOUT, USE_POSTGRES
-from apps.api.services.db_pool import (
-    _get_sqlite_conn,
-    close_pg_pool,
-    db_context,
-    decrypt_val,
-    encrypt_val,
-    get_pg_pool,
-)
-from apps.api.services.db_schema import (
-    SCHEMA_SQL,
-    SQLITE_SCHEMA_SQL,
-    init_pg_schema,
-    init_sqlite_schema,
-)
-from apps.api.services.db_errors import (
-    DatabaseError,
-    NotFoundError,
-    PoolNotAvailableError,
-)
 from apps.api.services.db_calls import (
     create_call_session,
     dequeue_call,
@@ -39,6 +19,32 @@ from apps.api.services.db_calls import (
     process_approval_db,
     rent_agent_db,
     update_call_status,
+)
+from apps.api.services.db_config import (
+    DATABASE_URL,
+    SQLITE_PATH,
+    SQLITE_POOL_SIZE,
+    SQLITE_TIMEOUT,
+    USE_POSTGRES,
+)
+from apps.api.services.db_errors import (
+    DatabaseError,
+    NotFoundError,
+    PoolNotAvailableError,
+)
+from apps.api.services.db_pool import (
+    _get_sqlite_conn,
+    close_pg_pool,
+    db_context,
+    decrypt_val,
+    encrypt_val,
+    get_pg_pool,
+)
+from apps.api.services.db_schema import (
+    SCHEMA_SQL,
+    SQLITE_SCHEMA_SQL,
+    init_pg_schema,
+    init_sqlite_schema,
 )
 from apps.api.services.db_tenants import (
     create_agent,
@@ -71,6 +77,12 @@ def db_context_sync():
         conn.close()
 
 
+async def db_run_sync(db_func):
+    """Run a synchronous DB function in a thread to avoid blocking the event loop."""
+    import asyncio
+    return await asyncio.to_thread(db_func)
+
+
 __all__ = [
     "db_context", "db_context_sync",
     "get_pg_pool", "close_pg_pool",
@@ -95,3 +107,5 @@ __all__ = [
     "get_webhook_url_db", "lookup_invoice_db", "get_order_status_db",
     "DatabaseError", "NotFoundError", "PoolNotAvailableError",
 ]
+
+

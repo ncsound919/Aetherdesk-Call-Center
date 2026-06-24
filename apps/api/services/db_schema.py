@@ -861,3 +861,5 @@ def init_sqlite_schema():
     conn.commit()
     conn.close()
     logger.info("SQLite schema initialized via raw SQL (fallback)")
+
+

@@ -161,8 +161,8 @@ services:
   # API Gateway / SaaS Platform
   api-gateway:
     build:
-      context: ./apps/api
-      dockerfile: Dockerfile
+      context: .                          # project root — preserves apps.api package path
+      dockerfile: Dockerfile.optimized    # multi-stage UV-based optimized build
     container_name: aetherdesk-api
     restart: unless-stopped
     environment:
@@ -170,21 +170,78 @@ services:
       REDIS_URL: redis://redis:6379
       FONOSTER_API_KEY: ${FONOSTER_API_KEY}
       FONOSTER_API_SECRET: ${FONOSTER_API_SECRET}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
+      TWILIO_FROM_NUMBER: ${TWILIO_FROM_NUMBER}
+      TWILIO_WEBHOOK_BASE: ${TWILIO_WEBHOOK_BASE:-https://api.aetherdesk.com}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY}
       JWT_SECRET: ${JWT_SECRET}
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
+      APP_ENV: ${APP_ENV:-production}
     ports:
-      - "3000:3000"
+      - "3000:8000"   # host:container — image runs uvicorn on 8000
     networks:
       - aetherdesk-net
     depends_on:
-      - db
-      - redis
-      - fonoster
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     deploy:
       resources:
         limits:
           cpus: '1'
           memory: 2G
+
+  # Celery Worker — async task processing
+  celery-worker:
+    build:
+      context: .                          # project root — preserves apps.api package path
+      dockerfile: Dockerfile.optimized
+    container_name: aetherdesk-celery
+    restart: unless-stopped
+    command: celery -A apps.api.services.celery_app worker --loglevel=info --concurrency=4
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/aetherdesk
+      REDIS_URL: redis://redis:6379
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+    networks:
+      - aetherdesk-net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # Celery Beat — scheduled task scheduler
+  celery-beat:
+    build:
+      context: .                          # project root — preserves apps.api package path
+      dockerfile: Dockerfile.optimized
+    container_name: aetherdesk-celery-beat
+    restart: unless-stopped
+    command: celery -A apps.api.services.celery_app beat --loglevel=info
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/aetherdesk
+      REDIS_URL: redis://redis:6379
+    networks:
+      - aetherdesk-net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
 
 volumes:
   db-data:

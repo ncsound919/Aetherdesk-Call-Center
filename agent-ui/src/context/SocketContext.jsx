@@ -1,114 +1,96 @@
-import React, { createContext, useContext, useEffect, useRef, useCallback } from 'react'
+import React, { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { useAuth } from './AuthContext'
 
 const SocketContext = createContext(null)
 
 export function SocketProvider({ children }) {
-  const { user } = useAuth()
-  const socketRef = useRef(null)
-  const reconnectTimeoutRef = useRef(null)
+  const { user, tenant } = useAuth()
+  const tenantSocketRef = useRef(null)
+  const agentSocketRef = useRef(null)
+  const reconnectTimerRef = useRef(null)
+  const heartbeatTimerRef = useRef(null)
+  const [connectionStatus, setConnectionStatus] = useState('disconnected')
+  const retryCountRef = useRef(0)
 
-  const connectWebSocket = useCallback(() => {
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-    const wsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/agent/' + (user?.agentId || '')
+  const getWsUrl = (path) => {
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+    const wsBase = base.replace(/^http/, 'ws')
+    return `${wsBase}${path}`
+  }
 
-    // Clean up existing connection
-    if (socketRef.current) {
-      socketRef.current.close()
-      socketRef.current = null
+  const connectTenantSocket = useCallback(() => {
+    const tid = tenant?.id
+    if (!tid) return
+
+    if (tenantSocketRef.current?.readyState === WebSocket.OPEN) return
+
+    const url = getWsUrl(`/ws/calls/${tid}`)
+    const ws = new WebSocket(url)
+    tenantSocketRef.current = ws
+    setConnectionStatus('connecting')
+
+    ws.onopen = () => {
+      setConnectionStatus('connected')
+      retryCountRef.current = 0
+      // Heartbeat
+      heartbeatTimerRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'ping' }))
+      }, 30000)
     }
 
-    // Don't connect without auth
-    if (!user?.token) {
-      return
-    }
-
-    // Add tenant WebSocket for call updates
-    const tenantWsUrl = apiUrl.replace(/^http/, 'ws') + '/ws/calls/' + (user?.tenantId || '')
-
-    const tenantSocket = new WebSocket(tenantWsUrl)
-
-    tenantSocket.onopen = () => {}
-
-    tenantSocket.onmessage = (event) => {
+    ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
-        // Dispatch custom event for call status updates
-        window.dispatchEvent(new CustomEvent('call:status', { detail: data }))
-      } catch (e) {
-        console.error('Failed to parse WebSocket message:', e)
-      }
-    }
-
-    tenantSocket.onerror = (error) => {
-      console.error('Tenant WebSocket error:', error)
-    }
-
-    tenantSocket.onclose = () => {
-      // Reconnect after delay
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
-      reconnectTimeoutRef.current = setTimeout(connectWebSocket, 5000)
-    }
-
-    socketRef.current = {
-      tenantSocket,
-      // Agent socket (for call assignments)
-      agentSocket: null,
-    }
-
-    // Connect agent WebSocket if user is an agent
-    if (user?.agentId) {
-      const agentSocket = new WebSocket(wsUrl)
-
-      agentSocket.onopen = () => {
-        agentSocket.send(JSON.stringify({ type: 'auth', token: user.token }))
-      }
-
-      agentSocket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data)
-          if (data.type === 'auth_success') {
-          } else if (data.type === 'call_assignment') {
-            window.dispatchEvent(new CustomEvent('call:assigned', { detail: data }))
-          }
-        } catch (e) {
-          console.error('Failed to parse agent WebSocket message:', e)
+        if (data.type === 'call:status' || data.type === 'call:assigned') {
+          window.dispatchEvent(new CustomEvent(data.type, { detail: data }))
         }
-      }
-
-      agentSocket.onerror = (error) => {
-        console.error('Agent WebSocket error:', error)
-      }
-
-      agentSocket.onclose = () => {}
-
-      socketRef.current.agentSocket = agentSocket
+      } catch { /* ignore */ }
     }
-  }, [user])
+
+    ws.onclose = () => {
+      setConnectionStatus('disconnected')
+      clearInterval(heartbeatTimerRef.current)
+      // Exponential backoff reconnect
+      const delay = Math.min(1000 * Math.pow(2, retryCountRef.current), 30000)
+      retryCountRef.current++
+      reconnectTimerRef.current = setTimeout(connectTenantSocket, delay)
+    }
+
+    ws.onerror = () => { ws.close() }
+  }, [tenant?.id])
+
+  const disconnect = useCallback(() => {
+    clearTimeout(reconnectTimerRef.current)
+    clearInterval(heartbeatTimerRef.current)
+    tenantSocketRef.current?.close()
+    agentSocketRef.current?.close()
+    tenantSocketRef.current = null
+    agentSocketRef.current = null
+    setConnectionStatus('disconnected')
+  }, [])
 
   useEffect(() => {
-    connectWebSocket()
-
+    connectTenantSocket()
     return () => {
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current)
-      }
-      if (socketRef.current) {
-        socketRef.current.tenantSocket?.close()
-        socketRef.current.agentSocket?.close()
-        socketRef.current = null
-      }
+      disconnect()
+      window.removeEventListener('call:status', () => {})
+      window.removeEventListener('call:assigned', () => {})
     }
-  }, [connectWebSocket])
+  }, [connectTenantSocket, disconnect])
 
   return (
-    <SocketContext.Provider value={socketRef.current}>
+    <SocketContext.Provider value={{
+      tenantSocket: tenantSocketRef.current,
+      agentSocket: agentSocketRef.current,
+      connectionStatus,
+      disconnect,
+    }}>
       {children}
     </SocketContext.Provider>
   )
 }
 
 export function useSocket() {
-  return useContext(SocketContext)
+  const ctx = useContext(SocketContext)
+  return ctx
 }

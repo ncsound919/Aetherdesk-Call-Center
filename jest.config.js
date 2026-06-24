@@ -1,7 +1,7 @@
 module.exports = {
   testEnvironment: 'jsdom',
   roots: ['<rootDir>/tests/unit'],
-  testMatch: ['**/*.test.js', '**/*.test.jsx'],
+  testMatch: ["**/__tests__/**/*.?(js|ts)?(x)", "**/tests/unit/frontend/**/*.?(js|jsx|ts|tsx)"],
   moduleNameMapper: {
     '\\.(css|less|scss|sass)$': 'identity-obj-proxy',
     '^react$': '<rootDir>/node_modules/react',

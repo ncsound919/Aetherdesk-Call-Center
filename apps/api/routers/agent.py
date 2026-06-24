@@ -86,7 +86,7 @@ class Hub:
     async def disconnect(self, agent_id: str):
         with self._lock:
             ws = self.sockets.pop(agent_id, None)
-        if ws:
+        if ws is not None:
             try:
                 await ws.close()
             except Exception as e:
@@ -95,7 +95,7 @@ class Hub:
     async def send(self, agent_id: str, payload: dict):
         with self._lock:
             ws = self.sockets.get(agent_id)
-        if ws:
+        if ws is not None:
             try:
                 await ws.send_json(payload)
             except Exception as e:

@@ -10,7 +10,7 @@ except Exception as e:
     # Start server inline
     print("Starting server inline...")
     import subprocess, os, time
-    os.environ["ENCRYPTION_KEY"] = "REDACTED_ENCRYPTION_KEY_PLEASE_ROTATE="
+    os.environ["ENCRYPTION_KEY"] = "rqSRQd2JssHG3nhORTRC3CBaeUjqOqZ3D2BH2FX0l0k="
     os.environ["JWT_SECRET"] = "test-websocket-secret"
     os.environ["WEBSOCKET_SECRET_KEY"] = "test-websocket-secret"
     os.environ["USE_POSTGRES"] = "false"
@@ -21,7 +21,7 @@ except Exception as e:
     sys.exit(0)
 
 # Login
-login = httpx.post("http://127.0.0.1:8000/auth/login", json={
+login = httpx.post("http://127.0.0.1:8000/api/v1/auth/login", json={
     "email": "admin@aetherdesk.com", "password": "admin123"
 })
 print("LOGIN:", login.status_code)

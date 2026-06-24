@@ -2,14 +2,14 @@ import React, { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
+import { FileText, Plus, Trash2, Loader2, BookOpen, Search } from 'lucide-react'
 import { toast } from 'sonner'
 
 export default function ScriptsPage() {
   const { tenant } = useAuth()
   const [scripts, setScripts] = useState([])
   const [loading, setLoading] = useState(true)
-  const [newName, setNewName] = useState('')
-  const [creating, setCreating] = useState(false)
+  const [search, setSearch] = useState('')
   const navigate = useNavigate()
 
   const fetchScripts = () => {
@@ -23,73 +23,89 @@ export default function ScriptsPage() {
 
   useEffect(() => { fetchScripts() }, [tenant])
 
-  const handleCreate = async () => {
-    if (!newName.trim()) return
-    setCreating(true)
-    try {
-      const res = await api.post('/scripts', { tenant_id: tenant.id, name: newName, content: '' })
-      setNewName('')
-      navigate(`/scripts/${res.data.id}`)
-    } catch {
-      toast.error('Failed to create script')
-    } finally {
-      setCreating(false)
-    }
-  }
-
-  const handleDelete = async (scriptId) => {
-    if (!window.confirm('Delete this script?')) return
+  const handleDelete = async (scriptId, name) => {
+    if (!window.confirm(`Delete "${name}"?`)) return
     try {
       await api.delete(`/scripts/${scriptId}`)
       setScripts((prev) => prev.filter((s) => s.id !== scriptId))
       toast.success('Script deleted')
-    } catch {
-      toast.error('Failed to delete script')
-    }
+    } catch { toast.error('Failed to delete script') }
   }
 
+  const filtered = scripts.filter(s => s.name?.toLowerCase().includes(search.toLowerCase()))
+
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-semibold text-gray-900 mb-4">Scripts</h1>
-      <div className="flex gap-2 mb-6">
-        <input
-          type="text"
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder="New script name"
-          className="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-        />
-        <button
-          onClick={handleCreate}
-          disabled={creating}
-          className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium disabled:opacity-50"
-        >
-          {creating ? 'Creating...' : 'New Script'}
+    <div className="p-6 max-w-5xl mx-auto animate-slide-up">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-ink tracking-tight">Scripts</h1>
+          <p className="text-sm text-ink-muted mt-0.5">Create and manage your call scripts</p>
+        </div>
+        <button onClick={() => navigate('/scripts/new')} className="btn-primary">
+          <Plus className="h-4 w-4" />
+          New Script
         </button>
       </div>
+
+      {/* Search */}
+      {scripts.length > 0 && (
+        <div className="relative mb-6">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-ink-subtle" />
+          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+            className="input-field pl-9" placeholder="Search scripts..." />
+        </div>
+      )}
+
       {loading ? (
-        <p className="text-gray-500">Loading...</p>
+        <div className="card p-12 text-center">
+          <Loader2 className="h-6 w-6 animate-spin mx-auto text-ink-subtle mb-2" />
+          <p className="text-sm text-ink-muted">Loading scripts...</p>
+        </div>
       ) : scripts.length === 0 ? (
-        <p className="text-gray-500">No scripts yet. Create one above.</p>
+        <div className="card p-12 text-center">
+          <FileText className="h-10 w-10 mx-auto text-ink-subtle mb-3" />
+          <p className="text-sm text-ink-muted">No scripts yet</p>
+          <p className="text-xs text-ink-subtle mt-1">Create a script to guide your agents through calls</p>
+          <button onClick={() => navigate('/scripts/new')} className="btn-primary mt-4">
+            <Plus className="h-4 w-4" />
+            Create your first script
+          </button>
+          <div className="mt-6 pt-6 border-t border-hairline">
+            <div className="flex items-center gap-2 justify-center text-xs text-ink-muted mb-3">
+              <BookOpen className="h-4 w-4" />
+              <span>Start with a template</span>
+            </div>
+            <p className="text-xs text-ink-muted">Templates available for Sales, Support, Billing, and Technical scripts</p>
+          </div>
+        </div>
       ) : (
-        <div className="space-y-3">
-          {scripts.map((script) => (
-            <div key={script.id} className="bg-white shadow rounded-lg p-4 flex items-center justify-between">
-              <button
-                onClick={() => navigate(`/scripts/${script.id}`)}
-                className="text-left flex-1"
-              >
-                <p className="font-medium text-gray-900">{script.name}</p>
-                <p className="text-sm text-gray-500 truncate">{script.content?.substring(0, 100) || 'Empty script'}</p>
-              </button>
-              <button
-                onClick={() => handleDelete(script.id)}
-                className="ml-4 text-red-600 hover:text-red-800 text-sm"
-              >
-                Delete
+        <div className="space-y-2">
+          {filtered.map((script) => (
+            <div key={script.id}
+              className="card p-4 flex items-center justify-between group hover:border-accent/20 transition-colors cursor-pointer"
+              onClick={() => navigate(`/scripts/${script.id}`)}>
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="p-2 rounded-lg bg-accent-soft shrink-0">
+                  <FileText className="h-4 w-4 text-accent" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-ink truncate">{script.name}</p>
+                  <p className="text-xs text-ink-muted truncate mt-0.5">
+                    {script.content ? script.content.substring(0, 120).replace(/\n/g, ' ') : 'Empty script'}
+                  </p>
+                </div>
+              </div>
+              <button onClick={(e) => { e.stopPropagation(); handleDelete(script.id, script.name) }}
+                className="btn-ghost p-2 text-call-red opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                <Trash2 className="h-4 w-4" />
               </button>
             </div>
           ))}
+          {filtered.length === 0 && search && (
+            <div className="card p-8 text-center">
+              <p className="text-sm text-ink-muted">No scripts matching "{search}"</p>
+            </div>
+          )}
         </div>
       )}
     </div>

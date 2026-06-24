@@ -14,3 +14,5 @@ class NotFoundError(DatabaseError):
 class PoolNotAvailableError(DatabaseError):
     def __init__(self):
         super().__init__("Database pool not available")
+
+

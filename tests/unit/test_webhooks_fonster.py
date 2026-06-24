@@ -1,12 +1,40 @@
-"""Unit tests for webhooks_fonster.py — HMAC signature validation and helper functions."""
+"""Unit tests for webhooks_fonster.py — HMAC signature validation, helper functions, and endpoint tests."""
 
 import hashlib
 import hmac
 import json
+import os
 
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
+
+# ---------------------------------------------------------------------------
+# Fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def app():
+    """Create a minimal FastAPI app with just the webhooks fonster router."""
+    from apps.api.routers.webhooks_fonster import router
+
+    application = FastAPI()
+    application.include_router(router)
+    application.state.redis = AsyncMock()
+    return application
+
+
+@pytest.fixture
+def client(app):
+    with TestClient(app) as c:
+        yield c
+
+
+# ---------------------------------------------------------------------------
+# HMAC signature validation (unit-level, no FastAPI app needed)
+# ---------------------------------------------------------------------------
 
 class TestFonsterSignatureValidation:
     """Verify the HMAC-SHA256 signature computation used by fonster_webhook."""
@@ -62,25 +90,36 @@ class TestFonsterSignatureValidation:
         assert hmac.compare_digest(sig1, sig2) is False
 
 
+# ---------------------------------------------------------------------------
+# handle_fonster_webhook helper (direct unit tests)
+# ---------------------------------------------------------------------------
+
 class TestHandleFonsterWebhook:
     """Test the handle_fonster_webhook helper (background task handler).
 
-    Note: handle_fonster_webhook references ``request`` as a module-level free
-    variable (it is not passed as a parameter). We patch it at the module
-    level so the function can resolve it during test execution.
+    Note: the function now accepts ``request`` as its first parameter
+    (the fix for the scope bug where ``request`` was previously a free variable).
     """
+
+    # -- helpers ---------------------------------------------------------------
+
+    def _make_request(self, redis_client=None):
+        req = MagicMock()
+        req.app.state.redis = redis_client
+        return req
+
+    # -- tests -----------------------------------------------------------------
 
     @pytest.mark.asyncio
     async def test_updates_call_status(self):
         """Should call db_update_call_status with correct call_id and status."""
-        with (patch("apps.api.routers.webhooks_fonster.db_update_call_status",
-                    new_callable=AsyncMock) as mock_update,
-              patch("apps.api.routers.webhooks_fonster.request",
-                    create=True) as mock_request):
-            mock_request.app.state.redis = None
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock) as mock_update:
+            mock_update.return_value = None
 
             from apps.api.routers.webhooks_fonster import handle_fonster_webhook
-            await handle_fonster_webhook(call_id="CA-001", status="active", session_ref="SR-001")
+            req = self._make_request(redis_client=None)
+            await handle_fonster_webhook(req, call_id="CA-001", status="active", session_ref="SR-001")
 
             mock_update.assert_awaited_once_with("CA-001", "active")
 
@@ -89,14 +128,11 @@ class TestHandleFonsterWebhook:
         """Should publish a JSON status update to redis when redis client exists."""
         mock_redis = AsyncMock()
 
-        with (patch("apps.api.routers.webhooks_fonster.db_update_call_status",
-                    new_callable=AsyncMock) as mock_db,
-              patch("apps.api.routers.webhooks_fonster.request",
-                    create=True) as mock_request):
-            mock_request.app.state.redis = mock_redis
-
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock):
             from apps.api.routers.webhooks_fonster import handle_fonster_webhook
-            await handle_fonster_webhook(call_id="CA-002", status="completed")
+            req = self._make_request(redis_client=mock_redis)
+            await handle_fonster_webhook(req, call_id="CA-002", status="completed")
 
             mock_redis.publish.assert_awaited_once()
             channel, message = mock_redis.publish.await_args[0]
@@ -112,14 +148,11 @@ class TestHandleFonsterWebhook:
         """Redis payload should include session_ref when provided."""
         mock_redis = AsyncMock()
 
-        with (patch("apps.api.routers.webhooks_fonster.db_update_call_status",
-                    new_callable=AsyncMock),
-              patch("apps.api.routers.webhooks_fonster.request",
-                    create=True) as mock_request):
-            mock_request.app.state.redis = mock_redis
-
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock):
             from apps.api.routers.webhooks_fonster import handle_fonster_webhook
-            await handle_fonster_webhook(call_id="CA-003", status="active", session_ref="SR-999")
+            req = self._make_request(redis_client=mock_redis)
+            await handle_fonster_webhook(req, call_id="CA-003", status="active", session_ref="SR-999")
 
             payload = json.loads(mock_redis.publish.await_args[0][1])
             assert payload["session_ref"] == "SR-999"
@@ -129,14 +162,11 @@ class TestHandleFonsterWebhook:
         """session_ref should be None in payload when not provided."""
         mock_redis = AsyncMock()
 
-        with (patch("apps.api.routers.webhooks_fonster.db_update_call_status",
-                    new_callable=AsyncMock),
-              patch("apps.api.routers.webhooks_fonster.request",
-                    create=True) as mock_request):
-            mock_request.app.state.redis = mock_redis
-
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock):
             from apps.api.routers.webhooks_fonster import handle_fonster_webhook
-            await handle_fonster_webhook(call_id="CA-004", status="active")
+            req = self._make_request(redis_client=mock_redis)
+            await handle_fonster_webhook(req, call_id="CA-004", status="active")
 
             payload = json.loads(mock_redis.publish.await_args[0][1])
             assert payload["session_ref"] is None
@@ -144,26 +174,162 @@ class TestHandleFonsterWebhook:
     @pytest.mark.asyncio
     async def test_no_crash_when_redis_is_none(self):
         """Should not raise when redis client is None."""
-        with (patch("apps.api.routers.webhooks_fonster.db_update_call_status",
-                    new_callable=AsyncMock),
-              patch("apps.api.routers.webhooks_fonster.request",
-                    create=True) as mock_request):
-            mock_request.app.state.redis = None
-
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock):
             from apps.api.routers.webhooks_fonster import handle_fonster_webhook
-            await handle_fonster_webhook(call_id="CA-005", status="failed")
+            req = self._make_request(redis_client=None)
+            await handle_fonster_webhook(req, call_id="CA-005", status="failed")
             # No exception means success
 
     @pytest.mark.asyncio
     async def test_no_crash_when_db_update_fails(self):
         """Should log error but not crash when db_update_call_status raises."""
-        with (patch("apps.api.routers.webhooks_fonster.db_update_call_status",
-                    new_callable=AsyncMock) as mock_update,
-              patch("apps.api.routers.webhooks_fonster.request",
-                    create=True) as mock_request):
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock) as mock_update:
             mock_update.side_effect = Exception("DB connection lost")
-            mock_request.app.state.redis = None
 
             from apps.api.routers.webhooks_fonster import handle_fonster_webhook
-            await handle_fonster_webhook(call_id="CA-006", status="completed")
+            req = self._make_request(redis_client=None)
+            await handle_fonster_webhook(req, call_id="CA-006", status="completed")
             # No exception means success
+
+
+# ---------------------------------------------------------------------------
+# fonster_webhook endpoint (TestClient integration tests)
+# ---------------------------------------------------------------------------
+
+class TestFonsterWebhookEndpoint:
+    """Tests for POST /api/v1/webhooks/fonster."""
+
+    WEBHOOK_PATH = "/api/v1/webhooks/fonster"
+
+    # -- call.answered ---------------------------------------------------------
+
+    def test_call_answered_event(self, client, app):
+        """POST with call.answered event returns 200 and triggers handle_fonster_webhook."""
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock) as mock_db:
+            resp = client.post(
+                self.WEBHOOK_PATH,
+                json={"event_type": "call.answered", "call_id": "CA-100", "session_ref": "SR-100"},
+            )
+            assert resp.status_code == 200
+            assert resp.json() == {"status": "ok"}
+
+    # -- call.completed --------------------------------------------------------
+
+    def test_call_completed_event(self, client, app):
+        """POST with call.completed event returns 200."""
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock):
+            resp = client.post(
+                self.WEBHOOK_PATH,
+                json={"event_type": "call.completed", "call_id": "CA-101"},
+            )
+            assert resp.status_code == 200
+            assert resp.json() == {"status": "ok"}
+
+    # -- call.failed -----------------------------------------------------------
+
+    def test_call_failed_event(self, client, app):
+        """POST with call.failed event returns 200."""
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock):
+            resp = client.post(
+                self.WEBHOOK_PATH,
+                json={"event_type": "call.failed", "call_id": "CA-102"},
+            )
+            assert resp.status_code == 200
+            assert resp.json() == {"status": "ok"}
+
+    # -- unknown event type ----------------------------------------------------
+
+    def test_unknown_event_type(self, client):
+        """POST with an unknown event type still returns 200 (no handler branch)."""
+        resp = client.post(
+            self.WEBHOOK_PATH,
+            json={"event_type": "call.unknown", "call_id": "CA-103"},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
+
+    # -- HMAC signature validation --------------------------------------------
+
+    def test_valid_hmac_signature(self, client, app, monkeypatch):
+        """POST with a valid HMAC signature succeeds."""
+        monkeypatch.setenv("FONOSTER_WEBHOOK_SECRET", "shared-secret")
+
+        body = {"event_type": "call.answered", "call_id": "CA-200"}
+        raw = json.dumps(body).encode()
+        expected_sig = hmac.new(b"shared-secret", raw, hashlib.sha256).hexdigest()
+
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock):
+            resp = client.post(
+                self.WEBHOOK_PATH,
+                data=raw,
+                headers={
+                    "x-fonoster-signature": expected_sig,
+                    "content-type": "application/json",
+                },
+            )
+            assert resp.status_code == 200
+
+    def test_invalid_hmac_signature(self, client, app, monkeypatch):
+        """POST with an invalid HMAC signature returns 401."""
+        monkeypatch.setenv("FONOSTER_WEBHOOK_SECRET", "shared-secret")
+
+        raw = json.dumps({"event_type": "call.answered", "call_id": "CA-201"}).encode()
+        resp = client.post(
+            self.WEBHOOK_PATH,
+            data=raw,
+            headers={
+                "x-fonoster-signature": "0000000000000000000000000000000000000000000000000000000000000000",
+                "content-type": "application/json",
+            },
+        )
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Invalid webhook signature"
+
+    def test_missing_signature_in_production(self, client, app, monkeypatch):
+        """POST without signature in production mode returns 401."""
+        monkeypatch.setenv("FONOSTER_WEBHOOK_SECRET", "shared-secret")
+        monkeypatch.setenv("APP_ENV", "production")
+
+        raw = json.dumps({"event_type": "call.answered", "call_id": "CA-202"}).encode()
+        resp = client.post(
+            self.WEBHOOK_PATH,
+            data=raw,
+            headers={"content-type": "application/json"},
+        )
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Missing webhook signature"
+
+    def test_missing_signature_in_development(self, client, app, monkeypatch):
+        """POST without signature in development mode is allowed."""
+        monkeypatch.setenv("FONOSTER_WEBHOOK_SECRET", "shared-secret")
+        monkeypatch.setenv("APP_ENV", "development")
+
+        raw = json.dumps({"event_type": "call.answered", "call_id": "CA-203"}).encode()
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock):
+            resp = client.post(
+                self.WEBHOOK_PATH,
+                data=raw,
+                headers={"content-type": "application/json"},
+            )
+            assert resp.status_code == 200
+
+    def test_no_secret_no_signature(self, client, app, monkeypatch):
+        """POST without secret configured passes through without validation."""
+        monkeypatch.delenv("FONOSTER_WEBHOOK_SECRET", raising=False)
+
+        raw = json.dumps({"event_type": "call.answered", "call_id": "CA-204"}).encode()
+        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+                    new_callable=AsyncMock):
+            resp = client.post(
+                self.WEBHOOK_PATH,
+                data=raw,
+                headers={"content-type": "application/json"},
+            )
+            assert resp.status_code == 200

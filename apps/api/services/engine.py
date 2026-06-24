@@ -87,3 +87,5 @@ class ProtocolVM:
     def _repeat(self, state: VMState, reason: str) -> VMState:
         state.transcript.append({"from":state.node,"to":state.node,"reason":reason,"fields":dict(state.fields)})
         return state
+
+

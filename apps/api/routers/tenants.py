@@ -15,7 +15,7 @@ from apps.api.services.database import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1", tags=["tenants"])
+router = APIRouter(prefix="/tenants", tags=["tenants"])
 
 
 @router.post("/tenants", response_model=TenantResponse, status_code=201)

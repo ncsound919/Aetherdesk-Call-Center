@@ -49,3 +49,5 @@ class VoiceProfileStore:
     def items_snapshot(self) -> list[tuple[str, dict]]:
         with self._lock:
             return list(self._profiles.items())
+
+

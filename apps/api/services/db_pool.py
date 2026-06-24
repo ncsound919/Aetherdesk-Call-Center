@@ -146,3 +146,5 @@ def _get_sqlite_conn():
     conn.row_factory = _dict_factory
     _enable_wal_mode(conn)
     return conn
+
+

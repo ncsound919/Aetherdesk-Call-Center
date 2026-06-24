@@ -201,6 +201,27 @@ class TestGenerateScript:
     """Tests for POST /saas/generate-script"""
 
     @pytest.mark.asyncio
+    async def test_generate_script_success(self):
+        from apps.api.routers.saas import generate_script
+        from unittest.mock import MagicMock
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "message": {"content": "You are an AI agent for customer support."}
+        }
+
+        with patch("apps.api.routers.saas.httpx.AsyncClient") as mock_client_class:
+            mock_instance = AsyncMock()
+            mock_client_class.return_value.__aenter__.return_value = mock_instance
+            mock_instance.post = AsyncMock(return_value=mock_response)
+
+            result = await generate_script(
+                goal={"objective": "customer support"},
+                tenant_id="TENANT-001",
+            )
+            assert result["script"] == "You are an AI agent for customer support."
+
+    @pytest.mark.asyncio
     async def test_generate_script_fallback_on_ollama_error(self):
         from apps.api.routers.saas import generate_script
 
