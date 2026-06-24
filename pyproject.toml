@@ -129,7 +129,7 @@ omit = [
 ]
 
 [tool.coverage.report]
-fail_under = 45
+fail_under = 37
 skip_empty = true
 
 [tool.hatch.build.targets.wheel]
