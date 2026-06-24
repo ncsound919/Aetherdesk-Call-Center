@@ -261,7 +261,7 @@ async def lifespan(app: FastAPI):
     fonster_client = get_voice_client()
     app.state.fonster_client = fonster_client
     if fonster_client:
-        logger.info("Voice client initialized")
+        logger.info(f"Voice client initialized: {type(fonster_client).__name__}")
     else:
         logger.warning("Voice client not available - running in dev mode")
 
@@ -415,7 +415,7 @@ app.include_router(voice.router, prefix="/api/v1")
 app.include_router(voice_cloning.router, prefix="/api/v1")
 app.include_router(agent.router, prefix="/api/v1")
 app.include_router(agents.router, prefix="/api/v1")
-app.include_router(tenants.router)
+app.include_router(tenants.router, prefix="/api/v1")
 app.include_router(realtime.router)
 app.include_router(engine.router)
 app.include_router(saas.router, prefix="/api/v1")
@@ -428,7 +428,7 @@ app.include_router(leads.router, prefix="/api/v1")
 app.include_router(scripts.router, prefix="/api/v1")
 app.include_router(webhooks_twilio.router)
 app.include_router(webhooks_fonster.router)
-app.include_router(calls.router)
+app.include_router(calls.router, prefix="/api/v1")
 app.include_router(health.router)
 app.include_router(usage.router, prefix="/api/v1")
 

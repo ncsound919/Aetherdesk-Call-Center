@@ -1,6 +1,7 @@
 import json
 import time
 import pytest
+from unittest.mock import MagicMock
 from apps.api.services.queue import InMemoryQueue, QueueManager, QUEUE_KEY, SESSION_KEY
 
 
@@ -45,6 +46,16 @@ class TestInMemoryQueue:
         self.q.setex("session:abc", 300, "x")
         assert self.q.exists("session:abc") is True
         assert self.q.exists("session:nope") is False
+
+    def test_get_returns_none_when_expired(self):
+        self.q.setex("session:expired", -1, "data")
+        result = self.q.get("session:expired")
+        assert result is None
+        assert "session:expired" not in self.q._sessions
+
+    def test_exists_returns_false_when_expired(self):
+        self.q.setex("session:expired", -1, "data")
+        assert self.q.exists("session:expired") is False
 
     def test_delete_removes_session_and_queue(self):
         self.q.setex("session:abc", 300, "x")
@@ -117,3 +128,25 @@ class TestQueueManager:
         self.qm.enqueue("inbound", {"session_id": "s3"})
         items = self.qm.peek("inbound", n=2)
         assert len(items) == 2
+
+    def test_is_redis_available_ping_success(self):
+        mock_redis = MagicMock()
+        mock_redis.ping.return_value = True
+        qm = QueueManager(redis_client=mock_redis, use_fallback=True, in_memory_queue=InMemoryQueue())
+        qm._last_health_check = 0
+        assert qm._is_redis_available() is True
+
+    def test_is_redis_available_ping_exception(self):
+        mock_redis = MagicMock()
+        mock_redis.ping.side_effect = Exception("Connection refused")
+        qm = QueueManager(redis_client=mock_redis, use_fallback=True, in_memory_queue=InMemoryQueue())
+        qm._last_health_check = 0
+        assert qm._is_redis_available() is False
+
+    def test_get_backend_returns_redis_when_available(self):
+        mock_redis = MagicMock()
+        mock_redis.ping.return_value = True
+        qm = QueueManager(redis_client=mock_redis, use_fallback=True, in_memory_queue=InMemoryQueue())
+        qm._last_health_check = 0
+        backend = qm._get_backend()
+        assert backend is mock_redis

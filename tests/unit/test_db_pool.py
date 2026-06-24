@@ -509,3 +509,101 @@ class TestDictFactory:
 
         result = _dict_factory(FakeCursor(), ())
         assert result == {}
+
+
+# ── Additional Pool & Encryption Tests ────────────────────────────────
+
+
+class TestSQLitePoolExtra:
+    """Extra tests for SQLite pool — stale connection handling."""
+
+    @pytest.mark.asyncio
+    async def test_reuse_stale_conn_handles_programming_error(self):
+        """Pool handles ProgrammingError when a closed connection is reused."""
+        from apps.api.services.db_pool import (
+            _get_sqlite_conn,
+            _get_sqlite_conn_async,
+            _release_sqlite_conn,
+            _sqlite_conn_pool,
+        )
+
+        _sqlite_conn_pool.clear()
+
+        conn = _get_sqlite_conn()
+        conn.close()
+        _release_sqlite_conn(conn)
+        assert conn in _sqlite_conn_pool
+
+        new_conn = await _get_sqlite_conn_async()
+        try:
+            row = new_conn.execute("SELECT 1 AS val").fetchone()
+            assert row["val"] == 1
+        finally:
+            new_conn.close()
+
+        _sqlite_conn_pool.clear()
+
+
+class TestSQLiteAsyncExtra:
+    """Extra async SQLite tests — ProgrammingError recovery."""
+
+    @pytest.mark.asyncio
+    async def test_get_sqlite_conn_async_handles_programming_error(self):
+        """_get_sqlite_conn_async creates a new connection when pooled one has ProgrammingError."""
+        from apps.api.services.db_pool import (
+            _get_sqlite_conn,
+            _get_sqlite_conn_async,
+            _release_sqlite_conn,
+            _sqlite_conn_pool,
+        )
+
+        _sqlite_conn_pool.clear()
+
+        conn = _get_sqlite_conn()
+        conn.close()
+        _release_sqlite_conn(conn)
+
+        new_conn = await _get_sqlite_conn_async()
+        assert new_conn is not conn
+        try:
+            row = new_conn.execute("SELECT 1 AS val").fetchone()
+            assert row["val"] == 1
+        finally:
+            new_conn.close()
+
+        _sqlite_conn_pool.clear()
+
+
+class TestDbContextExtra:
+    """Extra db_context tests — PostgreSQL path."""
+
+    @pytest.mark.asyncio
+    async def test_db_context_yields_postgres_conn(self):
+        """db_context yields an async connection from the Postgres pool when USE_POSTGRES is True."""
+        mock_conn = AsyncMock()
+        mock_pool = MagicMock()
+        mock_pool.acquire.return_value.__aenter__ = AsyncMock(return_value=mock_conn)
+        mock_pool.acquire.return_value.__aexit__ = AsyncMock()
+
+        with patch(
+            "apps.api.services.db_pool.USE_POSTGRES", True
+        ), patch(
+            "apps.api.services.db_pool.get_pg_pool",
+            new_callable=AsyncMock,
+            return_value=mock_pool,
+        ):
+            from apps.api.services.db_pool import db_context
+
+            async with db_context() as conn:
+                assert conn is mock_conn
+
+
+class TestEncryptionExtra:
+    """Extra encryption tests."""
+
+    def test_decrypt_val_returns_original_on_failure(self):
+        """decrypt_val returns the original value when decryption fails (invalid token)."""
+        from apps.api.services.db_pool import decrypt_val
+
+        result = decrypt_val("not-a-valid-fernet-token")
+        assert result == "not-a-valid-fernet-token"

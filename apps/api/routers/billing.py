@@ -21,7 +21,7 @@ from apps.api.services.stripe_service import (
     verify_webhook_signature,
 )
 
-router = APIRouter(prefix="/api/v1", tags=["billing"])
+router = APIRouter(prefix="/billing", tags=["billing"])
 
 class CheckoutRequest(BaseModel):
     plan: str

@@ -81,14 +81,24 @@ class TwilioVoiceClient:
             return {"ref": call_sid, "status": "queued", "sid": call_sid, "_mock": True}
 
         try:
-            call = self.client.calls.create(
-                to=to_phone,
-                from_=caller_id,
-                url=voice_url,
-                status_callback=status_callback,
-                status_callback_event=["initiated", "ringing", "answered", "completed"],
-                timeout=30,
-            )
+            # Use inline TwiML when webhook is localhost (not publicly reachable)
+            is_local = "localhost" in voice_url or "127.0.0.1" in voice_url
+            call_kwargs = {
+                "to": to_phone,
+                "from_": caller_id,
+                "status_callback": status_callback,
+                "status_callback_event": ["initiated", "ringing", "answered", "completed"],
+                "timeout": 30,
+            }
+            if is_local:
+                call_kwargs["twiml"] = (
+                    '<Response><Say voice="alice">Hello from AetherDesk. How can I help you today?</Say>'
+                    '<Gather input="speech" timeout="5" language="en-US"/>'
+                    '</Response>'
+                )
+            else:
+                call_kwargs["url"] = voice_url
+            call = self.client.calls.create(**call_kwargs)
             sid = call.sid
             import time as _time
             self._call_created_at[sid] = _time.time()
@@ -123,7 +133,7 @@ class TwilioVoiceClient:
         if self.client is None:
             return {"healthy": False, "provider": "twilio", "detail": "Not configured"}
         try:
-            self.client.api.accounts.get().fetch()
+            self.client.api.accounts(self.client.account_sid).fetch()
             return {"healthy": True, "provider": "twilio"}
         except Exception as e:
             return {"healthy": False, "provider": "twilio", "error": str(e)}

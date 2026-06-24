@@ -23,7 +23,7 @@ class MemoryService:
         clean = re.sub(r'[^a-zA-Z0-9_-]', '', name)
         if not clean:
             import hashlib
-            return hashlib.md5(name.encode()).hexdigest()
+            return hashlib.sha256(name.encode()).hexdigest()[:16]
         return clean
 
     def _get_tenant_path(self, tenant_id: str):
@@ -98,3 +98,5 @@ class MemoryService:
                 logger.error("memory_write_error", error=str(e))
 
 memory_service = MemoryService()
+
+

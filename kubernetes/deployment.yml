@@ -84,6 +84,9 @@ data:
 ---
 # ============================================
 # SealedSecrets (Replaces plaintext Opaque Secret)
+# REQUIREMENTS: kubeseal CLI + SealedSecrets controller in cluster
+# Install controller: helm install sealed-secrets sealed-secrets/sealed-secrets -n kube-system
+# Generate: see scripts/generate-sealed-secret.sh
 # ============================================
 apiVersion: bitnami.com/v1alpha1
 kind: SealedSecret
@@ -94,17 +97,34 @@ metadata:
     sealedsecrets.bitnami.com/namespace-wide: "true"
 spec:
   encryptedData:
-    # These values must be generated using kubeseal:
-    # echo -n "secret-value" | kubectl create secret generic aetherdesk-secrets --dry-run=client --from-file=DB_PASSWORD=/dev/stdin -o json | kubeseal --format=yaml
-    DB_PASSWORD: "Ag...encrypted_data_here..."
-    REDIS_PASSWORD: "Ag...encrypted_data_here..."
-    FONOSTER_API_KEY: "Ag...encrypted_data_here..."
-    FONOSTER_API_SECRET: "Ag...encrypted_data_here..."
-    ENCRYPTION_KEY: "Ag...encrypted_data_here..."
-    JWT_SECRET: "Ag...encrypted_data_here..."
-    DEEPGRAM_API_KEY: "Ag...encrypted_data_here..."
-    GROQ_API_KEY: "Ag...encrypted_data_here..."
-    SIP_TRUNK_PASSWORD: "Ag...encrypted_data_here..."
+    DB_PASSWORD: "RANDOM_DB_PASSWORD_32CHARACTERS_LONG_1234567890"
+    REDIS_PASSWORD: "RANDOM_REDIS_PASSWORD_32CHARACTERS_LONG_123"
+    FONOSTER_API_KEY: "fonoster_random_api_key_16chars"
+    FONOSTER_API_SECRET: "RANDOM_FONOSTER_SECRET_32CHARACTERS_LONG_"
+    ENCRYPTION_KEY: "RANDOM_ENCRYPTION_KEY_32CHARACTERS_LONG_12"
+    JWT_PRIVATE_KEY: |
+      -----BEGIN RSA PRIVATE KEY-----
+      MIIEpAIBAAKCAQEAxJZ5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X
+      4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4
+      +5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+
+      5J6v5XwIDAQABAoIBAQCfJ6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5
+      X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4
+      +5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+
+      5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+
+      -----END RSA PRIVATE KEY-----
+    JWT_PUBLIC_KEY: |
+      -----BEGIN RSA PUBLIC KEY-----
+      MIIBCgKCAQEAxJZ5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J
+      6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v
+      5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X4+5J6v5X
+      4+5J6v5X4+5J6v5X4+5J6v5XwIDAQAB
+    WEBSOCKET_SECRET_KEY: "RANDOM_WS_SECRET_32CHARACTERS_LONG_1234"
+    DEEPGRAM_API_KEY: "RANDOM_DEEPGRAM_KEY_32CHARACTERS_LONG_123"
+    GROQ_API_KEY: "RANDOM_GROQ_KEY_32CHARACTERS_LONG_12345678"
+    SIP_TRUNK_PASSWORD: "RANDOM_SIP_PASSWORD_32CHARACTERS_LONG_123"
+    TWILIO_ACCOUNT_SID: "ACRANDOMTWILIOSID16CHARACTERS"
+    TWILIO_AUTH_TOKEN: "RANDOM_TWILIO_TOKEN_32CHARACTERS_LONG_"
+    INTERNAL_API_KEY: "RANDOM_INTERNAL_KEY_32CHARACTERS_LONG_123"
   template:
     metadata:
       name: aetherdesk-secrets
@@ -125,7 +145,7 @@ spec:
     app: aetherdesk-api
   ports:
     - port: 80
-      targetPort: 3000
+      targetPort: 8000   # matches uvicorn port inside container
       protocol: TCP
   type: LoadBalancer
 
@@ -434,13 +454,13 @@ spec:
               command: ["redis-cli", "ping"]
             initialDelaySeconds: 5
             periodSeconds: 5
-volumeMounts:
-             - name: redis-data
-               mountPath: /data
-       volumes:
-         - name: redis-data
-           persistentVolumeClaim:
-             claimName: redis-data-pvc
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: redis-data-pvc
 
 ---
 apiVersion: v1
@@ -574,15 +594,15 @@ spec:
       labels:
         app: aetherdesk-freeswitch
         app-group: aetherdesk
-spec:
-       # hostNetwork: true is required for FreeSWITCH to directly access SIP/UDP ports
-       # without NAT traversal issues. This is compensated by:
-       # 1. Restrictive network policies limiting egress/ingress
-       # 2. Running FreeSWITCH as non-root user
-       # 3. Limited host filesystem access (only /var/freeswitch mounted)
-       # 4. Seccomp and AppArmor profiles (to be implemented)
-       hostNetwork: true
-       dnsPolicy: ClusterFirstWithHostNet
+    spec:
+      # hostNetwork: true is required for FreeSWITCH to directly access SIP/UDP ports
+      # without NAT traversal issues. This is compensated by:
+      # 1. Restrictive network policies limiting egress/ingress
+      # 2. Running FreeSWITCH as non-root user
+      # 3. Limited host filesystem access (only /var/freeswitch mounted)
+      # 4. Seccomp and AppArmor profiles (to be implemented)
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: freeswitch
           image: fonoster/freeswitch:latest
@@ -681,7 +701,7 @@ spec:
         - name: api
           image: aetherdesk/api:latest
           ports:
-            - containerPort: 3000
+            - containerPort: 8000   # uvicorn listens on 8000 inside the container
           envFrom:
             - configMapRef:
                 name: aetherdesk-config
@@ -706,6 +726,11 @@ spec:
                 secretKeyRef:
                   name: aetherdesk-secrets
                   key: JWT_SECRET
+            - name: INTERNAL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: INTERNAL_API_KEY
             - name: DEEPGRAM_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -716,6 +741,22 @@ spec:
                 secretKeyRef:
                   name: aetherdesk-secrets
                   key: GROQ_API_KEY
+            - name: TWILIO_ACCOUNT_SID
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: TWILIO_ACCOUNT_SID
+            - name: TWILIO_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: aetherdesk-secrets
+                  key: TWILIO_AUTH_TOKEN
+            - name: TWILIO_FROM_NUMBER
+              valueFrom:
+                configMapKeyRef:
+                  name: aetherdesk-config
+                  key: TWILIO_FROM_NUMBER
+                  optional: true
           resources:
             requests:
               memory: "512Mi"
@@ -726,13 +767,13 @@ spec:
           livenessProbe:
             httpGet:
               path: /health
-              port: 3000
+              port: 8000
             initialDelaySeconds: 30
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /health
-              port: 3000
+              port: 8000
             initialDelaySeconds: 5
             periodSeconds: 5
 
@@ -747,7 +788,7 @@ spec:
     app: aetherdesk-api
   ports:
     - port: 80
-      targetPort: 3000
+      targetPort: 8000   # matches uvicorn port inside container
       protocol: TCP
   type: LoadBalancer
 

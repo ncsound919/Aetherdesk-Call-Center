@@ -183,7 +183,7 @@ async def check_redis_health() -> bool:
             app.state.redis.ping()
             return True
     except Exception:
-        pass
+        pass  # Best-effort health check
     return False
 
 
@@ -193,7 +193,7 @@ async def check_asr_health() -> bool:
         if asr_service._model is not None:
             return True
     except Exception:
-        pass
+        pass  # Best-effort health check
     return False
 
 
@@ -240,3 +240,5 @@ async def get_health_status() -> dict[str, Any]:
         "system_metrics": system_metrics,
         "metrics": metrics.get_metrics()
     }
+
+

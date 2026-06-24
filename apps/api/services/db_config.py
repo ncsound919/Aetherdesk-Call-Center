@@ -17,3 +17,5 @@ SQLITE_PATH = os.getenv("SQLITE_PATH", "aetherdesk.db")
 
 SQLITE_POOL_SIZE = int(os.getenv("SQLITE_POOL_SIZE", "5"))
 SQLITE_TIMEOUT = int(os.getenv("SQLITE_TIMEOUT", "30"))
+
+

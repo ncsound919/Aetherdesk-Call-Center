@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import structlog
 
@@ -29,7 +29,7 @@ async def create_call_session(tenant_id, agent_id, caller_number, caller_name=No
     else:
         conn = _get_sqlite_conn()
         try:
-            now = datetime.now(UTC).isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             conn.execute("""
                 INSERT INTO call_sessions (id, tenant_id, agent_id, caller_number, caller_name, called_number,
                     call_direction, call_status, sip_call_id, intent_detected, created_at, updated_at)
@@ -63,7 +63,7 @@ async def update_call_status(call_id, status):
             return await pool.fetchrow("SELECT * FROM call_sessions WHERE id = $1", call_id)
     else:
         conn = _get_sqlite_conn()
-        now = datetime.now(UTC).isoformat()
+        now = datetime.now(timezone.utc).isoformat()
         conn.execute("UPDATE call_sessions SET call_status = ?, updated_at = ? WHERE id = ?",
                      (status, now, call_id))
         conn.commit()
@@ -135,7 +135,7 @@ async def dequeue_call(tenant_id, agent_id):
     else:
         conn = _get_sqlite_conn()
         try:
-            now = datetime.now(UTC).isoformat()
+            now = datetime.now(timezone.utc).isoformat()
             row = conn.execute("SELECT * FROM call_queue WHERE tenant_id = ? AND status = 'waiting' ORDER BY position LIMIT 1", (tenant_id,)).fetchone()
             if row:
                 conn.execute("UPDATE call_queue SET status = 'assigned', assigned_at = ? WHERE id = ?", (now, row['id']))
@@ -385,3 +385,5 @@ async def get_order_status_db(order_id):
     except Exception as e:
         logger.warning("get_order_status_db failed", error=str(e))
     return None
+
+

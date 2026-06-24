@@ -1,5 +1,6 @@
 import time
 import pytest
+from unittest.mock import patch
 from apps.api.services.transcript_store import TranscriptStore
 
 
@@ -50,6 +51,20 @@ class TestTranscriptStore:
         self.store.add_transcript("call-1", {"text": "hello"})
         self.store.touch("call-1")
         assert "call-1" in self.store._last_activity
+
+    @pytest.mark.asyncio
+    async def test_cleanup_stale_loop_purges_expired(self):
+        self.store.add_transcript("call-stale", {"text": "old"})
+        self.store.add_transcript("call-fresh", {"text": "new"})
+        self.store._last_activity["call-stale"] = time.time() - 7200
+        self.store._last_activity["call-fresh"] = time.time()
+
+        with patch("apps.api.services.transcript_store.asyncio.sleep", side_effect=[None, Exception("break")]):
+            with pytest.raises(Exception, match="break"):
+                await self.store.cleanup_stale_loop()
+
+        assert self.store.get_transcripts("call-stale") == []
+        assert len(self.store.get_transcripts("call-fresh")) == 1
 
     def test_lru_eviction(self):
         for i in range(12):

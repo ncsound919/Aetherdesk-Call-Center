@@ -1,190 +1,145 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../context/AuthContext'
 import api from '../services/api'
-import {
-  PhoneIncoming as PhoneIncomingIcon,
-  PhoneOutgoing as PhoneOutgoingIcon,
-  Clock as ClockIcon,
-  ArrowRight as ArrowRightIcon,
-} from 'lucide-react'
+import { PhoneIncoming, PhoneOutgoing, Clock, Filter, Loader2, PhoneMissed } from 'lucide-react'
 
 export default function CallLogs() {
   const { tenant } = useAuth()
   const [calls, setCalls] = useState([])
   const [loading, setLoading] = useState(true)
-  const [filters, setFilters] = useState({
-    status: 'all',
-    dateFrom: new Date().toISOString().split('T')[0],
-    dateTo: new Date().toISOString().split('T')[0],
-  })
+  const [filters, setFilters] = useState({ status: 'all', dateFrom: '', dateTo: '' })
 
-  useEffect(() => {
-    if (tenant) {
-      fetchCalls()
-    }
-  }, [tenant, filters])
+  useEffect(() => { if (tenant) fetchCalls() }, [tenant, filters])
 
   const fetchCalls = async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({
-        tenant_id: tenant.id,
-        ...(filters.status !== 'all' && { status: filters.status }),
-      })
+      const params = new URLSearchParams({ tenant_id: tenant.id })
+      if (filters.status !== 'all') params.append('status', filters.status)
       const res = await api.get(`/calls?${params}`)
-      setCalls(res.data)
-    } catch (error) {
-      console.error('Failed to fetch calls:', error)
-    } finally {
-      setLoading(false)
-    }
+      setCalls(Array.isArray(res.data) ? res.data : [])
+    } catch (e) { console.error(e); setCalls([]) }
+    finally { setLoading(false) }
   }
 
-  const getStatusColor = (status) => {
+  const getIcon = (dir) => {
+    if (dir === 'inbound') return <PhoneIncoming className="h-4 w-4 text-call-green" />
+    if (dir === 'outbound') return <PhoneOutgoing className="h-4 w-4 text-accent" />
+    return <PhoneMissed className="h-4 w-4 text-call-red" />
+  }
+  const getBg = (dir) => {
+    if (dir === 'inbound') return 'bg-call-green-soft'
+    if (dir === 'outbound') return 'bg-accent-soft'
+    return 'bg-call-red-soft'
+  }
+
+  const statusOptions = ['all', 'completed', 'active', 'missed', 'failed', 'voicemail', 'initiated']
+
+  const statusBadge = (status) => {
     switch (status) {
-      case 'completed': return 'text-green-600 bg-green-100'
-      case 'active': return 'text-blue-600 bg-blue-100'
-      case 'missed': return 'text-red-600 bg-red-100'
-      case 'failed': return 'text-red-600 bg-red-100'
-      case 'voicemail': return 'text-yellow-600 bg-yellow-100'
-      case 'initiated': return 'text-gray-400 bg-gray-100'
-      default: return 'text-gray-400 bg-gray-100'
+      case 'completed': return <span className="badge-green">Completed</span>
+      case 'active': case 'ringing': case 'initiated': return <span className="badge-amber">{status}</span>
+      case 'missed': return <span className="badge-red">Missed</span>
+      case 'failed': return <span className="badge-red">Failed</span>
+      case 'voicemail': return <span className="badge-slate">Voicemail</span>
+      default: return <span className="badge-slate">{status || 'Unknown'}</span>
     }
   }
 
-  const getDirectionIcon = (direction) => {
-    if (direction === 'inbound') {
-      return <PhoneIncomingIcon className="h-5 w-5 text-green-500" />
-    }
-    return <PhoneOutgoingIcon className="h-5 w-5 text-blue-500" />
+  const fmtNum = (num) => {
+    if (!num) return '-'
+    const c = num.replace(/\D/g, '')
+    if (c.length === 11) return `+1 (${c.slice(1,4)}) ${c.slice(4,7)}-${c.slice(7)}`
+    if (c.length === 10) return `(${c.slice(0,3)}) ${c.slice(3,6)}-${c.slice(6)}`
+    return num
   }
 
-  const formatDuration = (seconds) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, '0')}`
+  const fmtDur = (s) => {
+    if (!s || s === 0) return '-'
+    const m = Math.floor(s / 60); const sec = Math.floor(s % 60)
+    return `${m}:${sec.toString().padStart(2, '0')}`
   }
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">Call Logs</h1>
-        <p className="text-gray-600">View and manage all call records</p>
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-semibold text-ink tracking-tight">Call Logs</h1>
+          <p className="text-sm text-ink-muted mt-0.5">View and manage all call records</p>
+        </div>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow p-4 mb-6 flex gap-4 items-end">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-          <select
-            value={filters.status}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="all">All Status</option>
-            <option value="completed">Completed</option>
-            <option value="active">Active</option>
-            <option value="missed">Missed</option>
-            <option value="failed">Failed</option>
-            <option value="voicemail">Voicemail</option>
+      <div className="card p-4 mb-6">
+        <div className="flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4 text-ink-muted" />
+            <span className="text-sm text-ink-muted font-medium">Filters</span>
+          </div>
+          <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+            className="input-field w-auto min-w-[140px] text-sm">
+            {statusOptions.map((s) => (
+              <option key={s} value={s}>{s === 'all' ? 'All Statuses' : s.charAt(0).toUpperCase() + s.slice(1)}</option>
+            ))}
           </select>
-        </div>
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Date From</label>
-          <input
-            type="date"
-            value={filters.dateFrom}
-            onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Date To</label>
-          <input
-            type="date"
-            value={filters.dateTo}
-            onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-            className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-          />
         </div>
       </div>
 
-      {/* Call Table */}
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center text-gray-500">Loading calls...</div>
-        ) : (
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Direction</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">From</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">To</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Intent</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cost</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {calls.length === 0 ? (
-                <tr>
-                  <td colSpan="9" className="px-6 py-8 text-center text-gray-500">
-                    <ClockIcon className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                    <p className="text-lg">No calls found</p>
-                    <p className="text-sm mt-1">Try adjusting your filters</p>
-                  </td>
+      {/* Table */}
+      {loading ? (
+        <div className="card p-12 text-center">
+          <Loader2 className="h-6 w-6 animate-spin mx-auto text-ink-subtle mb-2" />
+          <p className="text-sm text-ink-muted">Loading calls...</p>
+        </div>
+      ) : calls.length === 0 ? (
+        <div className="card p-12 text-center">
+          <PhoneIncoming className="h-10 w-10 mx-auto text-ink-subtle mb-3" />
+          <p className="text-sm text-ink-muted">No calls found</p>
+          <p className="text-xs text-ink-subtle mt-1">Try adjusting your filters</p>
+        </div>
+      ) : (
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-hairline bg-surface-hover">
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Direction</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">From</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">To</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Agent</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Duration</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Intent</th>
+                  <th className="text-left px-5 py-3 text-xs font-semibold text-ink-muted uppercase tracking-wider">Status</th>
                 </tr>
-              ) : (
-                calls.map((call) => (
-                  <tr key={call.id} className="hover:bg-gray-50 cursor-pointer">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        {getDirectionIcon(call.call_direction)}
-                        <span className="ml-2 text-sm capitalize">{call.call_direction}</span>
+              </thead>
+              <tbody className="divide-y divide-hairline">
+                {calls.map((call, idx) => (
+                  <tr key={call.id || idx} className="hover:bg-surface-hover transition-colors">
+                    <td className="px-5 py-4">
+                      <div className={`p-2 rounded-lg ${getBg(call.call_direction || call.direction)} inline-flex`}>
+                        {getIcon(call.call_direction || call.direction)}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {call.caller_number}
+                    <td className="px-5 py-4 text-sm font-medium text-ink">{fmtNum(call.caller_number || call.from)}</td>
+                    <td className="px-5 py-4 text-sm text-ink-muted">{fmtNum(call.called_number || call.to)}</td>
+                    <td className="px-5 py-4 text-sm text-ink-muted">
+                      {call.agent_id ? `Agent ${call.agent_id.slice(0, 6)}` : '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {call.called_number}
+                    <td className="px-5 py-4 text-sm text-ink-muted flex items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {fmtDur(call.duration_seconds || call.duration)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {call.agent_id ? `Agent ${call.agent_id.slice(-6)}` : '-'}
+                    <td className="px-5 py-4">
+                      <span className="badge-slate text-[11px]">{call.intent_detected || call.intent || 'N/A'}</span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {call.duration_seconds ? formatDuration(call.duration_seconds) : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs">
-                        {call.intent_detected || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      ${call.total_cost?.toFixed(2) || '0.00'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(call.call_status)}`}>
-                        {call.call_status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      {call.recording_id && (
-                        <button className="text-blue-600 hover:text-blue-900 mr-3">
-                          <ArrowRightIcon className="h-5 w-5" />
-                        </button>
-                      )}
-                    </td>
+                    <td className="px-5 py-4">{statusBadge(call.call_status || call.status)}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

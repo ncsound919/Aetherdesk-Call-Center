@@ -170,3 +170,330 @@ class TestCSVImport:
             # Verify the auto-mapping correctly mapped phone
             call_args = mock_create.call_args
             assert call_args.kwargs.get("phone") == "+15551111111" or call_args.args[1] == "+15551111111"
+
+
+class TestLeadGet:
+    @pytest.mark.asyncio
+    async def test_get_lead_success(self):
+        from apps.api.routers.leads import get_lead
+
+        with patch("apps.api.services.db_tenants.get_lead_db", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = {"id": "lead-1", "tenant_id": "tenant-1", "phone": "+1", "company_name": "Acme", "custom_fields": "{}"}
+            result = await get_lead("lead-1", tenant_id="tenant-1")
+            assert result["id"] == "lead-1"
+            assert isinstance(result["custom_fields"], dict)
+
+    @pytest.mark.asyncio
+    async def test_get_lead_custom_fields_json(self):
+        from apps.api.routers.leads import get_lead
+
+        with patch("apps.api.services.db_tenants.get_lead_db", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = {"id": "lead-1", "custom_fields": '{"source": "web", "campaign": "summer"}'}
+            result = await get_lead("lead-1", tenant_id="tenant-1")
+            assert result["custom_fields"] == {"source": "web", "campaign": "summer"}
+
+    @pytest.mark.asyncio
+    async def test_get_lead_custom_fields_invalid_json(self):
+        from apps.api.routers.leads import get_lead
+
+        with patch("apps.api.services.db_tenants.get_lead_db", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = {"id": "lead-1", "custom_fields": "not-json-at-all"}
+            result = await get_lead("lead-1", tenant_id="tenant-1")
+            assert result["custom_fields"] == {}
+
+    @pytest.mark.asyncio
+    async def test_get_lead_not_found(self):
+        from apps.api.routers.leads import get_lead
+        from fastapi import HTTPException
+
+        with patch("apps.api.services.db_tenants.get_lead_db", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = None
+            with pytest.raises(HTTPException) as exc:
+                await get_lead("lead-999", tenant_id="tenant-1")
+            assert exc.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_get_lead_invalid_row_format(self):
+        from apps.api.routers.leads import get_lead
+        from fastapi import HTTPException
+
+        with patch("apps.api.services.db_tenants.get_lead_db", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = "not_a_dict"
+            with pytest.raises(HTTPException) as exc:
+                await get_lead("lead-1", tenant_id="tenant-1")
+            assert exc.value.status_code == 500
+
+
+class TestLeadListExtended:
+    @pytest.mark.asyncio
+    async def test_list_leads_with_row_like_objects(self):
+        from apps.api.routers.leads import list_leads
+
+        mock_row = MagicMock()
+        mock_row.keys.return_value = ["id", "tenant_id", "phone", "company_name", "custom_fields"]
+        mock_row.__getitem__.side_effect = lambda k: {
+            "id": "lead-1", "tenant_id": "tenant-1",
+            "phone": "+15551234567", "company_name": "Acme",
+            "custom_fields": '{"source": "web"}'
+        }[k]
+
+        with patch("apps.api.services.db_tenants.list_leads_db", new_callable=AsyncMock) as mock_list:
+            mock_list.return_value = [mock_row]
+            result = await list_leads(tenant_id="tenant-1")
+            assert result["count"] == 1
+            assert result["items"][0]["custom_fields"] == {"source": "web"}
+
+    @pytest.mark.asyncio
+    async def test_list_leads_skips_non_dict_rows(self):
+        from apps.api.routers.leads import list_leads
+
+        with patch("apps.api.services.db_tenants.list_leads_db", new_callable=AsyncMock) as mock_list:
+            mock_list.return_value = [42, "string", None]
+            result = await list_leads(tenant_id="tenant-1")
+            assert result["count"] == 0
+
+    @pytest.mark.asyncio
+    async def test_list_leads_custom_fields_invalid_json(self):
+        from apps.api.routers.leads import list_leads
+
+        with patch("apps.api.services.db_tenants.list_leads_db", new_callable=AsyncMock) as mock_list:
+            mock_list.return_value = [{
+                "id": "lead-1", "tenant_id": "t-1", "phone": "+1",
+                "company_name": "X", "custom_fields": "bad-json{{{"
+            }]
+            result = await list_leads(tenant_id="tenant-1", limit=10, offset=0)
+            assert result["count"] == 1
+            assert result["items"][0]["custom_fields"] == {}
+
+
+class TestLeadUpdateExtended:
+    @pytest.mark.asyncio
+    async def test_update_lead_no_fields(self):
+        from apps.api.routers.leads import update_lead, LeadUpdate
+        from fastapi import HTTPException
+
+        req = LeadUpdate()
+        with pytest.raises(HTTPException) as exc:
+            await update_lead("lead-1", req, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+        assert "No fields" in exc.value.detail
+
+    @pytest.mark.asyncio
+    async def test_update_lead_not_found(self):
+        from apps.api.routers.leads import update_lead, LeadUpdate
+        from fastapi import HTTPException
+
+        with patch("apps.api.services.db_tenants.update_lead_db", new_callable=AsyncMock) as mock_update:
+            mock_update.return_value = None
+            req = LeadUpdate(status="interested")
+            with pytest.raises(HTTPException) as exc:
+                await update_lead("lead-999", req, tenant_id="tenant-1")
+            assert exc.value.status_code == 404
+
+
+class TestLeadDeleteExtended:
+    @pytest.mark.asyncio
+    async def test_delete_lead_not_found(self):
+        from apps.api.routers.leads import delete_lead
+        from fastapi import HTTPException
+
+        with patch("apps.api.services.db_tenants.delete_lead_db", new_callable=AsyncMock) as mock_delete:
+            mock_delete.return_value = False
+            with pytest.raises(HTTPException) as exc:
+                await delete_lead("lead-999", tenant_id="tenant-1")
+            assert exc.value.status_code == 404
+
+
+class TestBulkLeadOpsExtended:
+    @pytest.mark.asyncio
+    async def test_bulk_update_empty_ids(self):
+        from apps.api.routers.leads import bulk_update_leads, BulkUpdateRequest, LeadUpdate
+        from fastapi import HTTPException
+
+        req = BulkUpdateRequest(lead_ids=[], updates=LeadUpdate(status="new"))
+        with pytest.raises(HTTPException) as exc:
+            await bulk_update_leads(req, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_bulk_update_empty_updates(self):
+        from apps.api.routers.leads import bulk_update_leads, BulkUpdateRequest, LeadUpdate
+        from fastapi import HTTPException
+
+        req = BulkUpdateRequest(lead_ids=["lead-1"], updates=LeadUpdate())
+        with pytest.raises(HTTPException) as exc:
+            await bulk_update_leads(req, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_bulk_delete_empty_ids(self):
+        from apps.api.routers.leads import bulk_delete_leads, BulkUpdateRequest, LeadUpdate
+        from fastapi import HTTPException
+
+        req = BulkUpdateRequest(lead_ids=[], updates=LeadUpdate())
+        with pytest.raises(HTTPException) as exc:
+            await bulk_delete_leads(req, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+
+
+class TestCSVUploadExtended:
+    @pytest.mark.asyncio
+    async def test_upload_rejects_no_filename(self):
+        from apps.api.routers.leads import upload_leads_csv
+        from fastapi import UploadFile, HTTPException
+
+        file = UploadFile(filename="", file=io.BytesIO(b"data"))
+        with pytest.raises(HTTPException) as exc:
+            await upload_leads_csv(file=file, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_upload_rejects_too_large(self):
+        from apps.api.routers.leads import upload_leads_csv
+        from fastapi import UploadFile, HTTPException
+
+        file = UploadFile(filename="leads.csv", file=io.BytesIO(b"x" * (10 * 1024 * 1024 + 1)))
+        with pytest.raises(HTTPException) as exc:
+            await upload_leads_csv(file=file, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+        assert "too large" in exc.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_upload_latin1_fallback(self):
+        from apps.api.routers.leads import upload_leads_csv
+        from fastapi import UploadFile
+
+        # 0xFF and 0xFE are invalid UTF-8 but valid Latin-1
+        content = bytes([0xFF, 0xFE]) + b"company,phone\nAcme,+15551234567"
+        file = UploadFile(filename="leads.csv", file=io.BytesIO(content))
+        result = await upload_leads_csv(file=file, tenant_id="tenant-1")
+        assert result["row_count"] == 1  # Latin-1 fallback succeeded
+
+    @pytest.mark.asyncio
+    async def test_upload_csv_no_data_rows(self):
+        from apps.api.routers.leads import upload_leads_csv
+        from fastapi import UploadFile, HTTPException
+
+        file = UploadFile(filename="leads.csv", file=io.BytesIO(b"company,phone"))
+        with pytest.raises(HTTPException) as exc:
+            await upload_leads_csv(file=file, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+        assert "no data" in exc.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_upload_too_many_rows(self):
+        from apps.api.routers.leads import upload_leads_csv
+        from fastapi import UploadFile, HTTPException
+
+        header = b"company,phone\n"
+        rows = b"\n".join([f"Co{i},+1555{i:07d}".encode() for i in range(10001)])
+        file = UploadFile(filename="leads.csv", file=io.BytesIO(header + rows))
+        with pytest.raises(HTTPException) as exc:
+            await upload_leads_csv(file=file, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+
+
+class TestCSVImportExtended:
+    @pytest.mark.asyncio
+    async def test_import_no_rows(self):
+        from apps.api.routers.leads import import_leads, ImportRequest
+        from fastapi import HTTPException
+
+        req = ImportRequest(mapping={}, rows=[])
+        with pytest.raises(HTTPException) as exc:
+            await import_leads(req, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_import_too_many_rows(self):
+        from apps.api.routers.leads import import_leads, ImportRequest
+        from fastapi import HTTPException
+
+        req = ImportRequest(mapping={}, rows=[{"phone": str(i)} for i in range(10001)])
+        with pytest.raises(HTTPException) as exc:
+            await import_leads(req, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_import_with_error_row(self):
+        from apps.api.routers.leads import import_leads, ImportRequest
+
+        with patch("apps.api.services.db_tenants.create_lead_db", new_callable=AsyncMock) as mock_create:
+            mock_create.side_effect = [{"id": "lead-1"}, Exception("DB constraint failed")]
+
+            req = ImportRequest(
+                mapping={"phone": "phone"},
+                rows=[
+                    {"phone": "+15551111111"},
+                    {"phone": "+15552222222"},
+                ],
+            )
+            result = await import_leads(req, tenant_id="tenant-1")
+            assert result["imported"] == 1
+            assert len(result["errors"]) == 1
+            assert "DB constraint" in result["errors"][0]["error"]
+
+    @pytest.mark.asyncio
+    async def test_import_auto_maps_surname_to_last_name(self):
+        from apps.api.routers.leads import import_leads, ImportRequest
+
+        req = ImportRequest(
+            mapping={},
+            rows=[{"Surname": "Smith", "Phone": "+15551234567"}],
+        )
+        with patch("apps.api.services.db_tenants.create_lead_db", new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = {"id": "lead-1"}
+            result = await import_leads(req, tenant_id="tenant-1")
+            assert result["imported"] == 1
+            assert mock_create.call_args.kwargs.get("last_name") == "Smith"
+
+
+class TestGetTenantId:
+    @pytest.mark.asyncio
+    async def test_get_tenant_id_success(self):
+        from apps.api.routers.leads import get_tenant_id
+        from fastapi.security import HTTPAuthorizationCredentials as Creds
+
+        creds = MagicMock()
+        creds.credentials = "valid_tok"
+        with patch("apps.api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_v:
+            mock_v.return_value = {"tenant_id": "tenant-1"}
+            result = await get_tenant_id(credentials=creds)
+            assert result == "tenant-1"
+
+    @pytest.mark.asyncio
+    async def test_get_tenant_id_no_credentials(self):
+        from apps.api.routers.leads import get_tenant_id
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            await get_tenant_id(credentials=None)
+        assert exc.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_tenant_id_invalid_token(self):
+        from apps.api.routers.leads import get_tenant_id
+        from fastapi import HTTPException
+        from fastapi.security import HTTPAuthorizationCredentials as Creds
+
+        creds = MagicMock()
+        creds.credentials = "bad_tok"
+        with patch("apps.api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_v:
+            mock_v.return_value = None
+            with pytest.raises(HTTPException) as exc:
+                await get_tenant_id(credentials=creds)
+            assert exc.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_get_tenant_id_missing_tenant_id(self):
+        from apps.api.routers.leads import get_tenant_id
+        from fastapi import HTTPException
+        from fastapi.security import HTTPAuthorizationCredentials as Creds
+
+        creds = MagicMock()
+        creds.credentials = "valid_tok"
+        with patch("apps.api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_v:
+            mock_v.return_value = {"sub": "user-1"}
+            with pytest.raises(HTTPException) as exc:
+                await get_tenant_id(credentials=creds)
+            assert exc.value.status_code == 400

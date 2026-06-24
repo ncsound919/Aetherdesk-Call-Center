@@ -12,7 +12,7 @@ from apps.api.services.voice_profile_store import VoiceProfileStore
 
 logger = structlog.get_logger()
 
-router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
+router = APIRouter(prefix="/voice", tags=["voice"])
 
 VOICE_CLONES_DIR = os.path.join(os.path.dirname(__file__), "../../../data/voice_clones")
 os.makedirs(VOICE_CLONES_DIR, exist_ok=True)

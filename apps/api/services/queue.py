@@ -145,3 +145,5 @@ class QueueManager:
     def session_delete(self, sid: str):
         backend = self._get_backend()
         backend.delete(SESSION_KEY.format(sid=sid))
+
+

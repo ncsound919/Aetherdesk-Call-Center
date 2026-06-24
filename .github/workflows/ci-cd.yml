@@ -143,7 +143,7 @@ jobs:
           pip install pytest pytest-asyncio pytest-cov bandit
       - name: Run unit and service tests (no ML deps)
         run: |
-          python -m pytest tests/unit/ tests/services/ tests/test_db_refactor.py tests/test_health.py tests/test_verification.py -v --tb=short --cov-fail-under=37 -k "not e2e_ml" --ignore=tests/e2e --ignore=tests/ai --ignore=tests/chaos --ignore=tests/cognitive --ignore=tests/integration
+          python -m pytest tests/unit/ tests/services/ tests/test_db_refactor.py tests/test_health.py tests/test_verification.py -v --tb=short --cov-fail-under=65 -k "not e2e_ml" --ignore=tests/e2e --ignore=tests/ai --ignore=tests/chaos --ignore=tests/cognitive --ignore=tests/integration
         env:
           USE_POSTGRES: "false"
       - name: Bandit security scan

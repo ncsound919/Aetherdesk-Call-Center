@@ -1,7 +1,7 @@
 import os
 import secrets
 import time
-from datetime import UTC
+from datetime import timezone
 
 import structlog
 from fastapi import Header, HTTPException, Depends
@@ -18,12 +18,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
-SECRET_KEY = os.getenv("JWT_SECRET")
-if not SECRET_KEY:
-    env = os.getenv("APP_ENV", "development")
-    if env == "production":
-        raise RuntimeError("JWT_SECRET environment variable must be set for production.")
-    SECRET_KEY = "dev-jwt-secret-do-not-use-in-production"  # nosec B105 — dev fallback, never used in production
 TOKEN_EXPIRY_SECONDS = 3600
 
 
@@ -92,12 +86,12 @@ async def generate_websocket_token(user_id: str, metadata: dict = None) -> str:
     return await token_store.create_token(user_id, metadata)
 
 
-def generate_access_token(data: dict, expires_delta_seconds: int = 3600) -> str:
+def generate_access_token(data: dict, expires_delta_seconds: int = TOKEN_EXPIRY_SECONDS) -> str:
     """Generate JWT access token signed with RS256."""
     from datetime import timedelta
 
-    from apps.api.services.jwt_utils import create_access_token as _create_rs256_token
-    return _create_rs256_token(data, timedelta(seconds=expires_delta_seconds))
+    from apps.api.services.jwt_utils import create_access_token
+    return create_access_token(data, timedelta(seconds=expires_delta_seconds))
 
 
 _fallback_blocklist: set[str] = set()
@@ -257,3 +251,5 @@ async def verify_tenant_access(
              status_code=403,
              detail="Access denied: tenant verification failed",
          ) from None
+
+

@@ -120,6 +120,22 @@ class TestProtocolsUpload:
         assert "Invalid filename" in exc.value.detail
 
     @pytest.mark.asyncio
+    async def test_upload_csv_path_traversal_in_tenant_id(self, temp_dirs):
+        from apps.api.routers.protocols import upload_csv
+
+        csv_content = b"node,prompt\nstart,Welcome\n"
+        mock_file = AsyncMock(spec=UploadFile)
+        mock_file.filename = "safe_name.csv"
+        mock_file.read.return_value = csv_content
+
+        with patch("apps.api.routers.protocols.verify_api_key", return_value="../../malicious"), \
+             pytest.raises(HTTPException) as exc:
+            await upload_csv(mock_file, tenant_id="../../malicious")
+
+        assert exc.value.status_code == 400
+        assert "Invalid file path" in str(exc.value.detail)
+
+    @pytest.mark.asyncio
     async def test_upload_csv_tenant_isolation(self, temp_dirs):
         from apps.api.routers.protocols import upload_csv
 

@@ -1,6 +1,8 @@
 import json
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 
 @pytest.fixture
@@ -9,6 +11,23 @@ def auth_bearer():
     cred = MagicMock()
     cred.credentials = "valid_test_token"
     return cred
+
+
+@pytest.fixture
+def app():
+    from apps.api.routers.billing import router
+    from apps.api.services.auth import verify_tenant_access
+
+    application = FastAPI()
+    application.include_router(router)
+    application.dependency_overrides[verify_tenant_access] = lambda: "TENANT-001"
+    return application
+
+
+@pytest.fixture
+def client(app):
+    with TestClient(app) as c:
+        yield c
 
 
 class TestCheckout:
@@ -48,6 +67,20 @@ class TestCheckout:
             await create_checkout(CheckoutRequest(plan="pro"), credentials=None)
         assert exc.value.status_code == 401
 
+    @pytest.mark.asyncio
+    async def test_checkout_tenant_not_found(self, auth_bearer):
+        from apps.api.routers.billing import create_checkout, CheckoutRequest
+        from fastapi import HTTPException
+
+        with patch("apps.api.routers.billing.get_price_id", return_value="price_test"), \
+             patch("apps.api.routers.billing.get_tenant_db", new_callable=AsyncMock) as mock_get_tenant:
+
+            mock_get_tenant.return_value = None
+
+            with pytest.raises(HTTPException) as exc:
+                await create_checkout(CheckoutRequest(plan="pro"), credentials=auth_bearer)
+            assert exc.value.status_code == 404
+
 
 class TestPortal:
     @pytest.mark.asyncio
@@ -75,6 +108,15 @@ class TestPortal:
             with pytest.raises(HTTPException) as exc:
                 await create_portal(credentials=auth_bearer)
             assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_portal_requires_auth(self):
+        from apps.api.routers.billing import create_portal
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            await create_portal(credentials=None)
+        assert exc.value.status_code == 401
 
 
 class TestWebhook:
@@ -163,6 +205,15 @@ class TestSubscription:
             assert result["plan_name"] == "free"
             assert result["active"] is False
 
+    @pytest.mark.asyncio
+    async def test_subscription_requires_auth(self):
+        from apps.api.routers.billing import get_subscription
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            await get_subscription(credentials=None)
+        assert exc.value.status_code == 401
+
 
 class TestUsage:
     @pytest.mark.asyncio
@@ -175,6 +226,61 @@ class TestUsage:
             assert result["recorded"] is True
             assert result["quantity"] == 42.5
             mock_record.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_usage_requires_auth(self):
+        from apps.api.routers.billing import report_usage, UsageRequest
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            await report_usage(UsageRequest(metric="agent_minutes", quantity=1.0), credentials=None)
+        assert exc.value.status_code == 401
+
+
+class TestGetBilling:
+    def test_get_billing_returns_summary(self, client):
+        mock_summary = {
+            "total_calls": 50,
+            "total_minutes": 120.0,
+            "total_cost": 1.80,
+            "currency": "USD",
+        }
+
+        with patch("apps.api.routers.billing.get_billing_summary", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_summary
+
+            resp = client.get("/api/v1/billing")
+
+            assert resp.status_code == 200
+            body = resp.json()
+            assert body["total_calls"] == 50
+            assert body["total_minutes"] == 120.0
+            assert body["total_cost"] == 1.80
+            assert body["currency"] == "USD"
+            assert body["breakdown"]["per_minute"] == 0.015
+            assert body["breakdown"]["ai_minutes"] == 60.0
+            assert body["breakdown"]["standard_minutes"] == 60.0
+
+    def test_get_billing_defaults_to_last_7_days(self, client):
+        mock_summary = {
+            "total_calls": 10,
+            "total_minutes": 30.0,
+            "total_cost": 0.45,
+            "currency": "USD",
+        }
+
+        with patch("apps.api.routers.billing.get_billing_summary", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_summary
+
+            resp = client.get("/api/v1/billing")
+
+            assert resp.status_code == 200
+            mock_get.assert_called_once()
+            args, _ = mock_get.call_args
+            assert args[0] == "TENANT-001"
+            # period_start and period_end default to last 7 days
+            assert args[1] is not None
+            assert args[2] is not None
 
 
 class TestPlanEnforcement:

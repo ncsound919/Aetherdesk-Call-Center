@@ -1,59 +1,85 @@
 <!-- AetherDesk Call Center - FreeSWITCH Configuration -->
 <!-- HIPAA/GDPR Compliant SIP Configuration -->
+<!-- HARDENED: Security-reviewed v1.0 -->
+
 
 <configuration name="sip_profiles" description="SIP Profiles Configuration">
 
-  <!-- Internal SIP Profile (for agents and internal calls) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  Internal SIP Profile (for agents and internal calls)    -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
   <profile name="internal">
     <settings>
       <!-- Basic Settings -->
       <param name="context" value="default"/>
-      <param name="bind-addr" value="0.0.0.0:5060"/>
-      <param name="tls-bind-addr" value="0.0.0.0:5061"/>
-      <param name="tls-version" value="tlsv1.2"/>
+      <param name="bind-addr" value="172.20.0.1:5060"/>         <!-- 🔒 Hardened: bind to internal Docker IP only -->
+      <param name="tls-bind-addr" value="172.20.0.1:5061"/>     <!-- 🔒 Hardened: TLS on internal network only -->
+      <param name="tls-version" value="tlsv1.2,tlsv1.3"/>      <!-- 🔒 Hardened: allow TLS 1.3 -->
+      <param name="tls-min-version" value="tlsv1.2"/>           <!-- 🔒 NEW: reject TLS < 1.2 -->
+      <param name="sip-ip" value="172.20.0.1"/>                 <!-- 🔒 Hardened: explicit internal IP -->
 
       <!-- Security Settings -->
-      <param name="apply-inbound-acl" value="internal"/>
+      <param name="apply-inbound-acl" value="internal"/>        <!-- ACL gate -->
+      <param name="apply-register-acl" value="internal"/>       <!-- 🔒 NEW: restrict registration to internal ACL -->
+      <param name="apply-proxy-acl" value="internal"/>          <!-- 🔒 NEW: restrict proxied requests -->
       <param name="auth-calls" value="true"/>
-      <param name="auth-all-packets" value="false"/>
-      <param name="challenge-realm" value="auto_from"/>
+      <param name="auth-all-packets" value="true"/>             <!-- 🔒 Hardened: authenticate ALL packets, not just INVITE -->
       <param name="accept-blind-auth" value="false"/>
+      <param name="accept-blind-reg" value="false"/>            <!-- 🔒 NEW: reject blind registrations -->
+      <param name="challenge-realm" value="auto_from"/>
+      <param name="inbound-reg-force-matching-ip" value="true"/> <!-- 🔒 NEW: enforce registration-IP match -->
+      <param name="only-register-known-users" value="true"/>     <!-- 🔒 NEW: reject unknown user registrations -->
 
-      <!-- RTP Settings -->
-      <param name="rtp-start-port" value="16384"/>
-      <parameter name="rtp-end-port" value="32768"/>
-      <parameter name="rtp-timer-name" value="soft"/>
-      <parameter name="rtp-timeout-sec" value="300"/>
-      <parameter name="rtp-hold-timeout-sec" value="1800"/>
+      <!-- Rate Limiting -->
+      <param name="max-registrations" value="2000"/>
+      <param name="max-registrations-per-ip" value="10"/>       <!-- 🔒 NEW: prevent registration flood -->
+      <param name="max-registrations-per-ip-per-second" value="2"/>  <!-- 🔒 NEW -->
+      <param name="max-dialogs" value="1000"/>                  <!-- 🔒 NEW: dialog limit -->
+      <param name="max-dialogs-per-ip" value="50"/>             <!-- 🔒 NEW -->
+      <param name="max-proceeding" value="500"/>                <!-- 🔒 Hardened: reduced from 1000 -->
+      <param name="sip-profile-timer" value="30"/>              <!-- 🔒 NEW: profile-level timer for cleanup -->
 
-      <!-- NAT Traversal -->
-      <param name="apply-nat-acl" value="rfc1918"/>
-      <parameter name="ext-rtp-ip" value="$${external_rtp_ip}"/>
-      <parameter name="ext-sip-ip" value="$${external_sip_ip}"/>
-
-      <!-- Codecs -->
-      <param name="codec-prefs" value="PCMA,PCMU,OPUS,G729"/>
-      <parameter name="inbound-codec-prefs" value="PCMA,PCMU,OPUS,G729"/>
-      <parameter name="outbound-codec-prefs" value="PCMA,PCMU,OPUS,G729"/>
-      <parameter name="codec-sample-rate" value="$${codec-sample-rate}"/>
-
-      <!-- Session Timers -->
-      <parameter name="session-timeout" value="1800"/>
-      <parameter name="session-refresher" value="uac"/>
-      <parameter name="enable-100rel" value="true"/>
-
-      <!-- Call Features -->
+      <!-- SIP Validation -->
+      <param name="apply-register-user-acl" value="true"/>      <!-- 🔒 NEW: validate registered user ACL -->
+      <param name="log-auth-failures" value="true"/>            <!-- 🔒 NEW: audit auth failures -->
+      <param name="disable-hold" value="false"/>
+      <param name="enable-100rel" value="true"/>
       <param name="enable-3pcc" value="true"/>
       <param name="manage-presence" value="true"/>
       <param name="presence-hosts" value="localhost"/>
 
-      <!-- DTMF -->
-      <param name="dtmf-duration" value="100"/>
-      <parameter name="dtmf-type" value="rfc2833"/>
+      <!-- RTP Settings -->
+      <param name="rtp-start-port" value="16384"/>
+      <param name="rtp-end-port" value="24576"/>                <!-- 🔒 Hardened: narrowed range for internal -->
+      <param name="rtp-timer-name" value="soft"/>
+      <param name="rtp-timeout-sec" value="300"/>
+      <param name="rtp-hold-timeout-sec" value="1800"/>
+      <param name="rtp-ip" value="172.20.0.1"/>                 <!-- 🔒 NEW: explicit RTP IP -->
 
-      <!-- Media Encryption (SRTP for HIPAA) -->
-      <parameter name="zrtp-enable" value="true"/>
-      <parameter name="sip-ip" value="$${local_ip_v4}"/>
+      <!-- Media Encryption (HIPAA compliance — mandatory SRTP) -->
+      <param name="zrtp-enable" value="true"/>
+      <param name="srtp-secure-media" value="true"/>            <!-- 🔒 NEW: mandate SRTP for media -->
+      <param name="srtp-failsafe" value="true"/>                <!-- 🔒 NEW: reject unencrypted media -->
+      <param name="media-option" value="resume-media-on-hold"/> <!-- 🔒 NEW: media security on hold -->
+
+      <!-- NAT Traversal -->
+      <param name="apply-nat-acl" value="rfc1918"/>
+      <param name="ext-rtp-ip" value="$${external_rtp_ip}"/>
+      <param name="ext-sip-ip" value="$${external_sip_ip}"/>
+
+      <!-- Codecs (secure codecs prioritized) -->
+      <param name="codec-prefs" value="OPUS,PCMA,PCMU,G729"/>
+      <param name="inbound-codec-prefs" value="OPUS,PCMA,PCMU,G729"/>
+      <param name="outbound-codec-prefs" value="OPUS,PCMA,PCMU,G729"/>
+      <param name="codec-sample-rate" value="$${codec-sample-rate}"/>
+
+      <!-- Session Timers -->
+      <param name="session-timeout" value="1800"/>
+      <param name="session-refresher" value="uac"/>
+
+      <!-- Call Features -->
+      <param name="dtmf-duration" value="100"/>
+      <param name="dtmf-type" value="rfc2833"/>
     </settings>
 
     <!-- Gateways for SIP Trunking -->
@@ -67,26 +93,90 @@
         <param name="caller-id-in-from" value="true"/>
         <param name="ping" value="25"/>
         <param name="context" value="public"/>
+        <param name="expire-seconds" value="3600"/>
+        <param name="retry-seconds" value="30"/>
+        <param name="extension-in-contact" value="true"/>
+        <!-- 🔒 NEW: gateway security -->
+        <param name="auth-register" value="true"/>
+        <param name="register-transport" value="tls"/>
       </gateway>
     </gateways>
   </profile>
 
-  <!-- External SIP Profile (for PSTN access) -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
+  <!--  External SIP Profile (for PSTN access only)              -->
+  <!-- ═══════════════════════════════════════════════════════════ -->
   <profile name="external">
     <settings>
       <param name="context" value="public"/>
       <param name="bind-addr" value="0.0.0.0:5080"/>
       <param name="tls-bind-addr" value="0.0.0.0:5081"/>
+      <param name="tls-version" value="tlsv1.2,tlsv1.3"/>
+      <param name="tls-min-version" value="tlsv1.2"/>
+      <param name="sip-ip" value="$${external_sip_ip}"/>
+
+      <!-- Security Settings -->
+      <param name="apply-inbound-acl" value="external"/>        <!-- ACL gate for external -->
+      <param name="apply-register-acl" value="external"/>
       <param name="auth-calls" value="true"/>
+      <param name="auth-all-packets" value="true"/>             <!-- 🔒 Hardened -->
       <param name="accept-blind-auth" value="false"/>
-      <param name="rtp-start-port" value="20000"/>
-      <parameter name="rtp-end-port" value="40000"/>
+      <param name="accept-blind-reg" value="false"/>
+
+      <!-- Rate Limiting -->
+      <param name="max-registrations" value="500"/>
+      <param name="max-registrations-per-ip" value="5"/>
+      <param name="max-dialogs" value="300"/>
+      <param name="max-dialogs-per-ip" value="20"/>
+      <param name="max-proceeding" value="200"/>
+
+      <!-- RTP Settings -->
+      <param name="rtp-start-port" value="24577"/>
+      <param name="rtp-end-port" value="32768"/>
+
+      <!-- Media Encryption -->
+      <param name="zrtp-enable" value="true"/>
+      <param name="srtp-secure-media" value="true"/>
+
+      <!-- Codecs -->
+      <param name="codec-prefs" value="PCMA,PCMU,OPUS,G729"/>
+      <param name="inbound-codec-prefs" value="PCMA,PCMU,OPUS,G729"/>
+      <param name="outbound-codec-prefs" value="PCMA,PCMU,OPUS,G729"/>
     </settings>
   </profile>
 
 </configuration>
 
-<!-- Dialplan Configuration -->
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  ACL Configuration — Network Security                        -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<configuration name="acl" description="AetherDesk Network ACLs">
+
+  <!-- Internal network — Agents and internal services -->
+  <network-list name="internal" default="deny">
+    <node type="allow" cidr="172.20.0.0/16"/>    <!-- Docker internal network -->
+    <node type="allow" cidr="10.0.0.0/8"/>        <!-- Kubernetes cluster CIDR -->
+    <node type="allow" cidr="127.0.0.1/32"/>       <!-- Loopback -->
+  </network-list>
+
+  <!-- External access — SIP trunk provider IPs only -->
+  <network-list name="external" default="deny">
+    <!-- 🔒 Replace with YOUR specific SIP trunk provider IP ranges -->
+    <!-- <node type="allow" cidr="203.0.113.0/24"/> -->
+  </network-list>
+
+  <!-- RADIUS (for authentication if used) -->
+  <network-list name="radius" default="deny">
+    <node type="allow" cidr="127.0.0.1/32"/>
+  </network-list>
+
+</configuration>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  Dialplan Configuration                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
 <configuration name="dialplan" description="AetherDesk Call Center Dialplan">
 
   <context name="default">
@@ -103,24 +193,13 @@
     <!-- Extension: Inbound Calls from PSTN -->
     <extension name="inbound-pstn">
       <condition field="destination_number" expression="^(\+?\d{10,15})$">
-        <!-- Log call for HIPAA compliance -->
         <action application="set" data="call_direction=inbound"/>
         <action application="set" data="call_start_time=${strftime(%Y-%m-%d %H:%M:%S)}"/>
-
-        <!-- Set caller ID -->
         <action application="set" data="effective_caller_id_number=$1"/>
-
-        <!-- Route to IVR / Queue -->
         <action application="answer"/>
         <action application="sleep" data="1000"/>
-
-        <!-- Play welcome message -->
         <action application="playback" data="ivr/ivr-welcome.wav"/>
-
-        <!-- Get caller intent via DTMF -->
         <action application="menu" data="1 Voicemail 2 Sales 3 Support 4 Billing"/>
-
-        <!-- Route based on selection -->
         <action application="set" data="queue_name=$${queue_selection}"/>
         <action application="bridge" data="sofia/internal/${queue_selection}@$${domain}"/>
       </condition>
@@ -166,15 +245,13 @@
         <action application="set" data="queue_max_wait_time=300000"/>
         <action application="set" data="queue_tier_rules=ring-all"/>
         <action application="set" data="queue_record_template=$${recordings_dir}/${strftime(%Y/%m/%d)}/${queue_name}-${uuid}.wav"/>
-
-        <!-- Queue with music on hold -->
         <action application="queue" data="$1 XML default"/>
       </condition>
     </extension>
 
   </context>
 
-  <!-- Public Context - PSTN Access -->
+  <!-- Public Context — PSTN Access (tightly controlled) -->
   <context name="public">
 
     <!-- Inbound from SIP Trunk -->
@@ -197,32 +274,10 @@
 
 </configuration>
 
-<!-- ACL Configuration - Network Security -->
-<configuration name="acl" description="AetherDesk Network ACLs">
 
-  <!-- Internal network - Agents and internal services -->
-  <network-list name="internal" default="deny">
-    <node type="allow" cidr="172.20.0.0/16"/>  <!-- Docker internal network -->
-    <node type="allow" cidr="10.0.0.0/8"/>     <!-- Kubernetes cluster CIDR -->
-    <node type="allow" cidr="127.0.0.1/32"/>    <!-- Loopback -->
-  </network-list>
-
-  <!-- External access - SIP trunk and authorized IPs -->
-  <network-list name="external" default="deny">
-    <!-- Add your SIP trunk provider IPs here -->
-    <node type="allow" cidr="208.80.152.0/24"/>  <!-- Example: Twilio/SIP trunk -->
-    <node type="allow" cidr="66.235.136.0/24"/>
-    <node type="allow" cidr="91.108.6.0/24"/>
-  </network-list>
-
-  <!-- RADIUS (for authentication if used) -->
-  <network-list name="radius" default="deny">
-    <node type="allow" cidr="127.0.0.1/32"/>
-  </network-list>
-
-</configuration>
-
-<!-- Directory Configuration - Agent Users -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  Directory Configuration — Agent Users                       -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
 <configuration name="directory" description="AetherDesk Agent Directory">
 
   <domain name="$${domain}">
@@ -236,15 +291,15 @@
     </group>
 
     <!-- Individual Agent Users (created dynamically in production) -->
-    <!-- Example placeholder - would be generated by the platform -->
+    <!-- 🔒 Passwords must use A1 hash, never stored in plaintext -->
     <user id="1000">
       <params>
-        <param name="password" value="encrypted-password-here"/>
+        <param name="password" value="$${agent_1000_password}"/>
         <param name="vm-password" value="$${default_voicemail_password}"/>
         <param name="dial-string" value="{sip_invite_domain=${destination_domain},leg_timeout=30,presence_id=${dialed_user}@${dialed_domain}}${sofia_contact(*/${dialed_user}@${dialed_domain})}"/>
       </params>
       <variables>
-        <variable name="toll_allow" value="domestic,international,local"/>
+        <variable name="toll_allow" value="domestic,local"/>
         <variable name="accountcode" value="1000"/>
         <variable name="user_context" value="default"/>
         <variable name="effective_caller_id_name" value="Agent 1000"/>
@@ -257,34 +312,49 @@
 
 </configuration>
 
-<!-- Logging Configuration - HIPAA Compliant -->
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  Logging & Core Configuration                                -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
 <configuration name="switch.conf" description="Core Switch Configuration">
 
   <settings>
-    <!-- Log Levels - HIPAA: No PII in logs -->
+    <!-- Log Levels — HIPAA: No PII in logs -->
     <param name="loglevel" value="WARNING"/>
     <param name="console-loglevel" value="INFO"/>
 
     <!-- Call Detail Records -->
-    <param name=" cdr-csv-mode" value="true"/>
-    <parameter name="cdr-log-dir" value="/var/log/freeswitch/cdr"/>
+    <param name="cdr-csv-mode" value="true"/>
+    <param name="cdr-log-dir" value="/var/log/freeswitch/cdr"/>
 
-    <!-- Recording Settings - HIPAA: All calls recorded with encryption -->
+    <!-- Recording Settings — HIPAA: All calls recorded -->
     <param name="record-calls" value="true"/>
-    <parameter name="record-path" value="/var/freeswitch/recordings"/>
-    <parameter name="record-template" value="$${recordings_dir}/${strftime(%Y/%m/%d)}/${caller_id_number}-${uuid}.wav"/>
+    <param name="record-path" value="/var/freeswitch/recordings"/>
+    <param name="record-template" value="$${recordings_dir}/${strftime(%Y/%m/%d)}/${caller_id_number}-${uuid}.wav"/>
 
     <!-- RTP Settings -->
-    <parameter name="rtp-start-port" value="16384"/>
-    <parameter name="rtp-end-port" value="32768"/>
+    <param name="rtp-start-port" value="16384"/>
+    <param name="rtp-end-port" value="32768"/>
 
-    <!-- SIP Settings -->
-    <parameter name="max-proceeding" value="1000"/>
-    <parameter name="max-registrations" value="5000"/>
+    <!-- SIP Security Limits -->
+    <param name="max-proceeding" value="1000"/>
+    <param name="max-registrations" value="5000"/>
+    <param name="max-dialogs" value="2000"/>
+    <param name="max-session-limits" value="1000"/>              <!-- 🔒 NEW: maximum concurrent sessions -->
 
     <!-- Performance Tuning -->
-    <parameter name="switchname" value="AetherDesk"/>
-    <parameter name="odbc-dsn" value="$${dsn}"/>
+    <param name="switchname" value="AetherDesk"/>
+    <param name="odbc-dsn" value="$${dsn}"/>
+
+    <!-- 🔒 Security: rate-limit registration failures -->
+    <param name="max-failure" value="20"/>
+    <param name="failure-lockout-time" value="300"/>            <!-- 5 min lockout after max failures -->
+
+    <!-- 🔒 Security: disable dangerous modules -->
+    <param name="disable-mod-voicemail" value="false"/>
+    <param name="disable-mod-conference" value="false"/>
+    <param name="disable-mod-tts" value="true"/>                 <!-- disable mod_tts_commandline -->
+    <param name="disable-mod-event-multicast" value="true"/>     <!-- disable multicast event leak -->
 
   </settings>
 

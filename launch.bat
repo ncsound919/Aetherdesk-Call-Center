@@ -22,7 +22,7 @@ set "VITE_API_URL=http://127.0.0.1:8000"
 :: Kill old
 echo [1/4] Cleaning old processes...
 taskkill /F /IM "node.exe" 2>nul
-timeout /t 2 /nobreak >nul
+ping 127.0.0.1 -n 3 >nul
 
 cd /d C:\Users\User\Desktop\aetherdesk_scaffold
 
@@ -35,7 +35,7 @@ start "AetherDesk API Server" cmd /c "title API Server ^& color 0C ^& python -m 
 
 :: Wait for API
 echo [3/4] Waiting for API startup (10s)...
-timeout /t 10 /nobreak >nul
+ping 127.0.0.1 -n 11 >nul
 
 :: Start UI server in new console window
 echo [4/4] Starting UI Server on port 3001...
@@ -43,7 +43,7 @@ start "AetherDesk UI Server" cmd /c "title UI Server ^& color 0B ^& cd /d C:\Use
 
 echo.
 echo Waiting for UI startup (8s)...
-timeout /t 8 /nobreak >nul
+ping 127.0.0.1 -n 9 >nul
 
 echo.
 echo ============================================

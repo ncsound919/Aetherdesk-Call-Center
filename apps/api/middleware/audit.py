@@ -148,7 +148,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
                                     tenant_id, user_id, action, resource_type, request_id,
                                     "{}", json.dumps(new_values),
-                                    request.client.host if request.client else "0.0.0.0"
+                                    request.client.host if request.client else "0.0.0.0"  # nosec B104 — fallback IP for audit log
                                 )
                             except Exception as log_err:
                                 logger.error("async_audit_log_failed", error=str(log_err))
@@ -171,7 +171,7 @@ class AuditMiddleware(BaseHTTPMiddleware):
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         (tenant_id, user_id, action, resource_type, str(request_id),
                          "{}", json.dumps(new_values),
-                         request.client.host if request.client else "0.0.0.0",
+                         request.client.host if request.client else "0.0.0.0",  # nosec B104 — fallback IP for audit log
                          dt.datetime.now(dt.UTC).isoformat())
                     )
                     conn.commit()

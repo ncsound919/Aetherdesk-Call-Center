@@ -418,3 +418,90 @@ class TestPhoneValidation:
 
         with pytest.raises(ValidationError):
             LeadCreate(company_name="Test", phone="+1555-ABC-DEFG")
+
+
+class TestEscalationAlert:
+    @pytest.mark.asyncio
+    async def test_push_escalation_alert_high_severity(self):
+        from apps.api.routers.campaign import push_escalation_alert
+
+        mock_mgr = MagicMock()
+        mock_mgr.broadcast_to_queue = AsyncMock()
+        with patch("apps.api.routers.realtime.manager", mock_mgr):
+            await push_escalation_alert("CC-123", "Customer requested manager", "Agent-1")
+            mock_mgr.broadcast_to_queue.assert_called_once()
+            args = mock_mgr.broadcast_to_queue.call_args
+            assert args[0][0] == "default"
+            alert = args[0][1]
+            assert alert["type"] == "escalation_alert"
+            assert alert["severity"] == "high"
+            assert alert["call_sid"] == "CC-123"
+
+    @pytest.mark.asyncio
+    async def test_push_escalation_alert_medium_severity(self):
+        from apps.api.routers.campaign import push_escalation_alert
+
+        mock_mgr = MagicMock()
+        mock_mgr.broadcast_to_queue = AsyncMock()
+        with patch("apps.api.routers.realtime.manager", mock_mgr):
+            await push_escalation_alert("CC-456", "Technical issue", "Agent-2")
+            alert = mock_mgr.broadcast_to_queue.call_args[0][1]
+            assert alert["severity"] == "medium"
+
+
+class TestRunCampaign:
+    @pytest.mark.asyncio
+    async def test_run_campaign_all_calls_succeed(self):
+        from apps.api.routers.campaign import _run_campaign, CampaignLaunch
+
+        leads = [
+            {"id": "LEAD-1", "phone": "+15551111111", "company_name": "Acme"},
+            {"id": "LEAD-2", "phone": "+15552222222", "company_name": "Globex"},
+        ]
+        config = CampaignLaunch(profile_id="PROF-TEST", delay_between_calls=2.0)
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"call_sid": "CA-123"}
+        mock_http = AsyncMock()
+        mock_http.post.return_value = mock_response
+        mock_http.__aenter__.return_value = mock_http
+
+        with patch("apps.api.routers.campaign.db_context_sync") as mock_db, \
+             patch("apps.api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("apps.api.routers.campaign.httpx.AsyncClient", return_value=mock_http):
+            mock_conn = MagicMock()
+            mock_cursor = MagicMock()
+            mock_conn.cursor.return_value = mock_cursor
+            mock_db.return_value.__enter__.return_value = mock_conn
+
+            await _run_campaign(leads, config, "tenant-1")
+
+            assert mock_http.post.call_count == 2
+            update_queries = [c[0][0] for c in mock_cursor.execute.call_args_list]
+            ringing_updates = [q for q in update_queries if "status = 'ringing'" in q]
+            assert len(ringing_updates) == 2
+
+    @pytest.mark.asyncio
+    async def test_run_campaign_call_fails(self):
+        from apps.api.routers.campaign import _run_campaign, CampaignLaunch
+
+        leads = [{"id": "LEAD-1", "phone": "+15551111111", "company_name": "Acme"}]
+        config = CampaignLaunch(profile_id="PROF-TEST", delay_between_calls=2.0)
+
+        mock_http = AsyncMock()
+        mock_http.post.side_effect = Exception("Voice API unavailable")
+        mock_http.__aenter__.return_value = mock_http
+
+        with patch("apps.api.routers.campaign.db_context_sync") as mock_db, \
+             patch("apps.api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("apps.api.routers.campaign.httpx.AsyncClient", return_value=mock_http):
+            mock_conn = MagicMock()
+            mock_cursor = MagicMock()
+            mock_conn.cursor.return_value = mock_cursor
+            mock_db.return_value.__enter__.return_value = mock_conn
+
+            await _run_campaign(leads, config, "tenant-1")
+
+            update_queries = [c[0][0] for c in mock_cursor.execute.call_args_list]
+            assert any("status = 'failed'" in q for q in update_queries)
+            assert any("status = 'new'" in q for q in update_queries)

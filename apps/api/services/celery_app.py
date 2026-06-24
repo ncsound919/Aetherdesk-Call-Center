@@ -24,3 +24,5 @@ celery_app.conf.update(
     task_time_limit=360,
     result_expires=86400,
 )
+
+

@@ -64,3 +64,5 @@ class MCPClientManager:
         return f"MCP Tool {tool_name} failed: Server not responding or tool not found."
 
 mcp_manager = MCPClientManager()
+
+

@@ -37,6 +37,21 @@ async def websocket_calls(websocket: WebSocket, tenant_id: str, _=Depends(verify
                 await asyncio.sleep(1)
     except WebSocketDisconnect:
         logger.info(f"WebSocket disconnected for tenant {tenant_id}")
+        # Reconnection logic with exponential backoff
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await asyncio.sleep(2 ** attempt)
+                await websocket.accept()
+                if redis_client:
+                    pubsub = redis_client.pubsub()
+                    await pubsub.subscribe(f"calls:{tenant_id}")
+                    logger.info(f"Reconnected WebSocket for tenant {tenant_id}")
+                    break
+            except Exception as e:
+                logger.warning(f"Reconnection attempt {attempt + 1} failed: {e}")
+                if attempt == max_retries - 1:
+                    logger.error(f"Max reconnection attempts reached for tenant {tenant_id}")
     finally:
         if pubsub:
             await pubsub.unsubscribe(f"calls:{tenant_id}")
@@ -74,6 +89,22 @@ async def websocket_agent(websocket: WebSocket, agent_id: str):
 
     except WebSocketDisconnect:
         logger.info(f"Agent {agent_id} disconnected")
+        # Reconnection logic with exponential backoff
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                await asyncio.sleep(2 ** attempt)
+                await websocket.accept()
+                if redis_client:
+                    await redis_client.sadd("online_agents", agent_id)
+                    pubsub = redis_client.pubsub()
+                    await pubsub.subscribe(f"agent:{agent_id}:assignments")
+                    logger.info(f"Reconnected WebSocket for agent {agent_id}")
+                    break
+            except Exception as e:
+                logger.warning(f"Reconnection attempt {attempt + 1} failed: {e}")
+                if attempt == max_retries - 1:
+                    logger.error(f"Max reconnection attempts reached for agent {agent_id}")
     finally:
         if redis_client:
             await redis_client.srem("online_agents", agent_id)

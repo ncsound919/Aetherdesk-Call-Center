@@ -8,7 +8,7 @@ os.chdir(r"C:\Users\User\Desktop\aetherdesk_scaffold")
 
 # Environment for both servers
 env = os.environ.copy()
-env["ENCRYPTION_KEY"] = "REDACTED_ENCRYPTION_KEY_PLEASE_ROTATE="
+env["ENCRYPTION_KEY"] = "rqSRQd2JssHG3nhORTRC3CBaeUjqOqZ3D2BH2FX0l0k="
 env["JWT_SECRET"] = "test-websocket-secret"
 env["WEBSOCKET_SECRET_KEY"] = "test-websocket-secret"
 env["USE_POSTGRES"] = "false"

@@ -43,16 +43,16 @@ async def fonster_webhook(
     logger.info(f"Fonster webhook: {event_type} for call {call_id}")
 
     if event_type == "call.answered":
-        background_tasks.add_task(handle_fonster_webhook, call_id, "active", session_ref)
+        background_tasks.add_task(handle_fonster_webhook, request, call_id, "active", session_ref)
     elif event_type == "call.completed":
-        background_tasks.add_task(handle_fonster_webhook, call_id, "completed")
+        background_tasks.add_task(handle_fonster_webhook, request, call_id, "completed")
     elif event_type == "call.failed":
-        background_tasks.add_task(handle_fonster_webhook, call_id, "failed")
+        background_tasks.add_task(handle_fonster_webhook, request, call_id, "failed")
 
     return {"status": "ok"}
 
 
-async def handle_fonster_webhook(call_id: str, status: str, session_ref: str = None):
+async def handle_fonster_webhook(request: Request, call_id: str, status: str, session_ref: str = None):
     """Update call status in DB and notify via WebSocket/Redis"""
     logger.info(f"Call {call_id} status updated to {status}")
 
