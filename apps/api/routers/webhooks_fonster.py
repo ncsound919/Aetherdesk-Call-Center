@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 
-from apps.api.services.database import db_update_call_status
+from apps.api.services.database import update_call_status as db_update_call_status
 
 router = APIRouter(tags=["webhooks"])
 logger = logging.getLogger(__name__)
