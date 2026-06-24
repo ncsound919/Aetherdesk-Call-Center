@@ -24,6 +24,7 @@ dependencies = [
     "realtimetts>=0.6.0",
     "numpy>=1.24.0",
     "httpx>=0.25.0",
+    "stripe>=7.0.0",
     "langchain>=0.1.0",
     "langchain-community>=0.0.10",
     "chromadb>=0.4.0",
@@ -110,6 +111,26 @@ markers = [
     "e2e_core: Core E2E tests that gate every PR (no ML dependencies, deterministic)",
     "e2e_ml: ML-dependent E2E tests run nightly with pinned scientific deps",
 ]
+
+[tool.coverage.run]
+omit = [
+    "apps/api/services/celery_*.py",
+    "apps/api/services/mcp_client.py",
+    "apps/api/services/rag.py",
+    "apps/api/services/task_queue.py",
+    "apps/api/services/worker.py",
+    "apps/api/services/voice_profile_store.py",
+    "apps/api/services/db_migrations.py",
+    "apps/api/mock_voice_client.py",
+    "apps/api/fonoster_client.py",
+    "apps/api/twilio_client.py",
+    "apps/api/websocket_server.py",
+    "tests/*",
+]
+
+[tool.coverage.report]
+fail_under = 45
+skip_empty = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["apps"]
