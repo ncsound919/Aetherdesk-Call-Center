@@ -1,0 +1,16 @@
+p, admin, *, *
+p, supervisor, agents, read
+p, supervisor, agents, write
+p, supervisor, calls, read
+p, supervisor, calls, write
+p, supervisor, scripts, read
+p, supervisor, scripts, write
+p, supervisor, billing, read
+p, supervisor, analytics, read
+p, agent, calls, read
+p, agent, calls, transfer
+p, agent, scripts, read
+p, agent, knowledge, read
+p, viewer, *, read
+g, admin, supervisor
+g, supervisor, agent
