@@ -1,4 +1,3 @@
-from fastapi import HTTPException, status
 
 def create_api_error(code: str, message: str, details: str | None = None):
     return {
