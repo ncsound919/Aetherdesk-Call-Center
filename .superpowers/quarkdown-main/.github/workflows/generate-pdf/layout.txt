@@ -1,4 +1,0 @@
-latex
-minimal
-beamer
-hyperlegible

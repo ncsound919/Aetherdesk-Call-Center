@@ -1,5 +1,0 @@
-.text {underline} decoration:{underline}
-.text {overline} decoration:{overline}
-.text {underoverline} decoration:{underoverline}
-.text {strikethrough} decoration:{strikethrough}
-.text {all} decoration:{all}

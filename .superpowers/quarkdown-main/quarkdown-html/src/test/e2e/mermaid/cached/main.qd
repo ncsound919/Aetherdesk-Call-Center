@@ -1,4 +1,0 @@
-.repeat {5}
-    .mermaid
-        flowchart TD
-            A --> B
