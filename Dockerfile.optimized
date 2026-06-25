@@ -23,7 +23,7 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN uv pip install --system -r pyproject.toml
 
 # Copy application code for potential build steps
-COPY apps/ ./apps/
+COPY src/ ./src/
 COPY config/ ./config/
 COPY data/ ./data/
 
@@ -47,7 +47,7 @@ RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Copy application code
-COPY --chown=appuser:appuser apps/ ./apps/
+COPY --chown=appuser:appuser src/ ./src/
 COPY --chown=appuser:appuser config/ ./config/
 COPY --chown=appuser:appuser data/ ./data/
 
@@ -59,4 +59,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 EXPOSE 8000
 
 # Run application
-CMD ["uvicorn", "apps.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

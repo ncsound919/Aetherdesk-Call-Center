@@ -6,12 +6,14 @@ module.exports = defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   workers: 1,
-  reporter: 'html',
+  timeout: 30000,
+  reporter: [['html', { open: 'never' }], ['list']],
   use: {
-    baseURL: process.env.E2E_BASE_URL || 'http://localhost:8000',
+    baseURL: process.env.E2E_BASE_URL || 'http://localhost:3001',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
+    actionTimeout: 10000,
   },
   projects: [
     {
@@ -19,9 +21,4 @@ module.exports = defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:8000',
-    reuseExistingServer: !process.env.CI,
-  },
 });

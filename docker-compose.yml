@@ -161,7 +161,7 @@ services:
   # API Gateway / SaaS Platform
   api-gateway:
     build:
-      context: .                          # project root — preserves apps.api package path
+      context: .                          # project root — preserves api package path
       dockerfile: Dockerfile.optimized    # multi-stage UV-based optimized build
     container_name: aetherdesk-api
     restart: unless-stopped
@@ -196,11 +196,11 @@ services:
   # Celery Worker — async task processing
   celery-worker:
     build:
-      context: .                          # project root — preserves apps.api package path
+      context: .                          # project root — preserves api package path
       dockerfile: Dockerfile.optimized
     container_name: aetherdesk-celery
     restart: unless-stopped
-    command: celery -A apps.api.services.celery_app worker --loglevel=info --concurrency=4
+    command: celery -A src.api.services.celery_app worker --loglevel=info --concurrency=4
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/aetherdesk
       REDIS_URL: redis://redis:6379
@@ -222,11 +222,11 @@ services:
   # Celery Beat — scheduled task scheduler
   celery-beat:
     build:
-      context: .                          # project root — preserves apps.api package path
+      context: .                          # project root — preserves api package path
       dockerfile: Dockerfile.optimized
     container_name: aetherdesk-celery-beat
     restart: unless-stopped
-    command: celery -A apps.api.services.celery_app beat --loglevel=info
+    command: celery -A src.api.services.celery_app beat --loglevel=info
     environment:
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/aetherdesk
       REDIS_URL: redis://redis:6379
@@ -243,6 +243,97 @@ services:
           cpus: '0.5'
           memory: 512M
 
+  # ClickHouse — high-volume call analytics database
+  clickhouse:
+    image: clickhouse/clickhouse-server:latest
+    container_name: aetherdesk-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: aetherdesk
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-default}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-}
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+    ports:
+      - "8123:8123"   # HTTP interface
+      - "9000:9000"   # Native protocol
+    networks:
+      - aetherdesk-net
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+
+  # Metabase — embeddable analytics dashboards
+  metabase:
+    image: metabase/metabase:latest
+    container_name: aetherdesk-metabase
+    restart: unless-stopped
+    environment:
+      MB_DB_TYPE: h2
+      MB_EMBEDDING_APP_ORIGIN: http://localhost:3001
+      MB_EMBDING_APP_ALLOW_EMBEDDING: "true"
+    ports:
+      - "3002:3000"
+    networks:
+      - aetherdesk-net
+    volumes:
+      - metabase-data:/metabase-data
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: aetherdesk-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - aetherdesk-net
+    resources:
+      limits:
+        cpus: "1.0"
+        memory: 1G
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: aetherdesk-grafana
+    ports:
+      - "3003:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: aetherdesk
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards
+    networks:
+      - aetherdesk-net
+    resources:
+      limits:
+        cpus: "1.0"
+        memory: 1G
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
 volumes:
   db-data:
     driver: local
@@ -250,6 +341,12 @@ volumes:
     driver: local
   recordings:
     driver: local
+  clickhouse-data:
+    driver: local
+  metabase-data:
+    driver: local
+  prometheus_data:
+  grafana_data:
 
 networks:
   aetherdesk-net:
