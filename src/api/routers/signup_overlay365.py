@@ -1,27 +1,35 @@
 """Public signup endpoint for Overlay 365 Aetherdesk trial."""
 import os
 import logging
-from typing import Optional
+from typing import Optional, Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/signup", tags=["signup"])
+
+# Rate limiter: 5 signups per IP per hour
+limiter = Limiter(key_func=get_remote_address)
+
+VALID_TIERS = Literal["starter", "pro", "scale", "enterprise"]
 
 
 TIERS = [
     {"id": "starter", "name": "Starter", "price": 99, "features": ["1 AI agent", "100 min/mo", "Basic scripts"]},
     {"id": "pro", "name": "Pro", "price": 299, "features": ["5 AI agents", "1000 min/mo", "Custom scripts", "Blocklabor lite"]},
     {"id": "scale", "name": "Scale", "price": 999, "features": ["Unlimited agents", "Full Blocklabor", "AgentBrowser", "Claw Protect"]},
+    {"id": "enterprise", "name": "Enterprise", "price": 5000, "features": ["Everything in Scale", "Custom AI training", "Dedicated support", "SLA"]},
 ]
 
 
 class SignupRequest(BaseModel):
     email: EmailStr
     company_name: str = Field(..., min_length=1, max_length=200)
-    phone: Optional[str] = None
-    tier: str = Field(default="starter")
+    phone: Optional[str] = Field(default=None, max_length=20)
+    tier: VALID_TIERS = Field(default="starter")
 
 
 class SignupResponse(BaseModel):
@@ -38,12 +46,22 @@ async def get_pricing_tiers():
 
 
 @router.post("/create-checkout", response_model=SignupResponse)
-async def create_checkout_session(request: SignupRequest):
+@limiter.limit("5/hour")
+async def create_checkout_session(
+    request: Request,
+    body: SignupRequest,
+):
+    """Create Stripe checkout session for Overlay 365 Aetherdesk trial."""
+    return await _create_checkout(body)
+
+
+async def _create_checkout(request: SignupRequest):
     """Create Stripe checkout session for Overlay 365 Aetherdesk trial."""
     price_map = {
         "starter": os.getenv("STRIPE_PRICE_STARTER"),
         "pro": os.getenv("STRIPE_PRICE_PRO"),
         "scale": os.getenv("STRIPE_PRICE_SCALE"),
+        "enterprise": os.getenv("STRIPE_PRICE_ENTERPRISE"),
     }
     price_id = price_map.get(request.tier)
     if not price_id:
@@ -80,12 +98,16 @@ async def create_checkout_session(request: SignupRequest):
             success_url=os.getenv("STRIPE_SUCCESS_URL", "http://localhost:5173/billing?success=true"),
             cancel_url=os.getenv("STRIPE_CANCEL_URL", "http://localhost:5173/billing?canceled=true"),
         )
+        logger.info(f"Stripe checkout created: email={request.email}, tier={request.tier}")
         return SignupResponse(
             status="success",
             checkout_url=checkout_session.url,
             customer_id=checkout_session.customer,
             tier=request.tier,
         )
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe checkout failed: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Checkout creation failed")
     except Exception as e:
-        logger.error(f"Stripe checkout failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Checkout creation failed: {str(e)}")
+        logger.error(f"Unexpected checkout error: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Checkout creation failed")
