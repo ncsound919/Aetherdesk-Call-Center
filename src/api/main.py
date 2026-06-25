@@ -483,6 +483,10 @@ app.include_router(platform_ops.router, prefix="/api/v1")
 from api.routers.signup_overlay365 import router as signup_overlay365_router
 app.include_router(signup_overlay365_router)
 
+# Overlay 365 Blocklabor integration (no prefix - already has /api/v1/blocklabor)
+from api.routers.blocklabor_overlay365 import router as blocklabor_overlay365_router
+app.include_router(blocklabor_overlay365_router)
+
 
 # =============================================================================
 # Auth Routes (must be after CORS, before middleware)
