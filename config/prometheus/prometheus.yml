@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'aetherdesk-api'
+    static_configs:
+      - targets: ['aetherdesk-api:8000']
+    metrics_path: '/metrics'
+    scrape_interval: 10s
+
+  - job_name: 'aetherdesk-redis'
+    static_configs:
+      - targets: ['aetherdesk-redis:6379']
+    scrape_interval: 30s
+
+  - job_name: 'aetherdesk-db'
+    static_configs:
+      - targets: ['aetherdesk-db:5432']
+    scrape_interval: 30s
+
+  - job_name: 'aetherdesk-freeswitch'
+    static_configs:
+      - targets: ['aetherdesk-freeswitch:8021']
+    scrape_interval: 30s
