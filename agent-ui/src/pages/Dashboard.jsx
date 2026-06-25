@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { useSocket } from '../context/SocketContext'
 import { useNavigate } from 'react-router-dom'
@@ -13,6 +14,7 @@ import {
 import { toast } from 'sonner'
 
 export default function Dashboard() {
+  const { t } = useTranslation()
   const { tenant } = useAuth()
   const navigate = useNavigate()
   const [stats, setStats] = useState({
@@ -73,7 +75,7 @@ export default function Dashboard() {
 
   async function handleMakeCall(e) {
     e.preventDefault()
-    if (!callForm.number || !callForm.agentId) { toast.error('Fill in number and agent'); return }
+    if (!callForm.number || !callForm.agentId) { toast.error(t('dashboard.fillInRequired', 'Fill in number and agent')); return }
     setCalling(true)
     try {
       const num = callForm.number.startsWith('+') ? callForm.number : `+1${callForm.number.replace(/\D/g, '')}`
@@ -90,12 +92,12 @@ export default function Dashboard() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-ink tracking-tight">Dashboard</h1>
-          <p className="text-sm text-ink-muted mt-0.5">Overview of your call center operations</p>
+          <h1 className="text-2xl font-semibold text-ink tracking-tight">{t('dashboard.title')}</h1>
+          <p className="text-sm text-ink-muted mt-0.5">{t('dashboard.subtitle')}</p>
         </div>
-        <button onClick={() => setShowCallModal(true)} className="btn-primary">
+        <button onClick={() => setShowCallModal(true)} className="btn-primary" aria-label={t('dashboard.makeACall')}>
           <PhoneCall className="h-4 w-4" />
-          Make a Call
+          {t('dashboard.makeACall')}
         </button>
       </div>
 
@@ -103,14 +105,14 @@ export default function Dashboard() {
       {!hasCalls && (
         <div className="mb-6 card overflow-hidden">
           <div className="bg-gradient-to-r from-primary-dark to-primary p-5 text-white">
-            <h2 className="text-lg font-semibold">Welcome to AetherDesk</h2>
-            <p className="text-sm text-white/60 mt-1">Get started with these quick steps</p>
+            <h2 className="text-lg font-semibold">{t('dashboard.welcomeTitle')}</h2>
+            <p className="text-sm text-white/60 mt-1">{t('dashboard.welcomeDesc')}</p>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-hairline">
             {[
-              { done: hasAgents, label: 'Create an Agent', desc: 'Set up an AI agent to handle calls', action: () => navigate('/agents'), btn: 'Add Agent' },
-              { done: false, label: 'Make a Test Call', desc: 'Dial a number to test the system', action: () => setShowCallModal(true), btn: 'Call Now' },
-              { done: false, label: 'Configure Settings', desc: 'Set up telephony and compliance', action: () => navigate('/settings'), btn: 'Open Settings' },
+              { done: hasAgents, label: t('dashboard.createAgent'), desc: t('dashboard.createAgentDesc'), action: () => navigate('/agents'), btn: t('dashboard.addAgent') },
+              { done: false, label: t('dashboard.makeTestCall'), desc: t('dashboard.makeTestCallDesc'), action: () => setShowCallModal(true), btn: t('dashboard.callNow') },
+              { done: false, label: t('dashboard.configureSettings'), desc: t('dashboard.configureSettingsDesc'), action: () => navigate('/settings'), btn: t('dashboard.openSettings') },
             ].map((step, i) => (
               <div key={i} className="flex items-start gap-3 p-5">
                 {step.done ? <CheckCircle2 className="h-5 w-5 text-call-green mt-0.5 shrink-0" /> : <Circle className="h-5 w-5 text-ink-subtle mt-0.5 shrink-0" />}
@@ -128,15 +130,17 @@ export default function Dashboard() {
       )}
 
       {/* Stats */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <StatCard title="Active Calls" value={stats.activeCalls} icon={<PhoneIncoming className="h-5 w-5" />} color="text-call-green" bgColor="bg-call-green-soft" />
-        <StatCard title="Total Calls Today" value={stats.totalCallsToday} icon={<BarChart3 className="h-5 w-5" />} color="text-accent" bgColor="bg-accent-soft" />
-        <StatCard title="Avg Call Duration" value={stats.avgCallDuration} icon={<Clock className="h-5 w-5" />} color="text-purple-600" bgColor="bg-purple-50" />
-        <StatCard title="Available Agents" value={`${stats.availableAgents} / ${stats.totalAgents}`} icon={<Users className="h-5 w-5" />} color="text-telecom-amber" bgColor="bg-call-amber-soft" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6" role="region" aria-label={t('dashboard.title')}>
+        <StatCard title={t('dashboard.activeCalls')} value={stats.activeCalls} icon={<PhoneIncoming className="h-5 w-5" />} color="text-call-green" bgColor="bg-call-green-soft" />
+        <StatCard title={t('dashboard.totalCallsToday')} value={stats.totalCallsToday} icon={<BarChart3 className="h-5 w-5" />} color="text-accent" bgColor="bg-accent-soft" />
+        <StatCard title={t('dashboard.avgCallDuration')} value={stats.avgCallDuration} icon={<Clock className="h-5 w-5" />} color="text-purple-600" bgColor="bg-purple-50" />
+        <StatCard title={t('dashboard.availableAgents')} value={`${stats.availableAgents} / ${stats.totalAgents}`} icon={<Users className="h-5 w-5" />} color="text-telecom-amber" bgColor="bg-call-amber-soft" />
       </div>
 
       {/* Activity Feed */}
-      <RecentCalls calls={recentCalls} />
+      <div aria-live="polite">
+        <RecentCalls calls={recentCalls} />
+      </div>
 
       {/* Make a Call Modal */}
       {showCallModal && (
@@ -147,34 +151,34 @@ export default function Dashboard() {
                 <div className="h-9 w-9 rounded-xl bg-accent-soft flex items-center justify-center">
                   <PhoneCall className="h-4 w-4 text-accent" />
                 </div>
-                <h2 className="text-lg font-semibold text-ink">Make a Call</h2>
+                <h2 className="text-lg font-semibold text-ink">{t('dashboard.callModalTitle')}</h2>
               </div>
               <button onClick={() => setShowCallModal(false)} className="p-1.5 rounded-lg hover:bg-surface-hover">
                 <X className="h-5 w-5 text-ink-muted" />
               </button>
             </div>
-            <form onSubmit={handleMakeCall} className="space-y-4">
+            <form onSubmit={handleMakeCall} className="space-y-4" role="form" aria-label={t('dashboard.callModalTitle')}>
               <div>
-                <label className="block text-sm font-medium text-ink mb-1.5">Phone Number</label>
-                <input type="tel" placeholder="+1 (984) 365-6059" value={callForm.number}
+                <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="call-number">{t('dashboard.phoneNumber')}</label>
+                <input id="call-number" type="tel" placeholder={t('dashboard.phonePlaceholder')} value={callForm.number}
                   onChange={(e) => setCallForm({ ...callForm, number: e.target.value })}
-                  className="input-field" required />
-                <p className="text-xs text-ink-subtle mt-1">Enter a phone number with area code</p>
+                  className="input-field" required aria-label={t('dashboard.phoneNumber')} />
+                <p className="text-xs text-ink-subtle mt-1">{t('dashboard.phoneHint')}</p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-ink mb-1.5">Assign To</label>
-                <select value={callForm.agentId} onChange={(e) => setCallForm({ ...callForm, agentId: e.target.value })}
-                  className="input-field" required>
-                  <option value="">Select an agent...</option>
+                <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="call-agent">{t('dashboard.assignTo')}</label>
+                <select id="call-agent" value={callForm.agentId} onChange={(e) => setCallForm({ ...callForm, agentId: e.target.value })}
+                  className="input-field" required aria-label={t('dashboard.assignTo')}>
+                  <option value="">{t('dashboard.selectAgent')}</option>
                   {agents.map((a) => <option key={a.id} value={a.id}>{a.name} ({a.status})</option>)}
                 </select>
-                {agents.length === 0 && <p className="text-xs text-call-amber mt-1">No agents available. Create one in Agent Management.</p>}
+                {agents.length === 0 && <p className="text-xs text-call-amber mt-1">{t('dashboard.noAgents')}</p>}
               </div>
               <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowCallModal(false)} className="btn-secondary flex-1">Cancel</button>
-                <button type="submit" disabled={calling || agents.length === 0} className="btn-primary flex-1">
+                <button type="button" onClick={() => setShowCallModal(false)} className="btn-secondary flex-1">{t('dashboard.cancel')}</button>
+                <button type="submit" disabled={calling || agents.length === 0} className="btn-primary flex-1" aria-label={calling ? t('dashboard.calling') : t('dashboard.startCall')}>
                   {calling ? <Loader2 className="h-4 w-4 animate-spin" /> : <PhoneCall className="h-4 w-4" />}
-                  {calling ? 'Calling...' : 'Start Call'}
+                  {calling ? t('dashboard.calling') : t('dashboard.startCall')}
                 </button>
               </div>
             </form>

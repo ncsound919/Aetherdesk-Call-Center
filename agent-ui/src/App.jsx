@@ -2,7 +2,10 @@ import React, { useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import { Menu } from 'lucide-react'
+import './i18n'
 import Sidebar from './components/Sidebar'
+import AccessibilityWrapper from './components/AccessibilityWrapper'
+import LanguageSwitcher from './components/LanguageSwitcher'
 import Dashboard from './pages/Dashboard'
 import AgentManagement from './pages/AgentManagement'
 import CallLogs from './pages/CallLogs'
@@ -19,6 +22,32 @@ import LeadsPage from './pages/LeadsPage'
 import ScriptsPage from './pages/ScriptsPage'
 import ScriptEditorPage from './pages/ScriptEditorPage'
 import LeadImportPage from './pages/LeadImportPage'
+import WFMDashboard from './pages/WFMDashboard'
+import QADashboard from './pages/QADashboard'
+import VoiceQualityDashboard from './pages/VoiceQualityDashboard'
+import AIOpsDashboard from './pages/AIOpsDashboard'
+import CXDashboard from './pages/CXDashboard'
+import IntegrationsDashboard from './pages/IntegrationsDashboard'
+import SMSDashboard from './pages/SMSDashboard'
+import ChatDashboard from './pages/ChatDashboard'
+import AIWorkspace from './pages/AIWorkspace'
+import DataGovernanceDashboard from './pages/DataGovernanceDashboard'
+import SupervisorWallboard from './pages/SupervisorWallboard'
+import TrainingDashboard from './pages/TrainingDashboard'
+import WFMMetricsDashboard from './pages/WFMMetricsDashboard'
+import BusinessContinuityDashboard from './pages/BusinessContinuityDashboard'
+import SecurityDashboard from './pages/SecurityDashboard'
+import ReliabilityDashboard from './pages/ReliabilityDashboard'
+import FailoverDashboard from './pages/FailoverDashboard'
+import ConversationQualityDashboard from './pages/ConversationQualityDashboard'
+import APIVersionsDashboard from './pages/APIVersionsDashboard'
+import CustomerPortalPreview from './pages/CustomerPortalPreview'
+import AIPlatformDashboard from './pages/AIPlatformDashboard'
+import DeveloperDashboard from './pages/DeveloperDashboard'
+import CDPDashboard from './pages/CDPDashboard'
+import VerticalsDashboard from './pages/VerticalsDashboard'
+import WhiteLabelDashboard from './pages/WhiteLabelDashboard'
+import SelfServeSetup from './pages/SelfServeSetup'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { SocketProvider } from './context/SocketContext'
 
@@ -53,11 +82,12 @@ function AppContent() {
   }
 
   return (
+    <AccessibilityWrapper>
     <div className="flex h-screen overflow-hidden bg-canvas">
       <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col min-w-0">
         {/* Mobile header */}
-        <header className="lg:hidden flex items-center h-14 px-4 border-b border-hairline bg-white">
+        <header className="lg:hidden flex items-center h-14 px-4 border-b border-hairline bg-white" role="banner">
           <button onClick={() => setSidebarOpen(true)} className="p-2 -ml-2 rounded-lg hover:bg-surface-hover">
             <Menu className="h-5 w-5 text-ink" />
           </button>
@@ -67,8 +97,11 @@ function AppContent() {
             </div>
             <span className="font-semibold text-sm text-ink">AetherDesk</span>
           </div>
+          <div className="ml-auto">
+            <LanguageSwitcher />
+          </div>
         </header>
-        <main className="flex-1 overflow-y-auto">
+        <main id="main-content" className="flex-1 overflow-y-auto" role="main" aria-label="Main content">
           <Routes>
             <Route path="/" element={<Dashboard />} />
             <Route path="/analytics" element={<Analytics />} />
@@ -81,6 +114,32 @@ function AppContent() {
             <Route path="/scripts" element={<ScriptsPage />} />
             <Route path="/scripts/new" element={<ScriptEditorPage />} />
             <Route path="/scripts/:id" element={<ScriptEditorPage />} />
+            <Route path="/wfm" element={<WFMDashboard />} />
+            <Route path="/qa" element={<QADashboard />} />
+            <Route path="/voice-quality" element={<VoiceQualityDashboard />} />
+            <Route path="/ai-ops" element={<AIOpsDashboard />} />
+            <Route path="/cx" element={<CXDashboard />} />
+            <Route path="/integrations" element={<IntegrationsDashboard />} />
+            <Route path="/sms" element={<SMSDashboard />} />
+            <Route path="/chat" element={<ChatDashboard />} />
+            <Route path="/ai-workspace" element={<AIWorkspace />} />
+            <Route path="/data-governance" element={<DataGovernanceDashboard />} />
+            <Route path="/supervisor" element={<SupervisorWallboard />} />
+            <Route path="/wfm-metrics" element={<WFMMetricsDashboard />} />
+            <Route path="/training" element={<TrainingDashboard />} />
+            <Route path="/business-continuity" element={<BusinessContinuityDashboard />} />
+            <Route path="/security-hardening" element={<SecurityDashboard />} />
+            <Route path="/reliability" element={<ReliabilityDashboard />} />
+            <Route path="/failover" element={<FailoverDashboard />} />
+            <Route path="/conversation-quality" element={<ConversationQualityDashboard />} />
+            <Route path="/api-versions" element={<APIVersionsDashboard />} />
+            <Route path="/customer-portal" element={<CustomerPortalPreview />} />
+            <Route path="/ai-platform" element={<AIPlatformDashboard />} />
+            <Route path="/developer" element={<DeveloperDashboard />} />
+            <Route path="/cdp" element={<CDPDashboard />} />
+            <Route path="/verticals" element={<VerticalsDashboard />} />
+            <Route path="/branding" element={<WhiteLabelDashboard />} />
+            <Route path="/onboarding" element={<SelfServeSetup />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignupPage />} />
@@ -93,11 +152,14 @@ function AppContent() {
       </div>
       <Toaster
         position="top-right"
+        tabIndex={0}
+        aria-label="Notifications"
         toastOptions={{
           style: { fontFamily: 'Inter, sans-serif', borderRadius: '12px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.06)' },
         }}
       />
     </div>
+    </AccessibilityWrapper>
   )
 }
 

@@ -70,11 +70,16 @@ export function SocketProvider({ children }) {
   }, [])
 
   useEffect(() => {
+    const handleCallStatus = (e) => window.dispatchEvent(new CustomEvent('call:status', { detail: e.detail }))
+    const handleCallAssigned = (e) => window.dispatchEvent(new CustomEvent('call:assigned', { detail: e.detail }))
+    window.addEventListener('call:status', handleCallStatus)
+    window.addEventListener('call:assigned', handleCallAssigned)
+
     connectTenantSocket()
     return () => {
+      window.removeEventListener('call:status', handleCallStatus)
+      window.removeEventListener('call:assigned', handleCallAssigned)
       disconnect()
-      window.removeEventListener('call:status', () => {})
-      window.removeEventListener('call:assigned', () => {})
     }
   }, [connectTenantSocket, disconnect])
 
