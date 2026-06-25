@@ -86,7 +86,7 @@ class TestIntentClassifier:
 
     def test_classify_billing_invoice(self, client, _verify_ml_deps):
         with unittest.mock.patch(
-            "apps.api.routers.voice.classifier.classify_with_fallback",
+            "api.routers.voice.classifier.classify_with_fallback",
             new_callable=unittest.mock.AsyncMock,
         ) as mock_c:
             mock_c.return_value = type("R", (), {
@@ -104,7 +104,7 @@ class TestIntentClassifier:
             assert resp.json()["intent"] == "billing_invoice"
 
     def test_keyword_fallback_billing(self, client, _verify_ml_deps):
-        from apps.api.services.intent_classifier import classifier
+        from api.services.intent_classifier import classifier
         import asyncio
         result = asyncio.run(classifier.classify_with_fallback("I need my invoice"))
         assert result.intent is not None
@@ -118,12 +118,12 @@ class TestTTSService:
     """TTS engine initialization and fallback"""
 
     def test_tts_initialization(self, client, _verify_ml_deps):
-        from apps.api.services.tts import TTSService
+        from api.services.tts import TTSService
         svc = TTSService(engines="edge", voice="en-US-AriaNeural")
         assert svc.engines == ["edge"]
 
     def test_tts_unknown_engine_raises(self, client, _verify_ml_deps):
-        from apps.api.services.tts import TTSService
+        from api.services.tts import TTSService
         svc = TTSService()
         import asyncio
         with pytest.raises(ValueError, match="Unknown TTS engine"):

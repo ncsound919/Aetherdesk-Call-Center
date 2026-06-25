@@ -15,13 +15,13 @@ class TestProtocolsUpload:
         # Create temporary directories for uploads and protocols
         with tempfile.TemporaryDirectory() as upload_dir, tempfile.TemporaryDirectory() as proto_dir:
             # Patch the constants to use temp directories
-            with patch("apps.api.routers.protocols.UPLOAD_DIR", upload_dir), \
-                 patch("apps.api.routers.protocols.PROTO_DIR", proto_dir):
+            with patch("api.routers.protocols.UPLOAD_DIR", upload_dir), \
+                 patch("api.routers.protocols.PROTO_DIR", proto_dir):
                 yield upload_dir, proto_dir
 
     @pytest.mark.asyncio
     async def test_upload_csv_success(self, temp_dirs):
-        from apps.api.routers.protocols import upload_csv
+        from api.routers.protocols import upload_csv
 
         upload_dir, proto_dir = temp_dirs
 
@@ -31,7 +31,7 @@ class TestProtocolsUpload:
         mock_file.filename = "test_protocol.csv"
         mock_file.read.return_value = csv_content
 
-        with patch("apps.api.routers.protocols.verify_api_key", return_value="tenant-1"):
+        with patch("api.routers.protocols.verify_api_key", return_value="tenant-1"):
             result = await upload_csv(mock_file, tenant_id="tenant-1")
 
         assert result["ok"] is True
@@ -50,12 +50,12 @@ class TestProtocolsUpload:
 
     @pytest.mark.asyncio
     async def test_upload_csv_invalid_extension(self):
-        from apps.api.routers.protocols import upload_csv
+        from api.routers.protocols import upload_csv
 
         mock_file = AsyncMock(spec=UploadFile)
         mock_file.filename = "test_protocol.txt"
 
-        with patch("apps.api.routers.protocols.verify_api_key", return_value="tenant-1"), \
+        with patch("api.routers.protocols.verify_api_key", return_value="tenant-1"), \
              pytest.raises(HTTPException) as exc:
             await upload_csv(mock_file, tenant_id="tenant-1")
         
@@ -64,12 +64,12 @@ class TestProtocolsUpload:
 
     @pytest.mark.asyncio
     async def test_upload_csv_invalid_filename(self):
-        from apps.api.routers.protocols import upload_csv
+        from api.routers.protocols import upload_csv
 
         mock_file = AsyncMock(spec=UploadFile)
         mock_file.filename = "test@protocol.csv"
 
-        with patch("apps.api.routers.protocols.verify_api_key", return_value="tenant-1"), \
+        with patch("api.routers.protocols.verify_api_key", return_value="tenant-1"), \
              pytest.raises(HTTPException) as exc:
             await upload_csv(mock_file, tenant_id="tenant-1")
         
@@ -78,7 +78,7 @@ class TestProtocolsUpload:
 
     @pytest.mark.asyncio
     async def test_upload_csv_with_options(self, temp_dirs):
-        from apps.api.routers.protocols import upload_csv
+        from api.routers.protocols import upload_csv
 
         upload_dir, proto_dir = temp_dirs
 
@@ -88,7 +88,7 @@ class TestProtocolsUpload:
         mock_file.filename = "test_options.csv"
         mock_file.read.return_value = csv_content
 
-        with patch("apps.api.routers.protocols.verify_api_key", return_value="tenant-1"):
+        with patch("api.routers.protocols.verify_api_key", return_value="tenant-1"):
             result = await upload_csv(mock_file, tenant_id="tenant-1")
 
         assert result["ok"] is True
@@ -106,12 +106,12 @@ class TestProtocolsUpload:
 
     @pytest.mark.asyncio
     async def test_upload_csv_path_traversal_attempt(self):
-        from apps.api.routers.protocols import upload_csv
+        from api.routers.protocols import upload_csv
 
         mock_file = AsyncMock(spec=UploadFile)
         mock_file.filename = "../../malicious.csv"
 
-        with patch("apps.api.routers.protocols.verify_api_key", return_value="tenant-1"), \
+        with patch("api.routers.protocols.verify_api_key", return_value="tenant-1"), \
              pytest.raises(HTTPException) as exc:
             await upload_csv(mock_file, tenant_id="tenant-1")
         
@@ -121,14 +121,14 @@ class TestProtocolsUpload:
 
     @pytest.mark.asyncio
     async def test_upload_csv_path_traversal_in_tenant_id(self, temp_dirs):
-        from apps.api.routers.protocols import upload_csv
+        from api.routers.protocols import upload_csv
 
         csv_content = b"node,prompt\nstart,Welcome\n"
         mock_file = AsyncMock(spec=UploadFile)
         mock_file.filename = "safe_name.csv"
         mock_file.read.return_value = csv_content
 
-        with patch("apps.api.routers.protocols.verify_api_key", return_value="../../malicious"), \
+        with patch("api.routers.protocols.verify_api_key", return_value="../../malicious"), \
              pytest.raises(HTTPException) as exc:
             await upload_csv(mock_file, tenant_id="../../malicious")
 
@@ -137,7 +137,7 @@ class TestProtocolsUpload:
 
     @pytest.mark.asyncio
     async def test_upload_csv_tenant_isolation(self, temp_dirs):
-        from apps.api.routers.protocols import upload_csv
+        from api.routers.protocols import upload_csv
 
         upload_dir, proto_dir = temp_dirs
 
@@ -148,11 +148,11 @@ class TestProtocolsUpload:
         mock_file.read.return_value = csv_content
 
         # Upload for tenant-1
-        with patch("apps.api.routers.protocols.verify_api_key", return_value="tenant-1"):
+        with patch("api.routers.protocols.verify_api_key", return_value="tenant-1"):
             result1 = await upload_csv(mock_file, tenant_id="tenant-1")
 
         # Upload for tenant-2
-        with patch("apps.api.routers.protocols.verify_api_key", return_value="tenant-2"):
+        with patch("api.routers.protocols.verify_api_key", return_value="tenant-2"):
             result2 = await upload_csv(mock_file, tenant_id="tenant-2")
 
         # Verify tenant isolation

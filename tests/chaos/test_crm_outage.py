@@ -2,8 +2,8 @@ import asyncio
 import unittest
 from unittest.mock import MagicMock, patch
 
-from apps.api.services.actions import Actions
-from apps.api.services.orchestrator import Orchestrator
+from api.services.actions import Actions
+from api.services.orchestrator import Orchestrator
 from tests.eval_utils import AARFEngine
 
 

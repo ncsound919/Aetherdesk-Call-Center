@@ -15,7 +15,7 @@ import pytest
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with just the health router."""
-    from apps.api.routers.health import router
+    from api.routers.health import router
 
     application = FastAPI()
     application.include_router(router)
@@ -44,8 +44,8 @@ class TestHealthEndpoint:
 
         Patching USE_POSTGRES to True so the DB check runs and succeeds.
         """
-        with patch("apps.api.routers.health.USE_POSTGRES", True), \
-             patch("apps.api.routers.health.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
+        with patch("api.routers.health.USE_POSTGRES", True), \
+             patch("api.routers.health.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
 
             mock_pool = AsyncMock()
             mock_pool.fetchval = AsyncMock(return_value=1)
@@ -84,7 +84,7 @@ class TestHealthEndpoint:
     def test_health_no_fonster_client(self, client):
         """Health handles missing fonster_client gracefully."""
         # Create a fresh app without fonster_client
-        from apps.api.routers.health import router
+        from api.routers.health import router
 
         app_no_fonster = FastAPI()
         app_no_fonster.include_router(router)
@@ -100,8 +100,8 @@ class TestHealthEndpoint:
 
     def test_health_db_disconnected_when_use_postgres(self, client):
         """Health returns degraded when PostgreSQL SELECT 1 fails."""
-        with patch("apps.api.routers.health.USE_POSTGRES", True), \
-             patch("apps.api.routers.health.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
+        with patch("api.routers.health.USE_POSTGRES", True), \
+             patch("api.routers.health.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
 
             mock_pool = AsyncMock()
             mock_pool.fetchval = AsyncMock(side_effect=Exception("Connection refused"))
@@ -116,8 +116,8 @@ class TestHealthEndpoint:
 
     def test_health_db_connected_when_use_postgres(self, client):
         """Health returns healthy when PostgreSQL pool is available."""
-        with patch("apps.api.routers.health.USE_POSTGRES", True), \
-             patch("apps.api.routers.health.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
+        with patch("api.routers.health.USE_POSTGRES", True), \
+             patch("api.routers.health.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
 
             mock_pool = AsyncMock()
             mock_pool.fetchval = AsyncMock(return_value=1)
@@ -133,8 +133,8 @@ class TestHealthEndpoint:
 
     def test_health_db_disconnected_no_pool(self, client):
         """Health returns disconnected when get_pg_pool returns None."""
-        with patch("apps.api.routers.health.USE_POSTGRES", True), \
-             patch("apps.api.routers.health.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
+        with patch("api.routers.health.USE_POSTGRES", True), \
+             patch("api.routers.health.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
 
             mock_get_pool.return_value = None
 

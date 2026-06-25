@@ -13,7 +13,7 @@ import pytest
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with SecurityHeadersMiddleware."""
-    from apps.api.middleware.security import SecurityHeadersMiddleware
+    from api.middleware.security import SecurityHeadersMiddleware
 
     application = FastAPI()
     application.add_middleware(SecurityHeadersMiddleware)
@@ -111,7 +111,7 @@ class TestSecurityHeadersMiddleware:
 
     def test_headers_are_not_overwritten_by_route(self):
         """Route handler cannot overwrite security headers (middleware sets after call_next)."""
-        from apps.api.middleware.security import SecurityHeadersMiddleware
+        from api.middleware.security import SecurityHeadersMiddleware
 
         app2 = FastAPI()
         app2.add_middleware(SecurityHeadersMiddleware)

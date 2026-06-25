@@ -4,13 +4,13 @@ import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from apps.api.services.auth import verify_tenant_access, get_current_user
+from api.services.auth import verify_tenant_access, get_current_user
 
 
 class TestBuildAgentResponse:
     @pytest.mark.asyncio
     async def test_build_agent_response_basic(self):
-        from apps.api.routers.agents import build_agent_response
+        from api.routers.agents import build_agent_response
 
         agent_data = {
             "id": "A-1",
@@ -42,7 +42,7 @@ class TestBuildAgentResponse:
 
     @pytest.mark.asyncio
     async def test_build_agent_response_parses_json_skills(self):
-        from apps.api.routers.agents import build_agent_response
+        from api.routers.agents import build_agent_response
 
         agent_data = {
             "id": "A-2",
@@ -56,7 +56,7 @@ class TestBuildAgentResponse:
 
     @pytest.mark.asyncio
     async def test_build_agent_response_handles_list_skills(self):
-        from apps.api.routers.agents import build_agent_response
+        from api.routers.agents import build_agent_response
 
         agent_data = {
             "id": "A-3",
@@ -69,7 +69,7 @@ class TestBuildAgentResponse:
 
     @pytest.mark.asyncio
     async def test_build_agent_response_empty_skills(self):
-        from apps.api.routers.agents import build_agent_response
+        from api.routers.agents import build_agent_response
 
         agent_data = {"id": "A-4", "name": "Agent 4", "skills": None}
 
@@ -78,7 +78,7 @@ class TestBuildAgentResponse:
 
     @pytest.mark.asyncio
     async def test_build_agent_response_invalid_json_skills(self):
-        from apps.api.routers.agents import build_agent_response
+        from api.routers.agents import build_agent_response
 
         agent_data = {"id": "A-5", "name": "Agent 5", "skills": "not valid json"}
 
@@ -87,7 +87,7 @@ class TestBuildAgentResponse:
 
     @pytest.mark.asyncio
     async def test_build_agent_response_empty_string_skills(self):
-        from apps.api.routers.agents import build_agent_response
+        from api.routers.agents import build_agent_response
 
         agent_data = {"id": "A-6", "name": "Agent 6", "skills": "[]"}
 
@@ -96,7 +96,7 @@ class TestBuildAgentResponse:
 
     @pytest.mark.asyncio
     async def test_build_agent_response_missing_optional_fields(self):
-        from apps.api.routers.agents import build_agent_response
+        from api.routers.agents import build_agent_response
 
         agent_data = {"id": "A-7", "name": "Minimal Agent"}
 
@@ -115,7 +115,7 @@ class TestBuildAgentResponse:
 
     @pytest.mark.asyncio
     async def test_build_agent_response_display_name_falls_back(self):
-        from apps.api.routers.agents import build_agent_response
+        from api.routers.agents import build_agent_response
 
         agent_data = {"id": "A-8", "name": "Agent 8", "display_name": None}
 
@@ -124,7 +124,7 @@ class TestBuildAgentResponse:
 
     @pytest.mark.asyncio
     async def test_build_agent_response_none_avg_rating(self):
-        from apps.api.routers.agents import build_agent_response
+        from api.routers.agents import build_agent_response
 
         agent_data = {"id": "A-9", "name": "Agent 9", "avg_rating": None}
 
@@ -133,7 +133,7 @@ class TestBuildAgentResponse:
 
     @pytest.mark.asyncio
     async def test_build_agent_response_zero_counts(self):
-        from apps.api.routers.agents import build_agent_response
+        from api.routers.agents import build_agent_response
 
         agent_data = {
             "id": "A-10",
@@ -152,7 +152,7 @@ class TestSafeRedisPublish:
 
     @pytest.mark.asyncio
     async def test_safe_redis_publish_success(self):
-        from apps.api.routers.agents import safe_redis_publish
+        from api.routers.agents import safe_redis_publish
         mock_request = MagicMock()
         mock_redis = AsyncMock()
         mock_request.app.state.redis = mock_redis
@@ -163,7 +163,7 @@ class TestSafeRedisPublish:
 
     @pytest.mark.asyncio
     async def test_safe_redis_publish_failure_logs_error(self):
-        from apps.api.routers.agents import safe_redis_publish
+        from api.routers.agents import safe_redis_publish
         mock_request = MagicMock()
         mock_redis = AsyncMock()
         mock_redis.publish.side_effect = Exception("Redis connection lost")
@@ -177,7 +177,7 @@ class TestSafeRedisPublish:
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with just the agents router."""
-    from apps.api.routers.agents import router
+    from api.routers.agents import router
     from fastapi import FastAPI
 
     application = FastAPI()
@@ -211,7 +211,7 @@ class TestCreateAgent:
     """Tests for POST /tenants/{tenant_id}/agents."""
 
     def test_create_agent_success(self, client):
-        with patch("apps.api.routers.agents.create_agent_db", new_callable=AsyncMock) as mock_create:
+        with patch("api.routers.agents.create_agent_db", new_callable=AsyncMock) as mock_create:
             mock_create.return_value = {
                 "id": "agent-1",
                 "sip_extension": "1001",
@@ -230,7 +230,7 @@ class TestCreateAgent:
 
     def test_create_agent_without_fonster(self, app, client):
         app.state.fonster_client = None
-        with patch("apps.api.routers.agents.create_agent_db", new_callable=AsyncMock) as mock_create:
+        with patch("api.routers.agents.create_agent_db", new_callable=AsyncMock) as mock_create:
             mock_create.return_value = {
                 "id": "agent-2",
                 "sip_extension": "1002",
@@ -248,7 +248,7 @@ class TestCreateAgent:
         app.state.fonster_client.create_application = AsyncMock(
             side_effect=Exception("Fonster timeout")
         )
-        with patch("apps.api.routers.agents.create_agent_db", new_callable=AsyncMock) as mock_create:
+        with patch("api.routers.agents.create_agent_db", new_callable=AsyncMock) as mock_create:
             mock_create.return_value = {
                 "id": "agent-3",
                 "sip_extension": "1003",
@@ -272,7 +272,7 @@ class TestListAgents:
     """Tests for GET /tenants/{tenant_id}/agents."""
 
     def test_list_agents_returns_list(self, client):
-        with patch("apps.api.routers.agents.list_agents_db", new_callable=AsyncMock) as mock_list:
+        with patch("api.routers.agents.list_agents_db", new_callable=AsyncMock) as mock_list:
             mock_list.return_value = [
                 {"id": "agent-1", "name": "Agent One", "skills": '["sales"]'},
                 {"id": "agent-2", "name": "Agent Two", "skills": '["support"]'},
@@ -286,7 +286,7 @@ class TestListAgents:
             assert body[1]["id"] == "agent-2"
 
     def test_list_agents_empty(self, client):
-        with patch("apps.api.routers.agents.list_agents_db", new_callable=AsyncMock) as mock_list:
+        with patch("api.routers.agents.list_agents_db", new_callable=AsyncMock) as mock_list:
             mock_list.return_value = []
 
             resp = client.get("/tenants/tenant-1/agents")
@@ -298,7 +298,7 @@ class TestGetAgent:
     """Tests for GET /tenants/{tenant_id}/agents/{agent_id}."""
 
     def test_get_agent_found(self, client):
-        with patch("apps.api.routers.agents.get_agent_db", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.agents.get_agent_db", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {
                 "id": "agent-1",
                 "tenant_id": "tenant-1",
@@ -322,7 +322,7 @@ class TestGetAgent:
             assert body["skills"] == ["sales"]
 
     def test_get_agent_not_found(self, client):
-        with patch("apps.api.routers.agents.get_agent_db", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.agents.get_agent_db", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = None
 
             resp = client.get("/tenants/tenant-1/agents/missing-agent")
@@ -334,7 +334,7 @@ class TestUpdateAgent:
     """Tests for PUT /tenants/{tenant_id}/agents/{agent_id}."""
 
     def test_update_agent_success(self, client):
-        with patch("apps.api.routers.agents.update_agent_db", new_callable=AsyncMock) as mock_update:
+        with patch("api.routers.agents.update_agent_db", new_callable=AsyncMock) as mock_update:
             mock_update.return_value = {
                 "id": "agent-1",
                 "tenant_id": "tenant-1",
@@ -360,7 +360,7 @@ class TestUpdateAgent:
             assert body["skills"] == ["billing"]
 
     def test_update_agent_not_found(self, client):
-        with patch("apps.api.routers.agents.update_agent_db", new_callable=AsyncMock) as mock_update:
+        with patch("api.routers.agents.update_agent_db", new_callable=AsyncMock) as mock_update:
             mock_update.return_value = None
 
             resp = client.put(
@@ -375,7 +375,7 @@ class TestDeleteAgent:
     """Tests for DELETE /tenants/{tenant_id}/agents/{agent_id}."""
 
     def test_delete_agent_success(self, client):
-        with patch("apps.api.routers.agents.delete_agent_db", new_callable=AsyncMock) as mock_delete:
+        with patch("api.routers.agents.delete_agent_db", new_callable=AsyncMock) as mock_delete:
             mock_delete.return_value = True
 
             resp = client.delete("/tenants/tenant-1/agents/agent-1")
@@ -383,7 +383,7 @@ class TestDeleteAgent:
             assert resp.json() == {"success": True, "agent_id": "agent-1"}
 
     def test_delete_agent_not_found(self, client):
-        with patch("apps.api.routers.agents.delete_agent_db", new_callable=AsyncMock) as mock_delete:
+        with patch("api.routers.agents.delete_agent_db", new_callable=AsyncMock) as mock_delete:
             mock_delete.return_value = False
 
             resp = client.delete("/tenants/tenant-1/agents/missing-agent")
@@ -400,8 +400,8 @@ class TestHandleUpdateAgentStatus:
 
         app.dependency_overrides[get_current_user] = _override_user_wrong
 
-        with patch("apps.api.routers.agents.update_agent_status", new_callable=AsyncMock) as mock_status, \
-             patch("apps.api.routers.agents.get_agent_db", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.agents.update_agent_status", new_callable=AsyncMock) as mock_status, \
+             patch("api.routers.agents.get_agent_db", new_callable=AsyncMock) as mock_get:
 
             mock_status.return_value = {"success": True}
             mock_get.return_value = {
@@ -418,9 +418,9 @@ class TestHandleUpdateAgentStatus:
             assert "Access denied" in resp.json()["detail"]
 
     def test_status_update_success(self, client):
-        with patch("apps.api.routers.agents.update_agent_status", new_callable=AsyncMock) as mock_status, \
-             patch("apps.api.routers.agents.get_agent_db", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.agents.safe_redis_publish", new_callable=AsyncMock) as mock_redis:
+        with patch("api.routers.agents.update_agent_status", new_callable=AsyncMock) as mock_status, \
+             patch("api.routers.agents.get_agent_db", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.agents.safe_redis_publish", new_callable=AsyncMock) as mock_redis:
 
             mock_status.return_value = {"success": True}
             mock_get.return_value = {
@@ -436,8 +436,8 @@ class TestHandleUpdateAgentStatus:
             assert resp.status_code == 200
 
     def test_status_update_agent_not_found(self, client):
-        with patch("apps.api.routers.agents.update_agent_status", new_callable=AsyncMock) as mock_status, \
-             patch("apps.api.routers.agents.get_agent_db", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.agents.update_agent_status", new_callable=AsyncMock) as mock_status, \
+             patch("api.routers.agents.get_agent_db", new_callable=AsyncMock) as mock_get:
 
             mock_status.return_value = {"success": False, "error": "Agent not found"}
             mock_get.return_value = {

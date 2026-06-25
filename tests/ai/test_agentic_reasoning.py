@@ -1,16 +1,16 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from apps.api.services.actions import Actions
-from apps.api.services.orchestrator import ReActAgent
+from api.services.actions import Actions
+from api.services.orchestrator import ReActAgent
 
 
 class TestAgenticReasoning(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         # Start patches
-        self.db_patcher = patch("apps.api.services.database.db_context")
-        self.ao_patcher = patch("apps.api.services.orchestrator.agentops")
-        self.mem_patcher = patch("apps.api.services.memory_service.memory_service.get_memories", new_callable=AsyncMock)
+        self.db_patcher = patch("api.services.database.db_context")
+        self.ao_patcher = patch("api.services.orchestrator.agentops")
+        self.mem_patcher = patch("api.services.memory_service.memory_service.get_memories", new_callable=AsyncMock)
         self.mock_db = self.db_patcher.start()
         self.mock_ao = self.ao_patcher.start()
         self.mock_mem = self.mem_patcher.start()

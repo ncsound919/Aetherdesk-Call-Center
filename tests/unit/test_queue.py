@@ -2,7 +2,7 @@ import json
 import time
 import pytest
 from unittest.mock import MagicMock
-from apps.api.services.queue import InMemoryQueue, QueueManager, QUEUE_KEY, SESSION_KEY
+from api.services.queue import InMemoryQueue, QueueManager, QUEUE_KEY, SESSION_KEY
 
 
 class TestInMemoryQueue:

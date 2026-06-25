@@ -3,9 +3,9 @@ import time
 import httpx
 import pytest
 
-from apps.api.services.memory_service import MemoryService
-from apps.api.services.rate_limit import RateLimitMiddleware
-from apps.api.services.tts import TTSService
+from api.services.memory_service import MemoryService
+from api.services.rate_limit import RateLimitMiddleware
+from api.services.tts import TTSService
 
 # ── Chaos Tests for Production Hardening ────────────────────────
 

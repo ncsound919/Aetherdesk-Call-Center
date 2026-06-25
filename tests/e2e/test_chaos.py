@@ -1,10 +1,10 @@
 
 import pytest
 
-from apps.api.services.actions import Actions
+from api.services.actions import Actions
 
 # Mocking the Orchestrator and Agent Response to simulate chaos
-from apps.api.services.orchestrator import AgentResponse, Orchestrator
+from api.services.orchestrator import AgentResponse, Orchestrator
 
 
 class MockRedis:
@@ -50,7 +50,7 @@ async def test_chaos_database_connection_drop():
     """
     import sqlite3
 
-    from apps.api.services.database import db_context
+    from api.services.database import db_context
 
     error_caught = False
     try:
@@ -76,7 +76,7 @@ async def test_chaos_rapid_websocket_disconnect():
     ensuring the ConnectionManager doesn't leak memory or crash.
     """
 
-    from apps.api.routers.realtime import ConnectionManager
+    from api.routers.realtime import ConnectionManager
 
     class MockWebsocket:
         async def accept(self): pass

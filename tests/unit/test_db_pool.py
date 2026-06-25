@@ -13,11 +13,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
-# ── Pre-register mock for apps.api.main (avoids import errors) ──────────
-_sentinel = types.ModuleType("apps.api.main")
+# ── Pre-register mock for api.main (avoids import errors) ──────────
+_sentinel = types.ModuleType("api.main")
 _sentinel.redis_client = None
 _sentinel.logger = MagicMock()
-sys.modules.setdefault("apps.api.main", _sentinel)
+sys.modules.setdefault("api.main", _sentinel)
 
 
 # ── Fixtures ─────────────────────────────────────────────────────────────
@@ -42,7 +42,7 @@ class TestSQLitePool:
 
     def test_get_sqlite_conn_returns_dict_rows(self):
         """Connection uses dict_factory so rows are dicts."""
-        from apps.api.services.db_pool import _get_sqlite_conn
+        from api.services.db_pool import _get_sqlite_conn
 
         conn = _get_sqlite_conn()
         try:
@@ -54,7 +54,7 @@ class TestSQLitePool:
 
     def test_get_sqlite_conn_executes_basic_query(self):
         """A bare SELECT works."""
-        from apps.api.services.db_pool import _get_sqlite_conn
+        from api.services.db_pool import _get_sqlite_conn
 
         conn = _get_sqlite_conn()
         try:
@@ -66,7 +66,7 @@ class TestSQLitePool:
 
     def test_get_sqlite_conn_enables_wal_mode(self):
         """Pragma journal_mode should be WAL after connection setup."""
-        from apps.api.services.db_pool import _get_sqlite_conn
+        from api.services.db_pool import _get_sqlite_conn
 
         conn = _get_sqlite_conn()
         try:
@@ -80,7 +80,7 @@ class TestSQLitePool:
 
     def test_get_sqlite_conn_sets_sync_to_normal(self):
         """Pragma synchronous should be NORMAL."""
-        from apps.api.services.db_pool import _get_sqlite_conn
+        from api.services.db_pool import _get_sqlite_conn
 
         conn = _get_sqlite_conn()
         try:
@@ -93,7 +93,7 @@ class TestSQLitePool:
 
     def test_get_sqlite_conn_creates_tables(self):
         """At least one table should exist (created by init_db)."""
-        from apps.api.services.db_pool import _get_sqlite_conn
+        from api.services.db_pool import _get_sqlite_conn
 
         conn = _get_sqlite_conn()
         try:
@@ -107,7 +107,7 @@ class TestSQLitePool:
 
     def test_release_sqlite_conn_closes_when_pool_full(self):
         """_release_sqlite_conn closes connection when pool is at capacity."""
-        from apps.api.services.db_pool import (
+        from api.services.db_pool import (
             _get_sqlite_conn,
             _release_sqlite_conn,
         )
@@ -115,7 +115,7 @@ class TestSQLitePool:
         # Use :memory: for isolation
         conn = _get_sqlite_conn()
         # Fill the pool so the next release triggers a close
-        from apps.api.services.db_pool import _sqlite_conn_pool
+        from api.services.db_pool import _sqlite_conn_pool
 
         _sqlite_conn_pool.clear()
         _release_sqlite_conn(conn)
@@ -134,7 +134,7 @@ class TestSQLiteAsync:
     @pytest.mark.asyncio
     async def test_get_sqlite_conn_async_returns_connection(self):
         """_get_sqlite_conn_async returns a working SQLite connection."""
-        from apps.api.services.db_pool import _get_sqlite_conn_async
+        from api.services.db_pool import _get_sqlite_conn_async
 
         conn = await _get_sqlite_conn_async()
         try:
@@ -146,7 +146,7 @@ class TestSQLiteAsync:
     @pytest.mark.asyncio
     async def test_get_sqlite_conn_async_reuses_pooled_conn(self):
         """_get_sqlite_conn_async pops from the pool when available."""
-        from apps.api.services.db_pool import (
+        from api.services.db_pool import (
             _get_sqlite_conn,
             _get_sqlite_conn_async,
             _release_sqlite_conn,
@@ -181,13 +181,13 @@ class TestPostgresPool:
         mock_pool.is_closed.return_value = False
 
         with patch(
-            "apps.api.services.db_pool._pg_pool", None
+            "api.services.db_pool._pg_pool", None
         ), patch(
-            "apps.api.services.db_pool.asyncpg.create_pool",
+            "api.services.db_pool.asyncpg.create_pool",
             new_callable=AsyncMock,
             return_value=mock_pool,
         ) as mock_create:
-            from apps.api.services.db_pool import get_pg_pool
+            from api.services.db_pool import get_pg_pool
 
             pool = await get_pg_pool()
             assert pool is mock_pool
@@ -201,12 +201,12 @@ class TestPostgresPool:
         mock_pool.is_closed.return_value = False
 
         with patch(
-            "apps.api.services.db_pool._pg_pool", mock_pool
+            "api.services.db_pool._pg_pool", mock_pool
         ), patch(
-            "apps.api.services.db_pool.asyncpg.create_pool",
+            "api.services.db_pool.asyncpg.create_pool",
             new_callable=AsyncMock,
         ) as mock_create:
-            from apps.api.services.db_pool import get_pg_pool
+            from api.services.db_pool import get_pg_pool
 
             pool = await get_pg_pool()
             assert pool is mock_pool
@@ -223,13 +223,13 @@ class TestPostgresPool:
         new_pool.is_closed.return_value = False
 
         with patch(
-            "apps.api.services.db_pool._pg_pool", closed_pool
+            "api.services.db_pool._pg_pool", closed_pool
         ), patch(
-            "apps.api.services.db_pool.asyncpg.create_pool",
+            "api.services.db_pool.asyncpg.create_pool",
             new_callable=AsyncMock,
             return_value=new_pool,
         ) as mock_create:
-            from apps.api.services.db_pool import get_pg_pool
+            from api.services.db_pool import get_pg_pool
 
             pool = await get_pg_pool()
             assert pool is new_pool
@@ -239,13 +239,13 @@ class TestPostgresPool:
     async def test_get_pg_pool_returns_none_on_failure(self):
         """get_pg_pool returns None when pool creation fails."""
         with patch(
-            "apps.api.services.db_pool._pg_pool", None
+            "api.services.db_pool._pg_pool", None
         ), patch(
-            "apps.api.services.db_pool.asyncpg.create_pool",
+            "api.services.db_pool.asyncpg.create_pool",
             new_callable=AsyncMock,
             side_effect=Exception("Connection refused"),
         ):
-            from apps.api.services.db_pool import get_pg_pool
+            from api.services.db_pool import get_pg_pool
 
             pool = await get_pg_pool()
             assert pool is None
@@ -260,9 +260,9 @@ class TestPostgresPool:
         mock_pool.close = AsyncMock()
 
         with patch(
-            "apps.api.services.db_pool._pg_pool", mock_pool
+            "api.services.db_pool._pg_pool", mock_pool
         ):
-            from apps.api.services.db_pool import close_pg_pool
+            from api.services.db_pool import close_pg_pool
 
             await close_pg_pool()
             mock_pool.close.assert_called_once()
@@ -275,9 +275,9 @@ class TestPostgresPool:
         mock_pool.is_closed.return_value = True
 
         with patch(
-            "apps.api.services.db_pool._pg_pool", mock_pool
+            "api.services.db_pool._pg_pool", mock_pool
         ):
-            from apps.api.services.db_pool import close_pg_pool
+            from api.services.db_pool import close_pg_pool
 
             await close_pg_pool()
             mock_pool.close.assert_not_called()
@@ -286,9 +286,9 @@ class TestPostgresPool:
     async def test_close_pg_pool_skips_if_none(self):
         """close_pg_pool does nothing when _pg_pool is None."""
         with patch(
-            "apps.api.services.db_pool._pg_pool", None
+            "api.services.db_pool._pg_pool", None
         ):
-            from apps.api.services.db_pool import close_pg_pool
+            from api.services.db_pool import close_pg_pool
 
             # Should not raise
             await close_pg_pool()
@@ -303,12 +303,12 @@ class TestEncryption:
         """encrypt_val then decrypt_val returns original value."""
         from cryptography.fernet import Fernet
 
-        from apps.api.services.db_pool import decrypt_val, encrypt_val
+        from api.services.db_pool import decrypt_val, encrypt_val
 
         key = Fernet.generate_key()
         fernet = Fernet(key)
 
-        with patch("apps.api.services.db_pool._fernet", fernet):
+        with patch("api.services.db_pool._fernet", fernet):
             original = "sensitive-data-123"
             encrypted = encrypt_val(original)
             assert encrypted != original
@@ -317,25 +317,25 @@ class TestEncryption:
 
     def test_encrypt_empty_string_returns_empty(self):
         """encrypt_val returns empty string unchanged."""
-        from apps.api.services.db_pool import encrypt_val
+        from api.services.db_pool import encrypt_val
 
         assert encrypt_val("") == ""
 
     def test_encrypt_none_returns_none(self):
         """encrypt_val returns None for falsy input."""
-        from apps.api.services.db_pool import encrypt_val
+        from api.services.db_pool import encrypt_val
 
         assert encrypt_val(None) is None
 
     def test_decrypt_empty_string_returns_empty(self):
         """decrypt_val returns empty string unchanged."""
-        from apps.api.services.db_pool import decrypt_val
+        from api.services.db_pool import decrypt_val
 
         assert decrypt_val("") == ""
 
     def test_decrypt_none_returns_none(self):
         """decrypt_val returns None for falsy input."""
-        from apps.api.services.db_pool import decrypt_val
+        from api.services.db_pool import decrypt_val
 
         assert decrypt_val(None) is None
 
@@ -343,12 +343,12 @@ class TestEncryption:
         """Unicode characters survive encrypt/decrypt round-trip."""
         from cryptography.fernet import Fernet
 
-        from apps.api.services.db_pool import decrypt_val, encrypt_val
+        from api.services.db_pool import decrypt_val, encrypt_val
 
         key = Fernet.generate_key()
         fernet = Fernet(key)
 
-        with patch("apps.api.services.db_pool._fernet", fernet):
+        with patch("api.services.db_pool._fernet", fernet):
             original = "héllo wörld 🎉"
             encrypted = encrypt_val(original)
             decrypted = decrypt_val(encrypted)
@@ -358,12 +358,12 @@ class TestEncryption:
         """decrypt_val returns original value when decryption fails."""
         from cryptography.fernet import Fernet
 
-        from apps.api.services.db_pool import decrypt_val
+        from api.services.db_pool import decrypt_val
 
         key = Fernet.generate_key()
         fernet = Fernet(key)
 
-        with patch("apps.api.services.db_pool._fernet", fernet):
+        with patch("api.services.db_pool._fernet", fernet):
             result = decrypt_val("not-a-valid-fernet-token")
             assert result == "not-a-valid-fernet-token"
 
@@ -377,9 +377,9 @@ class TestDbContext:
     async def test_db_context_yields_sqlite_conn(self):
         """db_context yields an active SQLite connection in dev mode."""
         with patch(
-            "apps.api.services.db_pool.USE_POSTGRES", False
+            "api.services.db_pool.USE_POSTGRES", False
         ):
-            from apps.api.services.db_pool import db_context
+            from api.services.db_pool import db_context
 
             async with db_context() as conn:
                 row = conn.execute("SELECT 1 AS val").fetchone()
@@ -393,7 +393,7 @@ class TestHTTPClientPool:
 
     def test_http_pool_is_singleton(self):
         """HTTPClientPool() returns the same instance each time."""
-        from apps.api.services.connection_pool import HTTPClientPool
+        from api.services.connection_pool import HTTPClientPool
 
         p1 = HTTPClientPool()
         p2 = HTTPClientPool()
@@ -401,7 +401,7 @@ class TestHTTPClientPool:
 
     def test_http_pool_instance_exists(self):
         """http_pool global is an HTTPClientPool instance."""
-        from apps.api.services.connection_pool import http_pool, HTTPClientPool
+        from api.services.connection_pool import http_pool, HTTPClientPool
 
         assert http_pool is not None
         assert isinstance(http_pool, HTTPClientPool)
@@ -413,7 +413,7 @@ class TestHTTPClientPool:
         """get_client() returns an httpx.AsyncClient."""
         import httpx
 
-        from apps.api.services.connection_pool import http_pool
+        from api.services.connection_pool import http_pool
 
         client = await http_pool.get_client()
         assert client is not None
@@ -423,7 +423,7 @@ class TestHTTPClientPool:
     @pytest.mark.asyncio
     async def test_get_client_returns_same_instance(self):
         """get_client() returns the same cached client on second call."""
-        from apps.api.services.connection_pool import http_pool
+        from api.services.connection_pool import http_pool
 
         # Reset for this test
         if http_pool._client and not http_pool._client.is_closed:
@@ -439,7 +439,7 @@ class TestHTTPClientPool:
     @pytest.mark.asyncio
     async def test_close_releases_client(self):
         """close() closes the client and sets it to None."""
-        from apps.api.services.connection_pool import http_pool
+        from api.services.connection_pool import http_pool
 
         await http_pool.get_client()  # ensure client exists
         await http_pool.close()
@@ -448,7 +448,7 @@ class TestHTTPClientPool:
     @pytest.mark.asyncio
     async def test_get_http_client_context_manager(self):
         """get_http_client() context manager yields a client."""
-        from apps.api.services.connection_pool import get_http_client
+        from api.services.connection_pool import get_http_client
 
         async with get_http_client() as client:
             assert client is not None
@@ -466,20 +466,20 @@ class TestPoolConfig:
             # Re-import to pick up fresh env
             import importlib
 
-            import apps.api.services.db_config as cfg
+            import api.services.db_config as cfg
 
             importlib.reload(cfg)
             assert cfg.SQLITE_POOL_SIZE >= 1
 
     def test_sqlite_timeout_default(self):
         """SQLITE_TIMEOUT defaults to 30 seconds."""
-        from apps.api.services.db_config import SQLITE_TIMEOUT
+        from api.services.db_config import SQLITE_TIMEOUT
 
         assert SQLITE_TIMEOUT == 30
 
     def test_use_postgres_defaults_to_false(self):
         """USE_POSTGRES is False when not set or set to false."""
-        from apps.api.services.db_config import USE_POSTGRES
+        from api.services.db_config import USE_POSTGRES
 
         assert USE_POSTGRES is False
 
@@ -491,7 +491,7 @@ class TestDictFactory:
 
     def test_dict_factory_creates_dict(self):
         """_dict_factory maps column names to row values."""
-        from apps.api.services.db_pool import _dict_factory
+        from api.services.db_pool import _dict_factory
 
         class FakeCursor:
             description = [("id",), ("name",), ("email",)]
@@ -502,7 +502,7 @@ class TestDictFactory:
 
     def test_dict_factory_empty_description(self):
         """_dict_factory returns empty dict when no columns."""
-        from apps.api.services.db_pool import _dict_factory
+        from api.services.db_pool import _dict_factory
 
         class FakeCursor:
             description = []
@@ -520,7 +520,7 @@ class TestSQLitePoolExtra:
     @pytest.mark.asyncio
     async def test_reuse_stale_conn_handles_programming_error(self):
         """Pool handles ProgrammingError when a closed connection is reused."""
-        from apps.api.services.db_pool import (
+        from api.services.db_pool import (
             _get_sqlite_conn,
             _get_sqlite_conn_async,
             _release_sqlite_conn,
@@ -550,7 +550,7 @@ class TestSQLiteAsyncExtra:
     @pytest.mark.asyncio
     async def test_get_sqlite_conn_async_handles_programming_error(self):
         """_get_sqlite_conn_async creates a new connection when pooled one has ProgrammingError."""
-        from apps.api.services.db_pool import (
+        from api.services.db_pool import (
             _get_sqlite_conn,
             _get_sqlite_conn_async,
             _release_sqlite_conn,
@@ -586,13 +586,13 @@ class TestDbContextExtra:
         mock_pool.acquire.return_value.__aexit__ = AsyncMock()
 
         with patch(
-            "apps.api.services.db_pool.USE_POSTGRES", True
+            "api.services.db_pool.USE_POSTGRES", True
         ), patch(
-            "apps.api.services.db_pool.get_pg_pool",
+            "api.services.db_pool.get_pg_pool",
             new_callable=AsyncMock,
             return_value=mock_pool,
         ):
-            from apps.api.services.db_pool import db_context
+            from api.services.db_pool import db_context
 
             async with db_context() as conn:
                 assert conn is mock_conn
@@ -603,7 +603,7 @@ class TestEncryptionExtra:
 
     def test_decrypt_val_returns_original_on_failure(self):
         """decrypt_val returns the original value when decryption fails (invalid token)."""
-        from apps.api.services.db_pool import decrypt_val
+        from api.services.db_pool import decrypt_val
 
         result = decrypt_val("not-a-valid-fernet-token")
         assert result == "not-a-valid-fernet-token"

@@ -207,7 +207,7 @@ class TestCustomerJourney(TestAPIClient):
     def test_04_agent_response_generation(self):
         """Test: AI agent generates appropriate response"""
         # Mock the orchestrator step
-        from apps.api.services.orchestrator import ReActAgent, Actions
+        from api.services.orchestrator import ReActAgent, Actions
         from unittest.mock import MagicMock
 
         mock_redis = MagicMock()
@@ -244,7 +244,7 @@ class TestCustomerJourney(TestAPIClient):
     # ─────────────────────────────────────────────
     def test_05_customer_handoff(self):
         """Test: Customer is successfully handed off to human agent"""
-        from apps.api.services.actions import Actions
+        from api.services.actions import Actions
         from unittest.mock import MagicMock
 
         mock_redis = MagicMock()
@@ -269,7 +269,7 @@ class TestCustomerJourney(TestAPIClient):
 
     def test_06_escalation_alert(self):
         """Test: Escalation alerts are pushed correctly"""
-        from apps.api.routers.campaign import push_escalation_alert
+        from api.routers.campaign import push_escalation_alert
 
         start = time.time()
         asyncio.run(push_escalation_alert(
@@ -332,7 +332,7 @@ class TestCustomerJourney(TestAPIClient):
         """Test: Tenants cannot access each other's data"""
         # Create two API keys for different tenants
         # This test validates that the verify_api_key function returns correct tenant_id
-        from apps.api.services.auth import verify_api_key
+        from api.services.auth import verify_api_key
 
         # Test with dev API key
         result = asyncio.run(verify_api_key("dev-api-key"))
@@ -345,7 +345,7 @@ class TestCustomerJourney(TestAPIClient):
     # ─────────────────────────────────────────────
     def test_10_call_status_update(self):
         """Test: Call status can be updated and retrieved"""
-        from apps.api.services.database import (
+        from api.services.database import (
             create_call_session, get_call_session, update_call_status
         )
 
@@ -385,7 +385,7 @@ class TestCustomerJourney(TestAPIClient):
     @pytest.mark.benchmark
     def test_benchmark_queue_operations(self, benchmark):
         """Benchmark: Queue enqueue/dequeue performance"""
-        from apps.api.services.queue import QueueManager
+        from api.services.queue import QueueManager
 
         class MockRedis:
             def ping(self):
@@ -411,7 +411,7 @@ class TestCustomerJourney(TestAPIClient):
     @pytest.mark.benchmark
     def test_benchmark_auth_verification(self, benchmark):
         """Benchmark: API key verification performance"""
-        from apps.api.services.auth import verify_api_key
+        from api.services.auth import verify_api_key
 
         def run_benchmark():
             return asyncio.run(verify_api_key("dev-api-key"))

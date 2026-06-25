@@ -3,10 +3,10 @@ from unittest.mock import MagicMock, patch, mock_open
 
 
 class TestDatabaseContextSync:
-    @patch("apps.api.services.database.USE_POSTGRES", False)
-    @patch("apps.api.services.database._get_sqlite_conn")
+    @patch("api.services.database.USE_POSTGRES", False)
+    @patch("api.services.database._get_sqlite_conn")
     def test_db_context_sync_yields_connection(self, mock_get_conn):
-        from apps.api.services.database import db_context_sync
+        from api.services.database import db_context_sync
 
         mock_conn = MagicMock()
         mock_get_conn.return_value = mock_conn
@@ -16,18 +16,18 @@ class TestDatabaseContextSync:
 
         mock_conn.close.assert_called_once()
 
-    @patch("apps.api.services.database.USE_POSTGRES", True)
+    @patch("api.services.database.USE_POSTGRES", True)
     def test_db_context_sync_postgres_raises(self):
-        from apps.api.services.database import db_context_sync
+        from api.services.database import db_context_sync
 
         with pytest.raises(RuntimeError, match="db_context_sync not supported for PostgreSQL"):
             with db_context_sync():
                 pass
 
-    @patch("apps.api.services.database.USE_POSTGRES", False)
-    @patch("apps.api.services.database._get_sqlite_conn")
+    @patch("api.services.database.USE_POSTGRES", False)
+    @patch("api.services.database._get_sqlite_conn")
     def test_db_context_sync_closes_on_error(self, mock_get_conn):
-        from apps.api.services.database import db_context_sync
+        from api.services.database import db_context_sync
 
         mock_conn = MagicMock()
         mock_get_conn.return_value = mock_conn
@@ -41,7 +41,7 @@ class TestDatabaseContextSync:
 
 @pytest.mark.asyncio
 async def test_db_run_sync():
-    from apps.api.services.database import db_run_sync
+    from api.services.database import db_run_sync
 
     def sync_func():
         return 42
@@ -52,7 +52,7 @@ async def test_db_run_sync():
 
 @pytest.mark.asyncio
 async def test_db_run_sync_with_args():
-    from apps.api.services.database import db_run_sync
+    from api.services.database import db_run_sync
 
     def sync_func(x, y=10):
         return x + y

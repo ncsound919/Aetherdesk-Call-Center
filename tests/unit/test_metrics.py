@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from starlette.responses import Response
 
-from apps.api.middleware.metrics import (
+from api.middleware.metrics import (
     REQUEST_COUNT,
     REQUEST_LATENCY,
     VOICE_REQUEST_COUNT,
@@ -38,7 +38,7 @@ def app():
     """Minimal FastAPI app with MetricsMiddleware."""
     application = FastAPI()
 
-    from apps.api.middleware.metrics import MetricsMiddleware
+    from api.middleware.metrics import MetricsMiddleware
 
     application.add_middleware(MetricsMiddleware)
 

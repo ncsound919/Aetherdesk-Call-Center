@@ -1,11 +1,11 @@
-"""Unit tests for apps.api.services.auth.
+"""Unit tests for api.services.auth.
 
 The auth module uses late imports (inside function bodies) to avoid circular
 dependencies.  In particular ``verify_access_token`` does::
 
-    from apps.api.main import redis_client
+    from api.main import redis_client
 
-when the decoded payload contains a ``jti`` claim.  The real ``apps.api.main``
+when the decoded payload contains a ``jti`` claim.  The real ``api.main``
 cannot be imported in a unit-test environment because it triggers a cascade of
 router imports that include ``webhooks_fonster.py`` with a broken import
 (``db_update_call_status`` missing from ``database.py``).
@@ -21,11 +21,11 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi import HTTPException
 
-# ── Mock apps.api.main to avoid importing the real module (broken deps) ──────
+# ── Mock api.main to avoid importing the real module (broken deps) ──────
 
-_mock_main = ModuleType("apps.api.main")
+_mock_main = ModuleType("api.main")
 _mock_main.redis_client = None  # Will be patched per-test when needed
-sys.modules["apps.api.main"] = _mock_main
+sys.modules["api.main"] = _mock_main
 
 
 class TestVerifyAccessToken:
@@ -43,12 +43,12 @@ class TestVerifyAccessToken:
     @pytest.mark.asyncio
     async def test_valid_token_returns_payload(self):
         """A valid JWT token should return the decoded payload."""
-        from apps.api.services.auth import verify_access_token
+        from api.services.auth import verify_access_token
 
-        # jti present → triggers late import of mock apps.api.main.redis_client.
+        # jti present → triggers late import of mock api.main.redis_client.
         # Our mock has redis_client = None (not in sys.modules yet → falls to
         # fallback blocklist check, which is empty → token OK).
-        with patch("apps.api.services.jwt_utils.verify_access_token") as mock_verify:
+        with patch("api.services.jwt_utils.verify_access_token") as mock_verify:
             mock_verify.return_value = {
                 "tenant_id": "T-1",
                 "email": "test@test.com",
@@ -70,9 +70,9 @@ class TestVerifyAccessToken:
     @pytest.mark.asyncio
     async def test_invalid_token_returns_none(self):
         """An invalid / expired JWT token should return None."""
-        from apps.api.services.auth import verify_access_token
+        from api.services.auth import verify_access_token
 
-        with patch("apps.api.services.jwt_utils.verify_access_token") as mock_verify:
+        with patch("api.services.jwt_utils.verify_access_token") as mock_verify:
             mock_verify.return_value = None
 
             result = await verify_access_token("expired.jwt.token")
@@ -86,9 +86,9 @@ class TestVerifyAccessToken:
     @pytest.mark.asyncio
     async def test_none_token_returns_none(self):
         """Passing None as the token should return None."""
-        from apps.api.services.auth import verify_access_token
+        from api.services.auth import verify_access_token
 
-        with patch("apps.api.services.jwt_utils.verify_access_token") as mock_verify:
+        with patch("api.services.jwt_utils.verify_access_token") as mock_verify:
             mock_verify.return_value = None
 
             result = await verify_access_token(None)
@@ -102,10 +102,10 @@ class TestVerifyAccessToken:
     @pytest.mark.asyncio
     async def test_blocklisted_token_returns_none(self):
         """A token whose jti appears in the fallback blocklist should return None."""
-        from apps.api.services.auth import verify_access_token
+        from api.services.auth import verify_access_token
 
-        with patch("apps.api.services.jwt_utils.verify_access_token") as mock_verify, \
-             patch("apps.api.services.auth._fallback_blocklist", {"blocked-jti"}):
+        with patch("api.services.jwt_utils.verify_access_token") as mock_verify, \
+             patch("api.services.auth._fallback_blocklist", {"blocked-jti"}):
             mock_verify.return_value = {"tenant_id": "T-1", "jti": "blocked-jti"}
 
             result = await verify_access_token("blocked.token")
@@ -118,9 +118,9 @@ class TestVerifyAccessToken:
     @pytest.mark.asyncio
     async def test_token_without_jti_skips_blocklist_check(self):
         """A valid token that has no jti claim skips the blocklist check entirely."""
-        from apps.api.services.auth import verify_access_token
+        from api.services.auth import verify_access_token
 
-        with patch("apps.api.services.jwt_utils.verify_access_token") as mock_verify:
+        with patch("api.services.jwt_utils.verify_access_token") as mock_verify:
             mock_verify.return_value = {"tenant_id": "T-1", "email": "test@test.com"}
 
             result = await verify_access_token("token.no.jti")
@@ -142,7 +142,7 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_internal_dev_api_key_returns_default_tenant(self):
         """The dev / internal API key should return TENANT-001."""
-        from apps.api.services.auth import verify_api_key
+        from api.services.auth import verify_api_key
 
         result = await verify_api_key("dev-api-key")
         assert result == "TENANT-001"
@@ -152,12 +152,13 @@ class TestVerifyApiKey:
     # ------------------------------------------------------------------
 
     @pytest.mark.asyncio
-    async def test_none_api_key_in_dev_uses_dev_fallback(self):
-        """None API key in dev mode should use the dev-api-key fallback."""
-        from apps.api.services.auth import verify_api_key
+    async def test_none_api_key_in_dev_raises_401(self):
+        """None API key in dev mode should raise 401 (no dev bypass)."""
+        from api.services.auth import verify_api_key
 
-        result = await verify_api_key(None)
-        assert result == "TENANT-001"
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_api_key(None)
+        assert exc_info.value.status_code == 401
 
     # ------------------------------------------------------------------
     # Valid tenant-specific API key (DB lookup)
@@ -166,10 +167,10 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_valid_tenant_api_key_returns_tenant_id(self):
         """A valid tenant API key (from DB) should return its tenant ID."""
-        from apps.api.services.auth import verify_api_key
+        from api.services.auth import verify_api_key
 
         with patch(
-            "apps.api.services.database.get_tenant_by_api_key",
+            "api.services.database.get_tenant_by_api_key",
             new_callable=AsyncMock,
         ) as mock_get:
             mock_get.return_value = {"id": "T-42"}
@@ -185,10 +186,10 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_invalid_api_key_raises_403(self):
         """An API key not found in the tenant DB should raise HTTP 403."""
-        from apps.api.services.auth import verify_api_key
+        from api.services.auth import verify_api_key
 
         with patch(
-            "apps.api.services.database.get_tenant_by_api_key",
+            "api.services.database.get_tenant_by_api_key",
             new_callable=AsyncMock,
         ) as mock_get:
             mock_get.return_value = None
@@ -205,7 +206,7 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_verify_api_key_production_missing(self):
         """Production env without API key should raise HTTP 401."""
-        from apps.api.services.auth import verify_api_key
+        from api.services.auth import verify_api_key
 
         with patch("os.getenv", return_value="production"):
             with pytest.raises(HTTPException) as exc_info:
@@ -218,12 +219,12 @@ class TestVerifyPassword:
     """Tests for auth.verify_password."""
 
     def test_verify_password_correct(self):
-        from apps.api.services.auth import verify_password, get_password_hash
+        from api.services.auth import verify_password, get_password_hash
         hashed = get_password_hash("correct-password")
         assert verify_password("correct-password", hashed) is True
 
     def test_verify_password_incorrect(self):
-        from apps.api.services.auth import verify_password, get_password_hash
+        from api.services.auth import verify_password, get_password_hash
         hashed = get_password_hash("correct-password")
         assert verify_password("wrong-password", hashed) is False
 
@@ -232,7 +233,7 @@ class TestGetPasswordHash:
     """Tests for auth.get_password_hash."""
 
     def test_hash_differs_from_plaintext(self):
-        from apps.api.services.auth import get_password_hash
+        from api.services.auth import get_password_hash
         hashed = get_password_hash("my-password")
         assert hashed != "my-password"
         assert hashed.startswith("$2")
@@ -243,7 +244,7 @@ class TestTokenStore:
 
     @pytest.mark.asyncio
     async def test_create_token_no_redis(self):
-        from apps.api.services.auth import TokenStore
+        from api.services.auth import TokenStore
         store = TokenStore()
         token = await store.create_token("user-1")
         assert isinstance(token, str)
@@ -253,7 +254,7 @@ class TestTokenStore:
 
     @pytest.mark.asyncio
     async def test_validate_token_fallback(self):
-        from apps.api.services.auth import TokenStore
+        from api.services.auth import TokenStore
         import time
         store = TokenStore()
         store._fallback_tokens = {
@@ -265,7 +266,7 @@ class TestTokenStore:
 
     @pytest.mark.asyncio
     async def test_validate_token_expired(self):
-        from apps.api.services.auth import TokenStore, TOKEN_EXPIRY_SECONDS
+        from api.services.auth import TokenStore, TOKEN_EXPIRY_SECONDS
         import time
         store = TokenStore()
         store._fallback_tokens = {
@@ -281,7 +282,7 @@ class TestTokenStore:
 
     @pytest.mark.asyncio
     async def test_revoke_token_fallback(self):
-        from apps.api.services.auth import TokenStore
+        from api.services.auth import TokenStore
         import time
         store = TokenStore()
         store._fallback_tokens = {
@@ -291,7 +292,7 @@ class TestTokenStore:
         assert "revoke-me" not in store._fallback_tokens
 
     def test_cleanup_expired(self):
-        from apps.api.services.auth import TokenStore, TOKEN_EXPIRY_SECONDS
+        from api.services.auth import TokenStore, TOKEN_EXPIRY_SECONDS
         import time
         store = TokenStore()
         now = time.time()
@@ -318,9 +319,9 @@ class TestGenerateAccessToken:
     """Tests for auth.generate_access_token."""
 
     def test_generate_access_token(self):
-        from apps.api.services.auth import generate_access_token
+        from api.services.auth import generate_access_token
 
-        with patch("apps.api.services.jwt_utils.create_access_token") as mock_create:
+        with patch("api.services.jwt_utils.create_access_token") as mock_create:
             mock_create.return_value = "signed.jwt.token"
             result = generate_access_token({"sub": "user-1"})
             assert result == "signed.jwt.token"
@@ -335,20 +336,20 @@ class TestGetCurrentUser:
 
     @pytest.mark.asyncio
     async def test_get_current_user_valid(self):
-        from apps.api.services.auth import get_current_user
+        from api.services.auth import get_current_user
 
         mock_creds = type("Creds", (), {"credentials": "valid.jwt.token"})()
-        with patch("apps.api.services.jwt_utils.verify_access_token") as mock_verify:
+        with patch("api.services.jwt_utils.verify_access_token") as mock_verify:
             mock_verify.return_value = {"sub": "user-1", "tenant_id": "T-1"}
             result = await get_current_user(mock_creds)
             assert result == {"sub": "user-1", "tenant_id": "T-1"}
 
     @pytest.mark.asyncio
     async def test_get_current_user_invalid(self):
-        from apps.api.services.auth import get_current_user
+        from api.services.auth import get_current_user
 
         mock_creds = type("Creds", (), {"credentials": "invalid.jwt.token"})()
-        with patch("apps.api.services.jwt_utils.verify_access_token") as mock_verify:
+        with patch("api.services.jwt_utils.verify_access_token") as mock_verify:
             mock_verify.return_value = None
             with pytest.raises(HTTPException) as exc_info:
                 await get_current_user(mock_creds)
@@ -361,7 +362,7 @@ class TestWebSocketAuthMiddleware:
 
     @pytest.mark.asyncio
     async def test_non_websocket_scope(self):
-        from apps.api.services.auth import WebSocketAuthMiddleware
+        from api.services.auth import WebSocketAuthMiddleware
 
         mock_app = AsyncMock()
         scope = {"type": "http", "path": "/some-path"}
@@ -373,7 +374,7 @@ class TestWebSocketAuthMiddleware:
 
     @pytest.mark.asyncio
     async def test_excluded_path(self):
-        from apps.api.services.auth import WebSocketAuthMiddleware
+        from api.services.auth import WebSocketAuthMiddleware
 
         mock_app = AsyncMock()
         middleware = WebSocketAuthMiddleware(mock_app)
@@ -385,7 +386,7 @@ class TestWebSocketAuthMiddleware:
 
     @pytest.mark.asyncio
     async def test_missing_token_rejected(self):
-        from apps.api.services.auth import WebSocketAuthMiddleware
+        from api.services.auth import WebSocketAuthMiddleware
 
         mock_app = AsyncMock()
         send = AsyncMock()
@@ -402,7 +403,7 @@ class TestWebSocketAuthMiddleware:
 
     @pytest.mark.asyncio
     async def test_invalid_token_rejected(self):
-        from apps.api.services.auth import WebSocketAuthMiddleware
+        from api.services.auth import WebSocketAuthMiddleware
 
         mock_app = AsyncMock()
         send = AsyncMock()
@@ -414,7 +415,7 @@ class TestWebSocketAuthMiddleware:
             "query_string": b"",
         }
         with patch(
-            "apps.api.services.auth.verify_websocket_token",
+            "api.services.auth.verify_websocket_token",
             new_callable=AsyncMock,
         ) as mock_verify:
             mock_verify.return_value = None
@@ -429,19 +430,19 @@ class TestVerifyTenantAccess:
 
     @pytest.mark.asyncio
     async def test_dev_bypass(self):
-        from apps.api.services.auth import verify_tenant_access
+        from api.services.auth import verify_tenant_access
 
         result = await verify_tenant_access("T-42", x_api_key="dev-api-key")
         assert result == "T-42"
 
     @pytest.mark.asyncio
     async def test_production_valid(self):
-        from apps.api.services.auth import verify_tenant_access
+        from api.services.auth import verify_tenant_access
 
         with patch("os.getenv", return_value="production"), \
-             patch("apps.api.services.auth.INTERNAL_API_KEY", "prod-internal-key"), \
+             patch("api.services.auth.INTERNAL_API_KEY", "prod-internal-key"), \
              patch(
-                 "apps.api.services.database.verify_tenant_api_key",
+                 "api.services.database.verify_tenant_api_key",
                  new_callable=AsyncMock,
              ) as mock_verify:
             mock_verify.return_value = True
@@ -451,12 +452,12 @@ class TestVerifyTenantAccess:
 
     @pytest.mark.asyncio
     async def test_production_invalid(self):
-        from apps.api.services.auth import verify_tenant_access
+        from api.services.auth import verify_tenant_access
 
         with patch("os.getenv", return_value="production"), \
-             patch("apps.api.services.auth.INTERNAL_API_KEY", "prod-internal-key"), \
+             patch("api.services.auth.INTERNAL_API_KEY", "prod-internal-key"), \
              patch(
-                 "apps.api.services.database.verify_tenant_api_key",
+                 "api.services.database.verify_tenant_api_key",
                  new_callable=AsyncMock,
              ) as mock_verify:
             mock_verify.return_value = False
@@ -466,12 +467,12 @@ class TestVerifyTenantAccess:
 
     @pytest.mark.asyncio
     async def test_db_failure(self):
-        from apps.api.services.auth import verify_tenant_access
+        from api.services.auth import verify_tenant_access
 
         with patch("os.getenv", return_value="production"), \
-             patch("apps.api.services.auth.INTERNAL_API_KEY", "prod-internal-key"), \
+             patch("api.services.auth.INTERNAL_API_KEY", "prod-internal-key"), \
              patch(
-                 "apps.api.services.database.verify_tenant_api_key",
+                 "api.services.database.verify_tenant_api_key",
                  new_callable=AsyncMock,
              ) as mock_verify:
             mock_verify.side_effect = Exception("DB connection failed")

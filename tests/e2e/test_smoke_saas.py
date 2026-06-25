@@ -4,7 +4,7 @@ import pytest
 os.environ["ENCRYPTION_KEY"] = "REDACTED_ENCRYPTION_KEY_PLEASE_ROTATE="
 os.environ["WEBSOCKET_SECRET_KEY"] = "test-websocket-secret-for-testing-only"
 
-from apps.api.main import app
+from api.main import app
 from httpx import AsyncClient, ASGITransport
 
 

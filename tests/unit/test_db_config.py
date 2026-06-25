@@ -13,5 +13,5 @@ class TestDbConfig:
 
         with patch.dict(os.environ, {"USE_POSTGRES": "true"}, clear=True):
             with pytest.raises(RuntimeError, match="DATABASE_URL"):
-                importlib.import_module("apps.api.services.db_config")
+                importlib.import_module("api.services.db_config")
 

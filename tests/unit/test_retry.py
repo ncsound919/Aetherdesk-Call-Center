@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 class TestExponentialBackoff:
     @pytest.mark.asyncio
     async def test_success_on_first_attempt(self):
-        from apps.api.services.retry import exponential_backoff
+        from api.services.retry import exponential_backoff
 
         @exponential_backoff(max_retries=3, base_delay=0.1)
         async def my_func():
@@ -17,7 +17,7 @@ class TestExponentialBackoff:
 
     @pytest.mark.asyncio
     async def test_retry_then_success(self):
-        from apps.api.services.retry import exponential_backoff
+        from api.services.retry import exponential_backoff
 
         call_count = 0
 
@@ -35,7 +35,7 @@ class TestExponentialBackoff:
 
     @pytest.mark.asyncio
     async def test_max_retries_exceeded(self):
-        from apps.api.services.retry import exponential_backoff, RetryError
+        from api.services.retry import exponential_backoff, RetryError
 
         @exponential_backoff(max_retries=2, base_delay=0.05)
         async def my_func():
@@ -49,7 +49,7 @@ class TestExponentialBackoff:
 
     @pytest.mark.asyncio
     async def test_cancelled_error_propagates(self):
-        from apps.api.services.retry import exponential_backoff
+        from api.services.retry import exponential_backoff
 
         @exponential_backoff(max_retries=3, base_delay=0.05)
         async def my_func():
@@ -60,7 +60,7 @@ class TestExponentialBackoff:
 
     @pytest.mark.asyncio
     async def test_jitter_applied(self):
-        from apps.api.services.retry import exponential_backoff
+        from api.services.retry import exponential_backoff
 
         delays = []
 
@@ -76,7 +76,7 @@ class TestExponentialBackoff:
 
     @pytest.mark.asyncio
     async def test_no_jitter(self):
-        from apps.api.services.retry import exponential_backoff
+        from api.services.retry import exponential_backoff
 
         @exponential_backoff(max_retries=1, base_delay=0.5, jitter=False)
         async def my_func():
@@ -90,7 +90,7 @@ class TestExponentialBackoff:
 
     @pytest.mark.asyncio
     async def test_delay_capped_by_max_delay(self):
-        from apps.api.services.retry import exponential_backoff
+        from api.services.retry import exponential_backoff
 
         @exponential_backoff(max_retries=5, base_delay=1.0, max_delay=2.0, jitter=False)
         async def my_func():
@@ -114,7 +114,7 @@ class TestExponentialBackoff:
 
 class TestRetryConfig:
     def test_default_config(self):
-        from apps.api.services.retry import RetryConfig
+        from api.services.retry import RetryConfig
 
         config = RetryConfig()
         assert config.max_retries == 3
@@ -124,7 +124,7 @@ class TestRetryConfig:
         assert config.retry_on == (Exception,)
 
     def test_custom_config(self):
-        from apps.api.services.retry import RetryConfig
+        from api.services.retry import RetryConfig
 
         config = RetryConfig(max_retries=5, base_delay=0.5, max_delay=15.0, exponential_base=3.0)
         assert config.max_retries == 5
@@ -136,7 +136,7 @@ class TestRetryConfig:
 class TestAsyncRetry:
     @pytest.mark.asyncio
     async def test_execute_async_success(self):
-        from apps.api.services.retry import AsyncRetry, RetryConfig
+        from api.services.retry import AsyncRetry, RetryConfig
 
         retrier = AsyncRetry(RetryConfig(max_retries=2, base_delay=0.05))
 
@@ -148,7 +148,7 @@ class TestAsyncRetry:
 
     @pytest.mark.asyncio
     async def test_execute_sync_success(self):
-        from apps.api.services.retry import AsyncRetry, RetryConfig
+        from api.services.retry import AsyncRetry, RetryConfig
 
         retrier = AsyncRetry(RetryConfig(max_retries=2, base_delay=0.05))
 
@@ -160,7 +160,7 @@ class TestAsyncRetry:
 
     @pytest.mark.asyncio
     async def test_execute_retry_then_success(self):
-        from apps.api.services.retry import AsyncRetry, RetryConfig
+        from api.services.retry import AsyncRetry, RetryConfig
 
         retrier = AsyncRetry(RetryConfig(max_retries=3, base_delay=0.05))
         call_count = 0
@@ -178,7 +178,7 @@ class TestAsyncRetry:
 
     @pytest.mark.asyncio
     async def test_execute_max_retries_exceeded(self):
-        from apps.api.services.retry import AsyncRetry, RetryConfig, RetryError
+        from api.services.retry import AsyncRetry, RetryConfig, RetryError
 
         retrier = AsyncRetry(RetryConfig(max_retries=2, base_delay=0.05))
 
@@ -193,7 +193,7 @@ class TestAsyncRetry:
 
     @pytest.mark.asyncio
     async def test_execute_specific_exception_only(self):
-        from apps.api.services.retry import AsyncRetry, RetryConfig, RetryError
+        from api.services.retry import AsyncRetry, RetryConfig, RetryError
 
         retrier = AsyncRetry(RetryConfig(max_retries=2, base_delay=0.05, retry_on=(ValueError,)))
 
@@ -205,7 +205,7 @@ class TestAsyncRetry:
 
     @pytest.mark.asyncio
     async def test_execute_with_args(self):
-        from apps.api.services.retry import AsyncRetry, RetryConfig
+        from api.services.retry import AsyncRetry, RetryConfig
 
         retrier = AsyncRetry(RetryConfig(max_retries=2, base_delay=0.05))
 
@@ -218,19 +218,19 @@ class TestAsyncRetry:
 
 class TestPreconfiguredRetryers:
     def test_retry_default_exists(self):
-        from apps.api.services.retry import retry_default
+        from api.services.retry import retry_default
 
         assert retry_default.config.max_retries == 3
         assert retry_default.config.base_delay == 1.0
 
     def test_retry_ollama_exists(self):
-        from apps.api.services.retry import retry_ollama
+        from api.services.retry import retry_ollama
 
         assert retry_ollama.config.max_retries == 2
         assert retry_ollama.config.max_delay == 10.0
 
     def test_retry_rag_exists(self):
-        from apps.api.services.retry import retry_rag
+        from api.services.retry import retry_rag
 
         assert retry_rag.config.max_retries == 2
         assert retry_rag.config.base_delay == 0.5
@@ -239,7 +239,7 @@ class TestPreconfiguredRetryers:
 
 class TestRetryError:
     def test_retry_error_attributes(self):
-        from apps.api.services.retry import RetryError
+        from api.services.retry import RetryError
 
         inner = ValueError("original")
         err = RetryError("Failed after 3 attempts", inner, 3)

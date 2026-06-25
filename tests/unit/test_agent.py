@@ -12,7 +12,7 @@ class TestAgentCache:
 
     @pytest.mark.asyncio
     async def test_cache_set_get(self):
-        from apps.api.routers.agent import AgentCache
+        from api.routers.agent import AgentCache
 
         cache = AgentCache(default_ttl=300)
         await cache.set("test:1", {"data": "value"})
@@ -21,7 +21,7 @@ class TestAgentCache:
 
     @pytest.mark.asyncio
     async def test_cache_ttl_expiry(self):
-        from apps.api.routers.agent import AgentCache
+        from api.routers.agent import AgentCache
 
         cache = AgentCache(default_ttl=1)  # 1 second TTL
         await cache.set("test:2", {"data": "value"})
@@ -31,7 +31,7 @@ class TestAgentCache:
 
     @pytest.mark.asyncio
     async def test_cache_custom_ttl(self):
-        from apps.api.routers.agent import AgentCache
+        from api.routers.agent import AgentCache
 
         cache = AgentCache(default_ttl=300)
         await cache.set("test:3", {"data": "value"}, ttl=0.1)  # 100ms TTL
@@ -41,7 +41,7 @@ class TestAgentCache:
 
     @pytest.mark.asyncio
     async def test_cache_invalidate(self):
-        from apps.api.routers.agent import AgentCache
+        from api.routers.agent import AgentCache
 
         cache = AgentCache(default_ttl=300)
         await cache.set("test:4", {"data": "value"})
@@ -51,7 +51,7 @@ class TestAgentCache:
 
     @pytest.mark.asyncio
     async def test_cache_invalidate_prefix(self):
-        from apps.api.routers.agent import AgentCache
+        from api.routers.agent import AgentCache
 
         cache = AgentCache(default_ttl=300)
         await cache.set("tenant:1:agent:1", {"data": "value1"})
@@ -66,7 +66,7 @@ class TestAgentCache:
 
     @pytest.mark.asyncio
     async def test_cache_cleanup(self):
-        from apps.api.routers.agent import AgentCache
+        from api.routers.agent import AgentCache
 
         cache = AgentCache(default_ttl=0.1)  # 100ms TTL
         await cache.set("test:5", {"data": "value"})
@@ -81,7 +81,7 @@ class TestHub:
 
     @pytest.mark.asyncio
     async def test_hub_connect_disconnect(self):
-        from apps.api.routers.agent import Hub
+        from api.routers.agent import Hub
 
         hub = Hub()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -96,7 +96,7 @@ class TestHub:
 
     @pytest.mark.asyncio
     async def test_hub_send(self):
-        from apps.api.routers.agent import Hub
+        from api.routers.agent import Hub
 
         hub = Hub()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -108,7 +108,7 @@ class TestHub:
 
     @pytest.mark.asyncio
     async def test_hub_send_nonexistent_agent(self):
-        from apps.api.routers.agent import Hub
+        from api.routers.agent import Hub
 
         hub = Hub()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -119,7 +119,7 @@ class TestHub:
 
     @pytest.mark.asyncio
     async def test_hub_broadcast(self):
-        from apps.api.routers.agent import Hub
+        from api.routers.agent import Hub
 
         hub = Hub()
         mock_ws1 = AsyncMock(spec=WebSocket)
@@ -135,7 +135,7 @@ class TestHub:
 
     @pytest.mark.asyncio
     async def test_hub_send_success(self):
-        from apps.api.routers.agent import Hub
+        from api.routers.agent import Hub
 
         hub = Hub()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -147,7 +147,7 @@ class TestHub:
 
     @pytest.mark.asyncio
     async def test_hub_send_failure_logs_warning(self):
-        from apps.api.routers.agent import Hub
+        from api.routers.agent import Hub
 
         hub = Hub()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -155,7 +155,7 @@ class TestHub:
 
         await hub.connect("agent-1", mock_ws)
 
-        with patch("apps.api.routers.agent.logger.warning") as mock_warning:
+        with patch("api.routers.agent.logger.warning") as mock_warning:
             await hub.send("agent-1", {"type": "test"})
 
         mock_warning.assert_called_once()
@@ -164,7 +164,7 @@ class TestHub:
 
     @pytest.mark.asyncio
     async def test_hub_disconnect_failure_logs_warning(self):
-        from apps.api.routers.agent import Hub
+        from api.routers.agent import Hub
 
         hub = Hub()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -172,7 +172,7 @@ class TestHub:
 
         await hub.connect("agent-1", mock_ws)
 
-        with patch("apps.api.routers.agent.logger.warning") as mock_warning:
+        with patch("api.routers.agent.logger.warning") as mock_warning:
             await hub.disconnect("agent-1")
 
         mock_warning.assert_called_once()
@@ -181,7 +181,7 @@ class TestHub:
 
     @pytest.mark.asyncio
     async def test_hub_broadcast_continues_on_error(self):
-        from apps.api.routers.agent import Hub
+        from api.routers.agent import Hub
 
         hub = Hub()
         mock_ws1 = AsyncMock(spec=WebSocket)
@@ -197,7 +197,7 @@ class TestHub:
 
     @pytest.mark.asyncio
     async def test_hub_disconnect_nonexistent(self):
-        from apps.api.routers.agent import Hub
+        from api.routers.agent import Hub
 
         hub = Hub()
 
@@ -210,7 +210,7 @@ class TestAgentEndpoints:
 
     @pytest.mark.asyncio
     async def test_peek_queue(self):
-        from apps.api.routers.agent import peek_queue
+        from api.routers.agent import peek_queue
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
@@ -219,7 +219,7 @@ class TestAgentEndpoints:
         mock_qm = MagicMock()
         mock_qm.peek.return_value = [{"id": "item1"}, {"id": "item2"}]
         
-        with patch("apps.api.routers.agent.QueueManager", return_value=mock_qm):
+        with patch("api.routers.agent.QueueManager", return_value=mock_qm):
             result = peek_queue(mock_request, queue="general", n=50)
             
         assert result == {"items": [{"id": "item1"}, {"id": "item2"}]}
@@ -227,9 +227,9 @@ class TestAgentEndpoints:
 
     @pytest.mark.asyncio
     async def test_get_ws_token(self):
-        from apps.api.routers.agent import get_ws_token
+        from api.routers.agent import get_ws_token
 
-        with patch("apps.api.services.auth.generate_websocket_token", new_callable=AsyncMock) as mock_gen:
+        with patch("api.services.auth.generate_websocket_token", new_callable=AsyncMock) as mock_gen:
             mock_gen.return_value = "test-token-123"
             result = await get_ws_token("agent-1")
             
@@ -238,7 +238,7 @@ class TestAgentEndpoints:
 
     @pytest.mark.asyncio
     async def test_claim_next_success(self):
-        from apps.api.routers.agent import claim_next
+        from api.routers.agent import claim_next
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
@@ -247,9 +247,9 @@ class TestAgentEndpoints:
         mock_qm = MagicMock()
         mock_qm.claim.return_value = {"id": "item1", "data": "test"}
         
-        with patch("apps.api.routers.agent.QueueManager", return_value=mock_qm), \
-             patch("apps.api.routers.agent.hub.send", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.agent.hub.broadcast", new_callable=AsyncMock) as mock_broadcast:
+        with patch("api.routers.agent.QueueManager", return_value=mock_qm), \
+             patch("api.routers.agent.hub.send", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.agent.hub.broadcast", new_callable=AsyncMock) as mock_broadcast:
             
             result = await claim_next(mock_request, queue="general", agent_id="agent-1")
             
@@ -260,7 +260,7 @@ class TestAgentEndpoints:
 
     @pytest.mark.asyncio
     async def test_claim_next_empty(self):
-        from apps.api.routers.agent import claim_next
+        from api.routers.agent import claim_next
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
@@ -269,9 +269,9 @@ class TestAgentEndpoints:
         mock_qm = MagicMock()
         mock_qm.claim.return_value = None
         
-        with patch("apps.api.routers.agent.QueueManager", return_value=mock_qm), \
-             patch("apps.api.routers.agent.hub.send", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.agent.hub.broadcast", new_callable=AsyncMock) as mock_broadcast:
+        with patch("api.routers.agent.QueueManager", return_value=mock_qm), \
+             patch("api.routers.agent.hub.send", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.agent.hub.broadcast", new_callable=AsyncMock) as mock_broadcast:
             
             result = await claim_next(mock_request, queue="general", agent_id="agent-1")
             
@@ -281,7 +281,7 @@ class TestAgentEndpoints:
 
     @pytest.mark.asyncio
     async def test_disposition_success(self):
-        from apps.api.routers.agent import disposition
+        from api.routers.agent import disposition
 
         mock_request = MagicMock(spec=Request)
         mock_redis = AsyncMock()
@@ -297,7 +297,7 @@ class TestAgentEndpoints:
 
     @pytest.mark.asyncio
     async def test_disposition_invalid_session_id(self):
-        from apps.api.routers.agent import disposition
+        from api.routers.agent import disposition
 
         mock_request = MagicMock(spec=Request)
         mock_redis = AsyncMock()
@@ -309,7 +309,7 @@ class TestAgentEndpoints:
 
     @pytest.mark.asyncio
     async def test_disposition_session_not_found(self):
-        from apps.api.routers.agent import disposition
+        from api.routers.agent import disposition
 
         mock_request = MagicMock(spec=Request)
         mock_redis = AsyncMock()
@@ -326,12 +326,12 @@ class TestWebSocket:
 
     @pytest.mark.asyncio
     async def test_ws_agent_missing_token(self):
-        from apps.api.routers.agent import ws_agent
+        from api.routers.agent import ws_agent
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = None
         
-        with patch("apps.api.routers.agent.hub.connect", new_callable=AsyncMock) as mock_connect:
+        with patch("api.routers.agent.hub.connect", new_callable=AsyncMock) as mock_connect:
             await ws_agent(mock_ws)
             
         mock_ws.close.assert_called_once_with(code=4001, reason="Missing authentication token")
@@ -339,13 +339,13 @@ class TestWebSocket:
 
     @pytest.mark.asyncio
     async def test_ws_agent_invalid_token(self):
-        from apps.api.routers.agent import ws_agent
+        from api.routers.agent import ws_agent
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "invalid-token"
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.agent.hub.connect", new_callable=AsyncMock) as mock_connect:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.agent.hub.connect", new_callable=AsyncMock) as mock_connect:
             
             mock_verify.return_value = None
             await ws_agent(mock_ws)
@@ -355,14 +355,14 @@ class TestWebSocket:
 
     @pytest.mark.asyncio
     async def test_ws_agent_success(self):
-        from apps.api.routers.agent import ws_agent
+        from api.routers.agent import ws_agent
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.side_effect = ["valid-token", "agent-1"]
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.agent.hub.connect", new_callable=AsyncMock) as mock_connect, \
-             patch("apps.api.routers.agent.hub.disconnect", new_callable=AsyncMock) as mock_disconnect:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.agent.hub.connect", new_callable=AsyncMock) as mock_connect, \
+             patch("api.routers.agent.hub.disconnect", new_callable=AsyncMock) as mock_disconnect:
             
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_ws.receive_text.side_effect = ["test message", WebSocketDisconnect()]
@@ -376,15 +376,15 @@ class TestWebSocket:
 
     @pytest.mark.asyncio
     async def test_ws_agent_auto_agent_id(self):
-        from apps.api.routers.agent import ws_agent
+        from api.routers.agent import ws_agent
         import time
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.side_effect = ["valid-token", None]  # No agent_id provided
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.agent.hub.connect", new_callable=AsyncMock) as mock_connect, \
-             patch("apps.api.routers.agent.time.time", return_value=1234567890):
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.agent.hub.connect", new_callable=AsyncMock) as mock_connect, \
+             patch("api.routers.agent.time.time", return_value=1234567890):
             
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_ws.receive_text.side_effect = WebSocketDisconnect()

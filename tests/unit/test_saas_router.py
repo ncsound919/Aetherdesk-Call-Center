@@ -8,10 +8,10 @@ class TestSaasDashboard:
 
     @pytest.mark.asyncio
     async def test_get_dashboard_returns_data(self):
-        from apps.api.routers.saas import get_saas_dashboard
+        from api.routers.saas import get_saas_dashboard
 
         mock_data = {"agents_count": 5, "calls_today": 100, "active_calls": 3}
-        with patch("apps.api.routers.saas.get_saas_dashboard_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.get_saas_dashboard_db", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = mock_data
 
             result = await get_saas_dashboard(tenant_id="TENANT-001")
@@ -20,9 +20,9 @@ class TestSaasDashboard:
 
     @pytest.mark.asyncio
     async def test_get_dashboard_empty_tenant(self):
-        from apps.api.routers.saas import get_saas_dashboard
+        from api.routers.saas import get_saas_dashboard
 
-        with patch("apps.api.routers.saas.get_saas_dashboard_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.get_saas_dashboard_db", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = {}
 
             result = await get_saas_dashboard(tenant_id="TENANT-999")
@@ -34,9 +34,9 @@ class TestCreateProfile:
 
     @pytest.mark.asyncio
     async def test_create_profile_success(self):
-        from apps.api.routers.saas import create_profile
+        from api.routers.saas import create_profile
 
-        with patch("apps.api.routers.saas.create_agent_profile_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.create_agent_profile_db", new_callable=AsyncMock) as mock_db:
             result = await create_profile(
                 name="Sales Agent",
                 prompt="Be helpful and persuasive",
@@ -49,9 +49,9 @@ class TestCreateProfile:
 
     @pytest.mark.asyncio
     async def test_create_profile_calls_db_with_correct_params(self):
-        from apps.api.routers.saas import create_profile
+        from api.routers.saas import create_profile
 
-        with patch("apps.api.routers.saas.create_agent_profile_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.create_agent_profile_db", new_callable=AsyncMock) as mock_db:
             result = await create_profile(
                 name="Support Agent",
                 prompt="Be patient",
@@ -73,9 +73,9 @@ class TestRentAgent:
 
     @pytest.mark.asyncio
     async def test_rent_agent_hour(self):
-        from apps.api.routers.saas import rent_agent
+        from api.routers.saas import rent_agent
 
-        with patch("apps.api.routers.saas.rent_agent_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.rent_agent_db", new_callable=AsyncMock) as mock_db:
             result = await rent_agent(
                 profile_id="PROF-ABC123",
                 duration_type="hour",
@@ -88,9 +88,9 @@ class TestRentAgent:
 
     @pytest.mark.asyncio
     async def test_rent_agent_day(self):
-        from apps.api.routers.saas import rent_agent
+        from api.routers.saas import rent_agent
 
-        with patch("apps.api.routers.saas.rent_agent_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.rent_agent_db", new_callable=AsyncMock) as mock_db:
             result = await rent_agent(
                 profile_id="PROF-DEF456",
                 duration_type="day",
@@ -101,9 +101,9 @@ class TestRentAgent:
 
     @pytest.mark.asyncio
     async def test_rent_agent_week(self):
-        from apps.api.routers.saas import rent_agent
+        from api.routers.saas import rent_agent
 
-        with patch("apps.api.routers.saas.rent_agent_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.rent_agent_db", new_callable=AsyncMock) as mock_db:
             result = await rent_agent(
                 profile_id="PROF-GHI789",
                 duration_type="week",
@@ -114,9 +114,9 @@ class TestRentAgent:
 
     @pytest.mark.asyncio
     async def test_rent_agent_month(self):
-        from apps.api.routers.saas import rent_agent
+        from api.routers.saas import rent_agent
 
-        with patch("apps.api.routers.saas.rent_agent_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.rent_agent_db", new_callable=AsyncMock) as mock_db:
             result = await rent_agent(
                 profile_id="PROF-JKL012",
                 duration_type="month",
@@ -127,7 +127,7 @@ class TestRentAgent:
 
     @pytest.mark.asyncio
     async def test_rent_agent_invalid_duration(self):
-        from apps.api.routers.saas import rent_agent
+        from api.routers.saas import rent_agent
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
@@ -145,7 +145,7 @@ class TestSettings:
 
     @pytest.mark.asyncio
     async def test_get_settings_returns_row(self):
-        from apps.api.routers.saas import get_settings
+        from api.routers.saas import get_settings
 
         mock_row = {
             "api_feeds": '{"feed1": "url1", "feed2": "url2"}',
@@ -155,7 +155,7 @@ class TestSettings:
             "sync_dnc": 0,
             "mcp_servers": '{"server1": "http://mcp1"}',
         }
-        with patch("apps.api.routers.saas.get_tenant_settings_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.get_tenant_settings_db", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = mock_row
 
             result = await get_settings(tenant_id="TENANT-001")
@@ -168,9 +168,9 @@ class TestSettings:
 
     @pytest.mark.asyncio
     async def test_get_settings_defaults_when_no_row(self):
-        from apps.api.routers.saas import get_settings
+        from api.routers.saas import get_settings
 
-        with patch("apps.api.routers.saas.get_tenant_settings_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.get_tenant_settings_db", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = None
 
             result = await get_settings(tenant_id="TENANT-999")
@@ -183,9 +183,9 @@ class TestSettings:
 
     @pytest.mark.asyncio
     async def test_update_settings(self):
-        from apps.api.routers.saas import update_settings
+        from api.routers.saas import update_settings
 
-        with patch("apps.api.routers.saas.update_tenant_settings_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.update_tenant_settings_db", new_callable=AsyncMock) as mock_db:
             result = await update_settings(
                 settings={"auto_mode_enabled": True, "redact_pii": False},
                 tenant_id="TENANT-001",
@@ -202,7 +202,7 @@ class TestGenerateScript:
 
     @pytest.mark.asyncio
     async def test_generate_script_success(self):
-        from apps.api.routers.saas import generate_script
+        from api.routers.saas import generate_script
         from unittest.mock import MagicMock
 
         mock_response = MagicMock()
@@ -210,7 +210,7 @@ class TestGenerateScript:
             "message": {"content": "You are an AI agent for customer support."}
         }
 
-        with patch("apps.api.routers.saas.httpx.AsyncClient") as mock_client_class:
+        with patch("api.routers.saas.httpx.AsyncClient") as mock_client_class:
             mock_instance = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_instance
             mock_instance.post = AsyncMock(return_value=mock_response)
@@ -223,9 +223,9 @@ class TestGenerateScript:
 
     @pytest.mark.asyncio
     async def test_generate_script_fallback_on_ollama_error(self):
-        from apps.api.routers.saas import generate_script
+        from api.routers.saas import generate_script
 
-        with patch("apps.api.routers.saas.httpx.AsyncClient") as mock_client_class:
+        with patch("api.routers.saas.httpx.AsyncClient") as mock_client_class:
             mock_instance = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_instance
             mock_instance.post.side_effect = Exception("Ollama connection refused")
@@ -239,9 +239,9 @@ class TestGenerateScript:
 
     @pytest.mark.asyncio
     async def test_generate_script_handles_empty_objective(self):
-        from apps.api.routers.saas import generate_script
+        from api.routers.saas import generate_script
 
-        with patch("apps.api.routers.saas.httpx.AsyncClient") as mock_client_class:
+        with patch("api.routers.saas.httpx.AsyncClient") as mock_client_class:
             mock_instance = AsyncMock()
             mock_client_class.return_value.__aenter__.return_value = mock_instance
             mock_instance.post.side_effect = Exception("Ollama connection refused")
@@ -259,13 +259,13 @@ class TestRecordings:
 
     @pytest.mark.asyncio
     async def test_get_recordings_returns_list(self):
-        from apps.api.routers.saas import get_recordings
+        from api.routers.saas import get_recordings
 
         mock_recordings = [
             {"id": "rec-001", "url": "https://example.com/rec1.mp3", "duration": 120},
             {"id": "rec-002", "url": "https://example.com/rec2.mp3", "duration": 60},
         ]
-        with patch("apps.api.routers.saas.get_session_recordings_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.get_session_recordings_db", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = mock_recordings
 
             result = await get_recordings(tenant_id="TENANT-001")
@@ -274,9 +274,9 @@ class TestRecordings:
 
     @pytest.mark.asyncio
     async def test_get_recordings_empty(self):
-        from apps.api.routers.saas import get_recordings
+        from api.routers.saas import get_recordings
 
-        with patch("apps.api.routers.saas.get_session_recordings_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.get_session_recordings_db", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = []
 
             result = await get_recordings(tenant_id="TENANT-001")
@@ -288,12 +288,12 @@ class TestApprovals:
 
     @pytest.mark.asyncio
     async def test_get_approvals_returns_list(self):
-        from apps.api.routers.saas import get_approvals
+        from api.routers.saas import get_approvals
 
         mock_approvals = [
             {"id": "app-001", "status": "pending", "requested_by": "TENANT-001"},
         ]
-        with patch("apps.api.routers.saas.get_pending_approvals_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.get_pending_approvals_db", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = mock_approvals
 
             result = await get_approvals(tenant_id="TENANT-001")
@@ -302,9 +302,9 @@ class TestApprovals:
 
     @pytest.mark.asyncio
     async def test_process_approval_approved(self):
-        from apps.api.routers.saas import process_approval
+        from api.routers.saas import process_approval
 
-        with patch("apps.api.routers.saas.process_approval_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.process_approval_db", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = True
 
             result = await process_approval(
@@ -317,9 +317,9 @@ class TestApprovals:
 
     @pytest.mark.asyncio
     async def test_process_approval_rejected(self):
-        from apps.api.routers.saas import process_approval
+        from api.routers.saas import process_approval
 
-        with patch("apps.api.routers.saas.process_approval_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.process_approval_db", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = True
 
             result = await process_approval(
@@ -331,7 +331,7 @@ class TestApprovals:
 
     @pytest.mark.asyncio
     async def test_process_approval_invalid_status(self):
-        from apps.api.routers.saas import process_approval
+        from api.routers.saas import process_approval
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
@@ -345,10 +345,10 @@ class TestApprovals:
 
     @pytest.mark.asyncio
     async def test_process_approval_not_found(self):
-        from apps.api.routers.saas import process_approval
+        from api.routers.saas import process_approval
         from fastapi import HTTPException
 
-        with patch("apps.api.routers.saas.process_approval_db", new_callable=AsyncMock) as mock_db:
+        with patch("api.routers.saas.process_approval_db", new_callable=AsyncMock) as mock_db:
             mock_db.return_value = False
 
             with pytest.raises(HTTPException) as exc_info:
@@ -366,8 +366,8 @@ class TestGetTenantId:
 
     @pytest.mark.asyncio
     async def test_get_tenant_id_returns_dev_key_in_test_env(self):
-        with patch("apps.api.routers.saas.os.getenv", return_value="test"):
-            from apps.api.routers.saas import get_tenant_id
+        with patch("api.routers.saas.os.getenv", return_value="test"):
+            from api.routers.saas import get_tenant_id
 
             result = await get_tenant_id(x_api_key="any-key")
             assert result == "TENANT-001"
@@ -381,8 +381,8 @@ class TestGetTenantId:
             }
             return envs.get(key, default)
 
-        with patch("apps.api.routers.saas.os.getenv", side_effect=getenv_side_effect):
-            from apps.api.routers.saas import get_tenant_id
+        with patch("api.routers.saas.os.getenv", side_effect=getenv_side_effect):
+            from api.routers.saas import get_tenant_id
 
             result = await get_tenant_id(x_api_key="my-dev-key")
             assert result == "TENANT-001"
@@ -395,12 +395,12 @@ class TestGetTenantId:
             }
             return envs.get(key, default)
 
-        with patch("apps.api.routers.saas.os.getenv", side_effect=getenv_side_effect), \
-             patch("apps.api.routers.saas.get_tenant_by_api_key", new_callable=AsyncMock) as mock_lookup:
+        with patch("api.routers.saas.os.getenv", side_effect=getenv_side_effect), \
+             patch("api.routers.saas.get_tenant_by_api_key", new_callable=AsyncMock) as mock_lookup:
 
             mock_lookup.return_value = {"id": "TENANT-REAL-001"}
 
-            from apps.api.routers.saas import get_tenant_id
+            from api.routers.saas import get_tenant_id
 
             result = await get_tenant_id(x_api_key="real-api-key-123")
             assert result == "TENANT-REAL-001"
@@ -416,12 +416,12 @@ class TestGetTenantId:
 
         from fastapi import HTTPException
 
-        with patch("apps.api.routers.saas.os.getenv", side_effect=getenv_side_effect), \
-             patch("apps.api.routers.saas.get_tenant_by_api_key", new_callable=AsyncMock) as mock_lookup:
+        with patch("api.routers.saas.os.getenv", side_effect=getenv_side_effect), \
+             patch("api.routers.saas.get_tenant_by_api_key", new_callable=AsyncMock) as mock_lookup:
 
             mock_lookup.return_value = None
 
-            from apps.api.routers.saas import get_tenant_id
+            from api.routers.saas import get_tenant_id
 
             with pytest.raises(HTTPException) as exc_info:
                 await get_tenant_id(x_api_key="invalid-key")

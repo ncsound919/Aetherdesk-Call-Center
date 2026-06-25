@@ -11,7 +11,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from apps.api.middleware.audit import _get_resource_type, _redact_phi
+from api.middleware.audit import _get_resource_type, _redact_phi
 
 
 # ── _redact_phi ────────────────────────────────────────────────────
@@ -151,9 +151,9 @@ class TestGetResourceType:
 @pytest.fixture
 def mock_db():
     """Mock SQLite connection so no real DB is touched."""
-    with patch("apps.api.middleware.audit.USE_POSTGRES", False):
+    with patch("api.middleware.audit.USE_POSTGRES", False):
         mock_conn = MagicMock()
-        with patch("apps.api.services.database._get_sqlite_conn", return_value=mock_conn):
+        with patch("api.services.database._get_sqlite_conn", return_value=mock_conn):
             yield mock_conn
 
 
@@ -162,7 +162,7 @@ def app():
     """Minimal FastAPI app with AuditMiddleware."""
     application = FastAPI()
 
-    from apps.api.middleware.audit import AuditMiddleware
+    from api.middleware.audit import AuditMiddleware
 
     application.add_middleware(AuditMiddleware)
 

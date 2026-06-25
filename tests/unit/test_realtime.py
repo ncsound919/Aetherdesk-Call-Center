@@ -11,7 +11,7 @@ class TestConnectionManager:
 
     @pytest.mark.asyncio
     async def test_connect_disconnect(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -24,7 +24,7 @@ class TestConnectionManager:
 
     @pytest.mark.asyncio
     async def test_register_unregister_voice_ws(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -38,7 +38,7 @@ class TestConnectionManager:
 
     @pytest.mark.asyncio
     async def test_safe_send_json(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -48,7 +48,7 @@ class TestConnectionManager:
 
     @pytest.mark.asyncio
     async def test_send_to_agent(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -59,7 +59,7 @@ class TestConnectionManager:
 
     @pytest.mark.asyncio
     async def test_send_to_nonexistent_agent(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -70,7 +70,7 @@ class TestConnectionManager:
 
     @pytest.mark.asyncio
     async def test_broadcast_to_queue(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
         mock_ws1 = AsyncMock(spec=WebSocket)
@@ -86,7 +86,7 @@ class TestConnectionManager:
 
     @pytest.mark.asyncio
     async def test_route_agent_audio(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
         import base64
 
         manager = ConnectionManager()
@@ -113,12 +113,12 @@ class TestAgentWebSocket:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_missing_token(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = None
         
-        with patch("apps.api.routers.realtime.manager.connect") as mock_connect:
+        with patch("api.routers.realtime.manager.connect") as mock_connect:
             await agent_websocket(mock_ws, "agent-1")
             
         mock_ws.close.assert_called_once_with(code=4001, reason="Missing authentication token")
@@ -126,13 +126,13 @@ class TestAgentWebSocket:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_invalid_token(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "invalid-token"
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.connect") as mock_connect:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect") as mock_connect:
             
             mock_verify.return_value = None
             await agent_websocket(mock_ws, "agent-1")
@@ -142,14 +142,14 @@ class TestAgentWebSocket:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_success(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.connect", new_callable=AsyncMock) as mock_connect, \
-             patch("apps.api.routers.realtime.manager.disconnect") as mock_disconnect:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect", new_callable=AsyncMock) as mock_connect, \
+             patch("api.routers.realtime.manager.disconnect") as mock_disconnect:
             
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_ws.receive_text.side_effect = WebSocketDisconnect()
@@ -163,16 +163,16 @@ class TestAgentWebSocket:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_subscribe_call(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.connect") as mock_connect, \
-             patch("apps.api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
-             patch("apps.api.routers.realtime._default_store.get_transcripts", return_value=[]) as mock_get_transcripts:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect") as mock_connect, \
+             patch("api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
+             patch("api.routers.realtime._default_store.get_transcripts", return_value=[]) as mock_get_transcripts:
             
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_ws.receive_text.side_effect = [
@@ -187,16 +187,16 @@ class TestAgentWebSocket:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_send_message(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.connect") as mock_connect, \
-             patch("apps.api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.realtime._default_store.touch") as mock_touch, \
-             patch("apps.api.routers.realtime.QueueManager") as mock_qm_class:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect") as mock_connect, \
+             patch("api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.realtime._default_store.touch") as mock_touch, \
+             patch("api.routers.realtime.QueueManager") as mock_qm_class:
             
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_qm = MagicMock()
@@ -216,15 +216,15 @@ class TestAgentWebSocket:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_takeover_call(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.connect") as mock_connect, \
-             patch("apps.api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.realtime.QueueManager") as mock_qm_class:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect") as mock_connect, \
+             patch("api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.realtime.QueueManager") as mock_qm_class:
             
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_qm = MagicMock()
@@ -248,7 +248,7 @@ class TestCallWebSocket:
 
     @pytest.mark.asyncio
     async def test_call_websocket_missing_token(self):
-        from apps.api.routers.realtime import call_websocket
+        from api.routers.realtime import call_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = None
@@ -259,12 +259,12 @@ class TestCallWebSocket:
 
     @pytest.mark.asyncio
     async def test_call_websocket_invalid_token(self):
-        from apps.api.routers.realtime import call_websocket
+        from api.routers.realtime import call_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "invalid-token"
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify:
             mock_verify.return_value = None
             await call_websocket(mock_ws, "call-123")
             
@@ -272,16 +272,16 @@ class TestCallWebSocket:
 
     @pytest.mark.asyncio
     async def test_call_websocket_success(self):
-        from apps.api.routers.realtime import call_websocket
+        from api.routers.realtime import call_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
-             patch("apps.api.routers.realtime._default_store.get_transcripts", return_value=[]) as mock_get_transcripts, \
-             patch("apps.api.routers.realtime.cleanup_call_transcripts") as mock_cleanup:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
+             patch("api.routers.realtime._default_store.get_transcripts", return_value=[]) as mock_get_transcripts, \
+             patch("api.routers.realtime.cleanup_call_transcripts") as mock_cleanup:
             
             mock_verify.return_value = {"call_sid": "call-123"}
             mock_ws.receive_text.side_effect = WebSocketDisconnect()
@@ -294,18 +294,18 @@ class TestCallWebSocket:
 
     @pytest.mark.asyncio
     async def test_call_websocket_transcript(self):
-        from apps.api.routers.realtime import call_websocket
+        from api.routers.realtime import call_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
         
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.realtime.manager.broadcast_to_queue", new_callable=AsyncMock) as mock_broadcast, \
-             patch("apps.api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
-             patch("apps.api.routers.realtime._default_store.get_transcripts", return_value=[]) as mock_get_transcripts, \
-             patch("apps.api.routers.realtime._default_store.add_transcript") as mock_add_transcript, \
-             patch("apps.api.routers.realtime.cleanup_call_transcripts") as mock_cleanup:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.realtime.manager.broadcast_to_queue", new_callable=AsyncMock) as mock_broadcast, \
+             patch("api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
+             patch("api.routers.realtime._default_store.get_transcripts", return_value=[]) as mock_get_transcripts, \
+             patch("api.routers.realtime._default_store.add_transcript") as mock_add_transcript, \
+             patch("api.routers.realtime.cleanup_call_transcripts") as mock_cleanup:
             
             mock_verify.return_value = {"call_sid": "call-123"}
             mock_ws.receive_text.side_effect = [
@@ -324,10 +324,10 @@ class TestTranscriptUtils:
 
     @pytest.mark.asyncio
     async def test_broadcast_transcript(self):
-        from apps.api.routers.realtime import broadcast_transcript
+        from api.routers.realtime import broadcast_transcript
 
-        with patch("apps.api.routers.realtime.manager.broadcast_to_queue", new_callable=AsyncMock) as mock_broadcast, \
-             patch("apps.api.routers.realtime._default_store.add_transcript") as mock_add:
+        with patch("api.routers.realtime.manager.broadcast_to_queue", new_callable=AsyncMock) as mock_broadcast, \
+             patch("api.routers.realtime._default_store.add_transcript") as mock_add:
             
             transcript_entry = {"text": "Hello", "is_final": True}
             broadcast_transcript("call-123", transcript_entry)
@@ -339,14 +339,14 @@ class TestTranscriptUtils:
         mock_broadcast.assert_called_once()
 
     def test_cleanup_call_transcripts(self):
-        from apps.api.routers.realtime import cleanup_call_transcripts
+        from api.routers.realtime import cleanup_call_transcripts
 
-        with patch("apps.api.routers.realtime._default_store.cleanup") as mock_cleanup:
+        with patch("api.routers.realtime._default_store.cleanup") as mock_cleanup:
             cleanup_call_transcripts("call-123")
             mock_cleanup.assert_called_once_with("call-123")
 
     def test_cleanup_call_transcripts_with_custom_store(self):
-        from apps.api.routers.realtime import cleanup_call_transcripts
+        from api.routers.realtime import cleanup_call_transcripts
 
         mock_store = MagicMock()
         cleanup_call_transcripts("call-456", store=mock_store)
@@ -354,11 +354,11 @@ class TestTranscriptUtils:
 
     def test_broadcast_transcript_no_event_loop(self):
         import asyncio
-        from apps.api.routers.realtime import broadcast_transcript
+        from api.routers.realtime import broadcast_transcript
 
         transcript_entry = {"text": "Hello", "is_final": True}
 
-        with patch("apps.api.routers.realtime._default_store.add_transcript") as mock_add, \
+        with patch("api.routers.realtime._default_store.add_transcript") as mock_add, \
              patch.object(asyncio, "create_task", side_effect=RuntimeError("No event loop")):
 
             # Should not raise
@@ -367,12 +367,12 @@ class TestTranscriptUtils:
         mock_add.assert_called_once_with("call-123", transcript_entry)
 
     def test_broadcast_transcript_with_custom_store(self):
-        from apps.api.routers.realtime import broadcast_transcript
+        from api.routers.realtime import broadcast_transcript
 
         mock_store = MagicMock()
         transcript_entry = {"text": "Hello", "is_final": True}
 
-        with patch("apps.api.routers.realtime.manager.broadcast_to_queue", new_callable=AsyncMock) as mock_broadcast:
+        with patch("api.routers.realtime.manager.broadcast_to_queue", new_callable=AsyncMock) as mock_broadcast:
             broadcast_transcript("call-123", transcript_entry, store=mock_store)
 
         mock_store.add_transcript.assert_called_once_with("call-123", transcript_entry)
@@ -383,7 +383,7 @@ class TestConnectionManagerEdgeCases:
 
     @pytest.mark.asyncio
     async def test_init_with_custom_store(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         mock_store = MagicMock()
         manager = ConnectionManager(store=mock_store)
@@ -391,7 +391,7 @@ class TestConnectionManagerEdgeCases:
 
     @pytest.mark.asyncio
     async def test_route_agent_audio_no_voice_connection(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
         import base64
 
         manager = ConnectionManager()
@@ -408,7 +408,7 @@ class TestConnectionManagerEdgeCases:
 
     @pytest.mark.asyncio
     async def test_broadcast_to_queue_with_send_failure(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
         mock_ws_ok = AsyncMock(spec=WebSocket)
@@ -426,7 +426,7 @@ class TestConnectionManagerEdgeCases:
 
     @pytest.mark.asyncio
     async def test_safe_send_json_lock_reuse(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -437,7 +437,7 @@ class TestConnectionManagerEdgeCases:
 
     @pytest.mark.asyncio
     async def test_disconnect_with_wrong_websocket(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
         mock_ws_registered = AsyncMock(spec=WebSocket)
@@ -451,7 +451,7 @@ class TestConnectionManagerEdgeCases:
 
     @pytest.mark.asyncio
     async def test_unregister_voice_ws_nonexistent(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
 
@@ -461,7 +461,7 @@ class TestConnectionManagerEdgeCases:
 
     @pytest.mark.asyncio
     async def test_send_to_agent_send_failure(self):
-        from apps.api.routers.realtime import ConnectionManager
+        from api.routers.realtime import ConnectionManager
 
         manager = ConnectionManager()
         mock_ws = AsyncMock(spec=WebSocket)
@@ -480,16 +480,16 @@ class TestAgentWebSocketEdgeCases:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_agent_audio(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
         import base64
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.connect") as mock_connect, \
-             patch("apps.api.routers.realtime.manager.route_agent_audio", new_callable=AsyncMock) as mock_route, \
-             patch("apps.api.routers.realtime.manager.disconnect") as mock_disconnect:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect") as mock_connect, \
+             patch("api.routers.realtime.manager.route_agent_audio", new_callable=AsyncMock) as mock_route, \
+             patch("api.routers.realtime.manager.disconnect") as mock_disconnect:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_ws.receive_text.side_effect = [
@@ -504,15 +504,15 @@ class TestAgentWebSocketEdgeCases:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_agent_audio_no_call_sid(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.connect") as mock_connect, \
-             patch("apps.api.routers.realtime.manager.route_agent_audio", new_callable=AsyncMock) as mock_route, \
-             patch("apps.api.routers.realtime.manager.disconnect") as mock_disconnect:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect") as mock_connect, \
+             patch("api.routers.realtime.manager.route_agent_audio", new_callable=AsyncMock) as mock_route, \
+             patch("api.routers.realtime.manager.disconnect") as mock_disconnect:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_ws.receive_text.side_effect = [
@@ -527,14 +527,14 @@ class TestAgentWebSocketEdgeCases:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_generic_exception(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.connect") as mock_connect, \
-             patch("apps.api.routers.realtime.manager.disconnect") as mock_disconnect:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect") as mock_connect, \
+             patch("api.routers.realtime.manager.disconnect") as mock_disconnect:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_ws.receive_text.side_effect = ValueError("Unexpected data")
@@ -545,7 +545,7 @@ class TestAgentWebSocketEdgeCases:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_send_message_without_redis(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
@@ -554,10 +554,10 @@ class TestAgentWebSocketEdgeCases:
         mock_ws.app = MagicMock()
         del mock_ws.app.state.redis
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.connect") as mock_connect, \
-             patch("apps.api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.realtime._default_store.touch") as mock_touch:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect") as mock_connect, \
+             patch("api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.realtime._default_store.touch") as mock_touch:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_ws.receive_text.side_effect = [
@@ -572,7 +572,7 @@ class TestAgentWebSocketEdgeCases:
 
     @pytest.mark.asyncio
     async def test_agent_websocket_takeover_without_redis(self):
-        from apps.api.routers.realtime import agent_websocket
+        from api.routers.realtime import agent_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
@@ -580,10 +580,10 @@ class TestAgentWebSocketEdgeCases:
         mock_ws.app = MagicMock()
         del mock_ws.app.state.redis
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.connect") as mock_connect, \
-             patch("apps.api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.realtime.manager.disconnect") as mock_disconnect:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect") as mock_connect, \
+             patch("api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.realtime.manager.disconnect") as mock_disconnect:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_ws.receive_text.side_effect = [
@@ -601,16 +601,16 @@ class TestCallWebSocketEdgeCases:
 
     @pytest.mark.asyncio
     async def test_call_websocket_generic_exception(self):
-        from apps.api.routers.realtime import call_websocket
+        from api.routers.realtime import call_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
-             patch("apps.api.routers.realtime._default_store.get_transcripts", return_value=[]) as mock_get_transcripts, \
-             patch("apps.api.routers.realtime.cleanup_call_transcripts") as mock_cleanup:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
+             patch("api.routers.realtime._default_store.get_transcripts", return_value=[]) as mock_get_transcripts, \
+             patch("api.routers.realtime.cleanup_call_transcripts") as mock_cleanup:
 
             mock_verify.return_value = {"call_sid": "call-123"}
             mock_ws.receive_text.side_effect = ValueError("Unexpected error")
@@ -622,7 +622,7 @@ class TestCallWebSocketEdgeCases:
 
     @pytest.mark.asyncio
     async def test_call_websocket_with_existing_transcripts(self):
-        from apps.api.routers.realtime import call_websocket
+        from api.routers.realtime import call_websocket
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
@@ -632,11 +632,11 @@ class TestCallWebSocketEdgeCases:
             {"type": "transcript", "text": "World", "is_final": True},
         ]
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
-             patch("apps.api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
-             patch("apps.api.routers.realtime._default_store.get_transcripts", return_value=existing_transcripts) as mock_get_transcripts, \
-             patch("apps.api.routers.realtime.cleanup_call_transcripts") as mock_cleanup:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
+             patch("api.routers.realtime._default_store.get_transcripts", return_value=existing_transcripts) as mock_get_transcripts, \
+             patch("api.routers.realtime.cleanup_call_transcripts") as mock_cleanup:
 
             mock_verify.return_value = {"call_sid": "call-123"}
             mock_ws.receive_text.side_effect = WebSocketDisconnect()

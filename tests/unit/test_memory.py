@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 class TestMemoryServiceInit:
     def test_default_initialization(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         assert svc.memory_dir == "memory_db"
@@ -15,14 +15,14 @@ class TestMemoryServiceInit:
         assert svc._embeddings is None
 
     def test_custom_initialization(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService(memory_dir="/tmp/test_mem", embedding_model="custom-model")
         assert svc.memory_dir == "/tmp/test_mem"
         assert svc.embedding_model == "custom-model"
 
     def test_singleton_instance(self):
-        from apps.api.services.memory import memory_service
+        from api.services.memory import memory_service
 
         assert memory_service is not None
         assert isinstance(memory_service, object)
@@ -30,12 +30,12 @@ class TestMemoryServiceInit:
 
 class TestMemoryServiceGetEmbeddings:
     def test_lazy_initialization(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         assert svc._embeddings is None
 
-        with patch("apps.api.services.memory.HuggingFaceEmbeddings") as mock_emb:
+        with patch("api.services.memory.HuggingFaceEmbeddings") as mock_emb:
             mock_instance = MagicMock()
             mock_emb.return_value = mock_instance
             result = svc._get_embeddings()
@@ -44,11 +44,11 @@ class TestMemoryServiceGetEmbeddings:
             mock_emb.assert_called_once_with(model_name=svc.embedding_model)
 
     def test_returns_cached_embeddings(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._embeddings = "cached"
-        with patch("apps.api.services.memory.HuggingFaceEmbeddings") as mock_emb:
+        with patch("api.services.memory.HuggingFaceEmbeddings") as mock_emb:
             result = svc._get_embeddings()
             assert result == "cached"
             mock_emb.assert_not_called()
@@ -57,7 +57,7 @@ class TestMemoryServiceGetEmbeddings:
 class TestMemoryServiceInitialize:
     @pytest.mark.asyncio
     async def test_initializes_vectorstore(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         with patch.object(svc, "_load_or_create_index") as mock_load:
@@ -66,7 +66,7 @@ class TestMemoryServiceInitialize:
 
     @pytest.mark.asyncio
     async def test_skips_if_already_initialized(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._vectorstore = MagicMock()
@@ -77,39 +77,39 @@ class TestMemoryServiceInitialize:
 
 class TestMemoryServiceLoadOrCreateIndex:
     def test_loads_existing_index(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         mock_chroma = MagicMock()
 
-        with patch("apps.api.services.memory.os.path.exists", return_value=True), \
-             patch("apps.api.services.memory.os.listdir", return_value=["some_file"]), \
-             patch("apps.api.services.memory.Chroma", return_value=mock_chroma) as mock_chroma_cls, \
+        with patch("api.services.memory.os.path.exists", return_value=True), \
+             patch("api.services.memory.os.listdir", return_value=["some_file"]), \
+             patch("api.services.memory.Chroma", return_value=mock_chroma) as mock_chroma_cls, \
              patch.object(svc, "_get_embeddings", return_value="fake_emb"):
             svc._load_or_create_index()
             mock_chroma_cls.assert_called_once_with(persist_directory=svc.memory_dir, embedding_function="fake_emb")
             assert svc._vectorstore == mock_chroma
 
     def test_creates_new_index_when_dir_empty(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         mock_chroma = MagicMock()
 
-        with patch("apps.api.services.memory.os.path.exists", return_value=True), \
-             patch("apps.api.services.memory.os.listdir", return_value=[]), \
-             patch("apps.api.services.memory.os.makedirs") as mock_mkdir, \
-             patch("apps.api.services.memory.Chroma", return_value=mock_chroma) as mock_chroma_cls, \
+        with patch("api.services.memory.os.path.exists", return_value=True), \
+             patch("api.services.memory.os.listdir", return_value=[]), \
+             patch("api.services.memory.os.makedirs") as mock_mkdir, \
+             patch("api.services.memory.Chroma", return_value=mock_chroma) as mock_chroma_cls, \
              patch.object(svc, "_get_embeddings", return_value="fake_emb"):
             svc._rebuild_index = MagicMock()
             svc._load_or_create_index()
             svc._rebuild_index.assert_called_once()
 
     def test_creates_new_index_when_dir_missing(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
-        with patch("apps.api.services.memory.os.path.exists", return_value=False), \
+        with patch("api.services.memory.os.path.exists", return_value=False), \
              patch.object(svc, "_rebuild_index") as mock_rebuild:
             svc._load_or_create_index()
             mock_rebuild.assert_called_once()
@@ -117,13 +117,13 @@ class TestMemoryServiceLoadOrCreateIndex:
 
 class TestMemoryServiceRebuildIndex:
     def test_creates_directory_and_index(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         mock_chroma = MagicMock()
 
-        with patch("apps.api.services.memory.os.makedirs") as mock_mkdir, \
-             patch("apps.api.services.memory.Chroma", return_value=mock_chroma) as mock_chroma_cls, \
+        with patch("api.services.memory.os.makedirs") as mock_mkdir, \
+             patch("api.services.memory.Chroma", return_value=mock_chroma) as mock_chroma_cls, \
              patch.object(svc, "_get_embeddings", return_value="fake_emb"):
             svc._rebuild_index()
             mock_mkdir.assert_called_once_with(svc.memory_dir, exist_ok=True)
@@ -133,7 +133,7 @@ class TestMemoryServiceRebuildIndex:
 
 class TestMemoryServiceCreateMemoryId:
     def test_creates_hex_id(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         mem_id = svc._create_memory_id("hello world", "session-1")
@@ -142,7 +142,7 @@ class TestMemoryServiceCreateMemoryId:
         all(c in "0123456789abcdef" for c in mem_id)
 
     def test_creates_different_ids_for_different_content(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         id1 = svc._create_memory_id("content a", "session-1")
@@ -150,7 +150,7 @@ class TestMemoryServiceCreateMemoryId:
         assert id1 != id2
 
     def test_creates_different_ids_for_different_sessions(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         id1 = svc._create_memory_id("same text", "session-a")
@@ -161,7 +161,7 @@ class TestMemoryServiceCreateMemoryId:
 class TestMemoryServiceAddMemory:
     @pytest.mark.asyncio
     async def test_adds_memory_successfully(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._vectorstore = MagicMock()
@@ -175,7 +175,7 @@ class TestMemoryServiceAddMemory:
 
     @pytest.mark.asyncio
     async def test_initializes_if_not_ready(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._vectorstore = None
@@ -191,14 +191,14 @@ class TestMemoryServiceAddMemory:
 
     @pytest.mark.asyncio
     async def test_add_memory_creates_document(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._vectorstore = MagicMock()
 
         with patch.object(svc, "_create_memory_id", return_value="mem-789"), \
              patch("asyncio.get_running_loop") as mock_loop, \
-             patch("apps.api.services.memory.Document") as mock_doc_cls:
+             patch("api.services.memory.Document") as mock_doc_cls:
             mock_loop.return_value.run_in_executor = AsyncMock(return_value=None)
             mock_doc = MagicMock()
             mock_doc_cls.return_value = mock_doc
@@ -214,7 +214,7 @@ class TestMemoryServiceAddMemory:
 class TestMemoryServiceSearchMemories:
     @pytest.mark.asyncio
     async def test_search_without_filter(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._vectorstore = MagicMock()
@@ -233,7 +233,7 @@ class TestMemoryServiceSearchMemories:
 
     @pytest.mark.asyncio
     async def test_search_with_session_filter(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._vectorstore = MagicMock()
@@ -253,7 +253,7 @@ class TestMemoryServiceSearchMemories:
 
     @pytest.mark.asyncio
     async def test_search_no_results(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._vectorstore = MagicMock()
@@ -265,7 +265,7 @@ class TestMemoryServiceSearchMemories:
 
     @pytest.mark.asyncio
     async def test_search_respects_k_limit(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._vectorstore = MagicMock()
@@ -284,7 +284,7 @@ class TestMemoryServiceSearchMemories:
 
     @pytest.mark.asyncio
     async def test_initializes_if_not_ready(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._vectorstore = None
@@ -301,7 +301,7 @@ class TestMemoryServiceSearchMemories:
 class TestMemoryServiceGetSessionMemories:
     @pytest.mark.asyncio
     async def test_returns_session_memories(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         svc._vectorstore = MagicMock()
@@ -321,7 +321,7 @@ class TestMemoryServiceGetSessionMemories:
 class TestMemoryServiceClearSessionMemories:
     @pytest.mark.asyncio
     async def test_is_noop(self):
-        from apps.api.services.memory import MemoryService
+        from api.services.memory import MemoryService
 
         svc = MemoryService()
         result = await svc.clear_session_memories("session-1")

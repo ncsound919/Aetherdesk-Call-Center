@@ -5,14 +5,14 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from apps.api.main import app
+from api.main import app
 
 
 class VoiceGatewayTests(unittest.TestCase):
     def setUp(self):
         self.client = TestClient(app)
 
-    @patch("apps.api.routers.voice.asr_service.transcribe", new_callable=AsyncMock)
+    @patch("api.routers.voice.asr_service.transcribe", new_callable=AsyncMock)
     def test_transcribe_endpoint_returns_text(self, mock_transcribe):
         mock_transcribe.return_value = "hello world"
         response = self.client.post(
@@ -25,7 +25,7 @@ class VoiceGatewayTests(unittest.TestCase):
         self.assertEqual(response.json(), {"text": "hello world"})
         mock_transcribe.assert_called_once()
 
-    @patch("apps.api.routers.voice.tts_service.synthesize", new_callable=AsyncMock)
+    @patch("api.routers.voice.tts_service.synthesize", new_callable=AsyncMock)
     def test_synthesize_endpoint_returns_base64_audio(self, mock_synthesize):
         mock_synthesize.return_value = b"test-audio"
         response = self.client.post("/voice/synthesize", json={"text": "hello"})
@@ -36,7 +36,7 @@ class VoiceGatewayTests(unittest.TestCase):
         self.assertEqual(base64.b64decode(payload["audio"]), b"test-audio")
         mock_synthesize.assert_called_once_with("hello")
 
-    @patch("apps.api.routers.voice.classifier.classify_with_fallback", new_callable=AsyncMock)
+    @patch("api.routers.voice.classifier.classify_with_fallback", new_callable=AsyncMock)
     def test_intent_endpoint_returns_classification(self, mock_classify):
         mock_classify.return_value = type("R", (), {
             "intent": "billing_invoice",
@@ -59,10 +59,10 @@ class VoiceGatewayTests(unittest.TestCase):
 
 class EngineTests(unittest.TestCase):
     def test_get_prompt_renders_template_fields(self):
-        from apps.api.services.actions import Actions
-        from apps.api.services.engine import ProtocolVM, VMState
-        from apps.api.services.loader import FileLoader as ProtocolLoader
-        from apps.api.services.validators import Validators
+        from api.services.actions import Actions
+        from api.services.engine import ProtocolVM, VMState
+        from api.services.loader import FileLoader as ProtocolLoader
+        from api.services.validators import Validators
 
         vm = ProtocolVM(ProtocolLoader(base_path="config/protocols"), Validators(), Actions(redis_client=None))
         state = VMState(
@@ -79,7 +79,7 @@ class EngineTests(unittest.TestCase):
 
 class TTSTests(unittest.TestCase):
     def test_synthesize_returns_audio_bytes(self):
-        from apps.api.services.tts import TTSService, tts_service
+        from api.services.tts import TTSService, tts_service
 
         # Use actual instance and test that synthesize returns bytes
         service = tts_service
@@ -90,7 +90,7 @@ class TTSTests(unittest.TestCase):
 
 class IntentClassifierTests(unittest.TestCase):
     def test_classify_with_keyword_fallback(self):
-        from apps.api.services.intent_classifier import IntentClassifier
+        from api.services.intent_classifier import IntentClassifier
 
         classifier = IntentClassifier()
 
@@ -101,14 +101,14 @@ class IntentClassifierTests(unittest.TestCase):
         self.assertIn("Keyword fallback matched", result.reasoning)
 
     def test_classify_with_ollama_failure_uses_fallback(self):
-        from apps.api.services.intent_classifier import IntentClassifier
+        from api.services.intent_classifier import IntentClassifier
 
         classifier = IntentClassifier()
 
         async def failing_execute(func, *args, **kwargs):
             raise RuntimeError("service unavailable")
 
-        with patch("apps.api.services.intent_classifier.retry_ollama.execute", new_callable=AsyncMock, side_effect=failing_execute):
+        with patch("api.services.intent_classifier.retry_ollama.execute", new_callable=AsyncMock, side_effect=failing_execute):
             result = asyncio.run(classifier.classify("I need help with my order"))
 
         self.assertEqual(result.intent, "generalInquiry")

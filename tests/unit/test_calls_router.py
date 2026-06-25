@@ -49,16 +49,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from apps.api.services.auth import verify_tenant_access
+from api.services.auth import verify_tenant_access
 
 
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with just the calls router."""
-    from apps.api.routers.calls import router
+    from api.routers.calls import router
 
     application = FastAPI()
-    application.include_router(router)
+    application.include_router(router, prefix="/api/v1")
 
     # Mock app.state dependencies
     fonster = AsyncMock()
@@ -97,8 +97,8 @@ class TestCreateCall:
 
     def test_create_call_with_specific_agent(self, client):
         """Creating a call with a valid agent_id succeeds."""
-        with patch("apps.api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent, \
-             patch("apps.api.routers.calls.create_call_session", new_callable=AsyncMock) as mock_create:
+        with patch("api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent, \
+             patch("api.routers.calls.create_call_session", new_callable=AsyncMock) as mock_create:
 
             mock_get_agent.return_value = {"id": "agent-1", "name": "Sales Agent"}
 
@@ -122,7 +122,7 @@ class TestCreateCall:
 
     def test_create_call_agent_not_found(self, client):
         """Creating a call with a non-existent agent_id returns 404."""
-        with patch("apps.api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent:
+        with patch("api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent:
             mock_get_agent.return_value = None
 
             resp = client.post(
@@ -137,8 +137,8 @@ class TestCreateCall:
 
     def test_create_call_auto_route_finds_agent(self, client):
         """Call without agent_id auto-routes to an available agent."""
-        with patch("apps.api.routers.calls.get_available_agents", new_callable=AsyncMock) as mock_avail, \
-             patch("apps.api.routers.calls.create_call_session", new_callable=AsyncMock) as mock_create:
+        with patch("api.routers.calls.get_available_agents", new_callable=AsyncMock) as mock_avail, \
+             patch("api.routers.calls.create_call_session", new_callable=AsyncMock) as mock_create:
 
             mock_avail.return_value = [{"id": "agent-2", "name": "Support Agent"}]
 
@@ -158,9 +158,9 @@ class TestCreateCall:
 
     def test_create_call_auto_route_queues_when_no_agents(self, client):
         """Call without agent_id enqueues when no agents are available."""
-        with patch("apps.api.routers.calls.get_available_agents", new_callable=AsyncMock) as mock_avail, \
-             patch("apps.api.routers.calls.enqueue_call", new_callable=AsyncMock) as mock_enqueue, \
-             patch("apps.api.routers.calls.create_call_session", new_callable=AsyncMock) as mock_create:
+        with patch("api.routers.calls.get_available_agents", new_callable=AsyncMock) as mock_avail, \
+             patch("api.routers.calls.enqueue_call", new_callable=AsyncMock) as mock_enqueue, \
+             patch("api.routers.calls.create_call_session", new_callable=AsyncMock) as mock_create:
 
             mock_avail.return_value = []
 
@@ -181,8 +181,8 @@ class TestCreateCall:
 
     def test_create_call_uses_called_number(self, client):
         """Called number overrides when provided."""
-        with patch("apps.api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent, \
-             patch("apps.api.routers.calls.create_call_session", new_callable=AsyncMock) as mock_create:
+        with patch("api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent, \
+             patch("api.routers.calls.create_call_session", new_callable=AsyncMock) as mock_create:
 
             mock_get_agent.return_value = {"id": "agent-1"}
 
@@ -203,8 +203,8 @@ class TestCreateCall:
 
     def test_create_call_outbound_direction(self, client):
         """Outbound call direction is preserved."""
-        with patch("apps.api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent, \
-             patch("apps.api.routers.calls.create_call_session", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent, \
+             patch("api.routers.calls.create_call_session", new_callable=AsyncMock):
 
             mock_get_agent.return_value = {"id": "agent-1"}
 
@@ -226,8 +226,8 @@ class TestCreateCall:
             side_effect=Exception("Fonster timeout")
         )
 
-        with patch("apps.api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent, \
-             patch("apps.api.routers.calls.create_call_session", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent, \
+             patch("api.routers.calls.create_call_session", new_callable=AsyncMock):
 
             mock_get_agent.return_value = {"id": "agent-1"}
 
@@ -246,8 +246,8 @@ class TestCreateCall:
         """Call creation succeeds even when fonster_client is not set."""
         app.state.fonster_client = None
 
-        with patch("apps.api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent, \
-             patch("apps.api.routers.calls.create_call_session", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_agent_db", new_callable=AsyncMock) as mock_get_agent, \
+             patch("api.routers.calls.create_call_session", new_callable=AsyncMock):
 
             mock_get_agent.return_value = {"id": "agent-1"}
 
@@ -266,8 +266,8 @@ class TestCallAction:
 
     def test_call_action_answer(self, client):
         """Answer action calls fonster_client.answer_call."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {
                 "id": "call-1",
@@ -286,8 +286,8 @@ class TestCallAction:
 
     def test_call_action_hangup(self, client):
         """Hangup action calls fonster_client.hangup_call."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {
                 "id": "call-1",
@@ -303,8 +303,8 @@ class TestCallAction:
 
     def test_call_action_mute(self, client):
         """Mute action calls fonster_client.mute_call."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -316,8 +316,8 @@ class TestCallAction:
 
     def test_call_action_unmute(self, client):
         """Unmute action calls fonster_client.unmute_call."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -329,8 +329,8 @@ class TestCallAction:
 
     def test_call_action_hold(self, client):
         """Hold action calls fonster_client.hold_call."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -342,8 +342,8 @@ class TestCallAction:
 
     def test_call_action_unhold(self, client):
         """Unhold action calls fonster_client.unhold_call."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -355,8 +355,8 @@ class TestCallAction:
 
     def test_call_action_transfer_with_target(self, client):
         """Transfer action requires and uses target."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -368,8 +368,8 @@ class TestCallAction:
 
     def test_call_action_transfer_without_target_returns_400(self, client):
         """Transfer without target returns 400."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -382,8 +382,8 @@ class TestCallAction:
 
     def test_call_action_gather(self, client):
         """Gather action calls fonster_client.gather_speech."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -395,8 +395,8 @@ class TestCallAction:
 
     def test_call_action_gather_default_hints(self, client):
         """Gather action uses default hints when data is not provided."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -408,8 +408,8 @@ class TestCallAction:
 
     def test_call_action_say(self, client):
         """Say action calls fonster_client.say_text."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -421,8 +421,8 @@ class TestCallAction:
 
     def test_call_action_say_default_text(self, client):
         """Say action uses empty text when data is not provided."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -434,8 +434,8 @@ class TestCallAction:
 
     def test_call_action_play(self, client):
         """Play action calls fonster_client.play_audio."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -447,8 +447,8 @@ class TestCallAction:
 
     def test_call_action_record_start(self, client):
         """Record action calls fonster_client.record_call."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -460,8 +460,8 @@ class TestCallAction:
 
     def test_call_action_record_default_action(self, client):
         """Record action uses 'start' as default action."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -473,8 +473,8 @@ class TestCallAction:
 
     def test_call_action_dtmf(self, client):
         """DTMF action calls fonster_client.send_dtmf."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -486,8 +486,8 @@ class TestCallAction:
 
     def test_call_action_dtmf_default_digits(self, client):
         """DTMF action uses empty string as default digits."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -499,7 +499,7 @@ class TestCallAction:
 
     def test_call_action_call_not_found(self, client):
         """Action on non-existent call returns 404."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = None
 
             resp = client.post(
@@ -511,7 +511,7 @@ class TestCallAction:
 
     def test_call_action_idor_protection(self, client):
         """Action on call from another tenant returns 403."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {
                 "id": "call-1",
                 "tenant_id": "tenant-other",
@@ -537,8 +537,8 @@ class TestCallAction:
         """Action returns success note when fonster_client is None (dev mode)."""
         app.state.fonster_client = None
 
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
-             patch("apps.api.routers.calls.log_audit_event", new_callable=AsyncMock):
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get, \
+             patch("api.routers.calls.log_audit_event", new_callable=AsyncMock):
 
             mock_get.return_value = {"id": "call-1", "tenant_id": "tenant-1", "caller_number": "+1"}
 
@@ -557,7 +557,7 @@ class TestGetCall:
 
     def test_get_call_found(self, client):
         """Getting an existing call returns it."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {
                 "id": "call-1",
                 "tenant_id": "tenant-1",
@@ -584,7 +584,7 @@ class TestGetCall:
 
     def test_get_call_not_found(self, client):
         """Getting a non-existent call returns 404."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = None
 
             resp = client.get("/api/v1/calls/call-missing")
@@ -593,7 +593,7 @@ class TestGetCall:
 
     def test_get_call_missing_optional_fields(self, client):
         """Getting a call with missing optional fields returns defaults."""
-        with patch("apps.api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.calls.get_call_session", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {
                 "id": "call-1",
                 "tenant_id": "tenant-1",
@@ -619,7 +619,7 @@ class TestListCalls:
 
     def test_list_calls_returns_all(self, client):
         """Listing calls returns all calls for the tenant."""
-        with patch("apps.api.routers.calls.list_calls_db", new_callable=AsyncMock) as mock_list:
+        with patch("api.routers.calls.list_calls_db", new_callable=AsyncMock) as mock_list:
             mock_list.return_value = [
                 {
                     "id": "call-1",
@@ -659,7 +659,7 @@ class TestListCalls:
 
     def test_list_calls_with_status_filter(self, client):
         """Listing calls with a status filter filters correctly."""
-        with patch("apps.api.routers.calls.list_calls_db", new_callable=AsyncMock) as mock_list:
+        with patch("api.routers.calls.list_calls_db", new_callable=AsyncMock) as mock_list:
             mock_list.return_value = [
                 {
                     "id": "call-1",
@@ -682,7 +682,7 @@ class TestListCalls:
 
     def test_list_calls_empty(self, client):
         """Listing calls returns empty list when no calls exist."""
-        with patch("apps.api.routers.calls.list_calls_db", new_callable=AsyncMock) as mock_list:
+        with patch("api.routers.calls.list_calls_db", new_callable=AsyncMock) as mock_list:
             mock_list.return_value = []
 
             resp = client.get("/api/v1/calls")
@@ -692,7 +692,7 @@ class TestListCalls:
 
     def test_list_calls_missing_optional_fields(self, client):
         """Listing calls handles rows with missing optional fields."""
-        with patch("apps.api.routers.calls.list_calls_db", new_callable=AsyncMock) as mock_list:
+        with patch("api.routers.calls.list_calls_db", new_callable=AsyncMock) as mock_list:
             mock_list.return_value = [
                 {
                     "id": "call-1",

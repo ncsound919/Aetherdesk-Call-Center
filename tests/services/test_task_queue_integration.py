@@ -2,7 +2,7 @@ import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from apps.api.services.task_queue import AsyncTaskQueue, BackgroundTask, TaskStatus
+from api.services.task_queue import AsyncTaskQueue, BackgroundTask, TaskStatus
 
 
 class TestAsyncTaskQueueSubmit:
@@ -36,7 +36,7 @@ class TestAsyncTaskQueueExecution:
         queue = AsyncTaskQueue()
         mock_rag = MagicMock()
         mock_rag.query = AsyncMock(return_value=[{"content": "result"}])
-        monkeypatch.setattr("apps.api.services.task_queue.AsyncTaskQueue._execute_task",
+        monkeypatch.setattr("api.services.task_queue.AsyncTaskQueue._execute_task",
                             lambda self, task: AsyncMock(return_value=[{"content": "result"}])())
 
         task_id = await queue.submit("rag_query", {"query": "test", "k": 2})
@@ -53,7 +53,7 @@ class TestAsyncTaskQueueExecution:
         queue = AsyncTaskQueue()
         async def fail_execute(self_arg, task):
             raise ValueError("Task failed")
-        monkeypatch.setattr("apps.api.services.task_queue.AsyncTaskQueue._execute_task", fail_execute)
+        monkeypatch.setattr("api.services.task_queue.AsyncTaskQueue._execute_task", fail_execute)
 
         task_id = await queue.submit("rag_query", {"query": "test"})
         await queue.start(num_workers=1)

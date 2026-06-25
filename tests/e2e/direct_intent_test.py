@@ -1,6 +1,6 @@
 """Test intent classifier directly (not through HTTP)."""
 import asyncio, time
-from apps.api.services.intent_classifier import classifier
+from api.services.intent_classifier import classifier
 
 async def main():
     t0 = time.time()

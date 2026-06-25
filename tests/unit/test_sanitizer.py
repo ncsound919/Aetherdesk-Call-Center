@@ -1,5 +1,5 @@
 import pytest
-from apps.api.services.sanitizer import InputSanitizer, SanitizationResult
+from api.services.sanitizer import InputSanitizer, SanitizationResult
 
 
 class TestInputSanitizer:
@@ -81,7 +81,7 @@ class TestInputSanitizer:
         assert result.sanitized_value["required_field"] == "valid"
 
     def test_sanitize_user_input_function(self):
-        from apps.api.services.sanitizer import sanitize_user_input
+        from api.services.sanitizer import sanitize_user_input
         data = {"name": "Alice", "age": 30}
         result = sanitize_user_input(data)
         assert result["name"] == "Alice"

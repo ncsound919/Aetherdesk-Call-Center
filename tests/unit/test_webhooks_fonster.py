@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with just the webhooks fonster router."""
-    from apps.api.routers.webhooks_fonster import router
+    from api.routers.webhooks_fonster import router
 
     application = FastAPI()
     application.include_router(router)
@@ -113,11 +113,11 @@ class TestHandleFonsterWebhook:
     @pytest.mark.asyncio
     async def test_updates_call_status(self):
         """Should call db_update_call_status with correct call_id and status."""
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock) as mock_update:
             mock_update.return_value = None
 
-            from apps.api.routers.webhooks_fonster import handle_fonster_webhook
+            from api.routers.webhooks_fonster import handle_fonster_webhook
             req = self._make_request(redis_client=None)
             await handle_fonster_webhook(req, call_id="CA-001", status="active", session_ref="SR-001")
 
@@ -128,9 +128,9 @@ class TestHandleFonsterWebhook:
         """Should publish a JSON status update to redis when redis client exists."""
         mock_redis = AsyncMock()
 
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock):
-            from apps.api.routers.webhooks_fonster import handle_fonster_webhook
+            from api.routers.webhooks_fonster import handle_fonster_webhook
             req = self._make_request(redis_client=mock_redis)
             await handle_fonster_webhook(req, call_id="CA-002", status="completed")
 
@@ -148,9 +148,9 @@ class TestHandleFonsterWebhook:
         """Redis payload should include session_ref when provided."""
         mock_redis = AsyncMock()
 
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock):
-            from apps.api.routers.webhooks_fonster import handle_fonster_webhook
+            from api.routers.webhooks_fonster import handle_fonster_webhook
             req = self._make_request(redis_client=mock_redis)
             await handle_fonster_webhook(req, call_id="CA-003", status="active", session_ref="SR-999")
 
@@ -162,9 +162,9 @@ class TestHandleFonsterWebhook:
         """session_ref should be None in payload when not provided."""
         mock_redis = AsyncMock()
 
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock):
-            from apps.api.routers.webhooks_fonster import handle_fonster_webhook
+            from api.routers.webhooks_fonster import handle_fonster_webhook
             req = self._make_request(redis_client=mock_redis)
             await handle_fonster_webhook(req, call_id="CA-004", status="active")
 
@@ -174,9 +174,9 @@ class TestHandleFonsterWebhook:
     @pytest.mark.asyncio
     async def test_no_crash_when_redis_is_none(self):
         """Should not raise when redis client is None."""
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock):
-            from apps.api.routers.webhooks_fonster import handle_fonster_webhook
+            from api.routers.webhooks_fonster import handle_fonster_webhook
             req = self._make_request(redis_client=None)
             await handle_fonster_webhook(req, call_id="CA-005", status="failed")
             # No exception means success
@@ -184,11 +184,11 @@ class TestHandleFonsterWebhook:
     @pytest.mark.asyncio
     async def test_no_crash_when_db_update_fails(self):
         """Should log error but not crash when db_update_call_status raises."""
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock) as mock_update:
             mock_update.side_effect = Exception("DB connection lost")
 
-            from apps.api.routers.webhooks_fonster import handle_fonster_webhook
+            from api.routers.webhooks_fonster import handle_fonster_webhook
             req = self._make_request(redis_client=None)
             await handle_fonster_webhook(req, call_id="CA-006", status="completed")
             # No exception means success
@@ -207,7 +207,7 @@ class TestFonsterWebhookEndpoint:
 
     def test_call_answered_event(self, client, app):
         """POST with call.answered event returns 200 and triggers handle_fonster_webhook."""
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock) as mock_db:
             resp = client.post(
                 self.WEBHOOK_PATH,
@@ -220,7 +220,7 @@ class TestFonsterWebhookEndpoint:
 
     def test_call_completed_event(self, client, app):
         """POST with call.completed event returns 200."""
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock):
             resp = client.post(
                 self.WEBHOOK_PATH,
@@ -233,7 +233,7 @@ class TestFonsterWebhookEndpoint:
 
     def test_call_failed_event(self, client, app):
         """POST with call.failed event returns 200."""
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock):
             resp = client.post(
                 self.WEBHOOK_PATH,
@@ -263,7 +263,7 @@ class TestFonsterWebhookEndpoint:
         raw = json.dumps(body).encode()
         expected_sig = hmac.new(b"shared-secret", raw, hashlib.sha256).hexdigest()
 
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock):
             resp = client.post(
                 self.WEBHOOK_PATH,
@@ -311,7 +311,7 @@ class TestFonsterWebhookEndpoint:
         monkeypatch.setenv("APP_ENV", "development")
 
         raw = json.dumps({"event_type": "call.answered", "call_id": "CA-203"}).encode()
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock):
             resp = client.post(
                 self.WEBHOOK_PATH,
@@ -325,7 +325,7 @@ class TestFonsterWebhookEndpoint:
         monkeypatch.delenv("FONOSTER_WEBHOOK_SECRET", raising=False)
 
         raw = json.dumps({"event_type": "call.answered", "call_id": "CA-204"}).encode()
-        with patch("apps.api.routers.webhooks_fonster.db_update_call_status",
+        with patch("api.routers.webhooks_fonster.db_update_call_status",
                     new_callable=AsyncMock):
             resp = client.post(
                 self.WEBHOOK_PATH,

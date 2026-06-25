@@ -6,7 +6,7 @@ import time
 
 class TestRateLimiter:
     def test_constructor_defaults(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         assert middleware.max_connections == 100
@@ -15,7 +15,7 @@ class TestRateLimiter:
         assert middleware._redis is None
 
     def test_get_client_ip_from_forwarded_header(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         request = MagicMock()
@@ -27,7 +27,7 @@ class TestRateLimiter:
         request.headers.get.assert_called_once_with("X-Forwarded-For")
 
     def test_get_client_ip_fallback_to_remote(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         request = MagicMock()
@@ -38,7 +38,7 @@ class TestRateLimiter:
         assert ip == "192.168.1.1"
 
     def test_get_client_ip_unknown(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         request = MagicMock()
@@ -49,7 +49,7 @@ class TestRateLimiter:
         assert ip == "unknown"
 
     def test_clean_old_requests_removes_expired(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         key = "test:127.0.0.1"
@@ -62,7 +62,7 @@ class TestRateLimiter:
         assert middleware.requests[key][0] == current_ts
 
     def test_clean_old_requests_removes_key_if_empty(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         key = "test:127.0.0.1"
@@ -73,7 +73,7 @@ class TestRateLimiter:
         assert key not in middleware.requests
 
     def test_clean_old_requests_keeps_recent(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         key = "test:127.0.0.1"
@@ -85,7 +85,7 @@ class TestRateLimiter:
 
     @pytest.mark.asyncio
     async def test_dispatch_skips_static_paths(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         request = MagicMock()
@@ -99,7 +99,7 @@ class TestRateLimiter:
 
     @pytest.mark.asyncio
     async def test_dispatch_skips_health_path(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         request = MagicMock()
@@ -112,8 +112,11 @@ class TestRateLimiter:
         call_next.assert_awaited_once_with(request)
 
     @pytest.mark.asyncio
-    async def test_dispatch_in_memory_rate_limited(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware, HTTPException
+    async def test_dispatch_in_memory_rate_limited(self, monkeypatch):
+        from api.services.rate_limit import RateLimitMiddleware, HTTPException
+
+        monkeypatch.setenv("APP_ENV", "production")
+        monkeypatch.delenv("REDIS_URL", raising=False)
 
         middleware = RateLimitMiddleware(None)
         request = MagicMock()
@@ -132,7 +135,7 @@ class TestRateLimiter:
 
     @pytest.mark.asyncio
     async def test_dispatch_in_memory_ok(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         request = MagicMock()
@@ -147,7 +150,7 @@ class TestRateLimiter:
 
     @pytest.mark.asyncio
     async def test_dispatch_development_mode_high_limit(self, monkeypatch):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         monkeypatch.setenv("APP_ENV", "development")
         middleware = RateLimitMiddleware(None)
@@ -165,7 +168,7 @@ class TestRateLimiter:
 
     @pytest.mark.asyncio
     async def test_dispatch_auth_path_lower_limit(self, monkeypatch):
-        from apps.api.services.rate_limit import RateLimitMiddleware, HTTPException
+        from api.services.rate_limit import RateLimitMiddleware, HTTPException
 
         monkeypatch.setenv("APP_ENV", "production")
         middleware = RateLimitMiddleware(None)
@@ -184,7 +187,7 @@ class TestRateLimiter:
 
     @pytest.mark.asyncio
     async def test_redis_failure_falls_back_to_memory(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None)
         redis_mock = MagicMock()
@@ -200,14 +203,14 @@ class TestRateLimiter:
         call_next.assert_awaited_once_with(request)
 
     def test_voice_connection_tracker_can_accept(self):
-        from apps.api.services.rate_limit import VoiceConnectionTracker
+        from api.services.rate_limit import VoiceConnectionTracker
 
         tracker = VoiceConnectionTracker(max_concurrent=2)
         tracker.add_call("call-1")
         assert tracker.can_accept_call() is True
 
     def test_voice_connection_tracker_full(self):
-        from apps.api.services.rate_limit import VoiceConnectionTracker
+        from api.services.rate_limit import VoiceConnectionTracker
 
         tracker = VoiceConnectionTracker(max_concurrent=2)
         tracker.add_call("call-1")
@@ -215,7 +218,7 @@ class TestRateLimiter:
         assert tracker.can_accept_call() is False
 
     def test_voice_connection_tracker_remove(self):
-        from apps.api.services.rate_limit import VoiceConnectionTracker
+        from api.services.rate_limit import VoiceConnectionTracker
 
         tracker = VoiceConnectionTracker(max_concurrent=2)
         tracker.add_call("call-1")
@@ -224,7 +227,7 @@ class TestRateLimiter:
         assert tracker.can_accept_call() is True
 
     def test_voice_connection_tracker_cleanup(self):
-        from apps.api.services.rate_limit import VoiceConnectionTracker
+        from api.services.rate_limit import VoiceConnectionTracker
 
         tracker = VoiceConnectionTracker(max_concurrent=2)
         old_ts = time.time() - 7200
@@ -233,7 +236,7 @@ class TestRateLimiter:
         assert "stale-call" not in tracker.active_calls
 
     def test_rate_limit_middleware_max_connections_custom(self):
-        from apps.api.services.rate_limit import RateLimitMiddleware
+        from api.services.rate_limit import RateLimitMiddleware
 
         middleware = RateLimitMiddleware(None, max_connections=200)
         assert middleware.max_connections == 200

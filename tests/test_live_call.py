@@ -100,7 +100,7 @@ log("GET /api/v1/calls", r)
 # 8. Intent Classification (mocked Ollama — tests keyword fallback speed)
 print("\n[8/12] Intent Classification - AT&T Telecom Scenarios")
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from apps.api.services.intent_classifier import classifier as local_clf
+from api.services.intent_classifier import classifier as local_clf
 
 scenarios = [
     ("My phone won't activate after I inserted the SIM", "order_status"),
@@ -129,7 +129,7 @@ print(f"  Intent Accuracy: {correct}/{len(scenarios)} = {acc:.0f}%")
 
 # 9. Orchestrator tools (direct)
 print("\n[9/12] Orchestrator Tool Chain")
-from apps.api.services.actions import Actions
+from api.services.actions import Actions
 actions = Actions(redis_client=None)
 async def run_tools():
     return await asyncio.gather(
@@ -144,7 +144,7 @@ print(f"    [{'OK' if r3.get('success') else 'N/F'}] VIP Handoff Escalation")
 
 # 10. Security & Compliance
 print("\n[10/12] Security & Compliance")
-from apps.api.services.security_guard import redact_pii, detect_prompt_injection
+from api.services.security_guard import redact_pii, detect_prompt_injection
 
 for text, desc in [
     ("Call me at 555-123-4567", "Phone"),
@@ -166,7 +166,7 @@ for inj in [
 
 # 11. Queue operations
 print("\n[11/12] Queue Operations (no Redis)")
-from apps.api.services.queue import QueueManager
+from api.services.queue import QueueManager
 q = QueueManager(redis_client=None)
 q.enqueue("att_queue", {"caller": PHONE, "reason": "billing", "session_id": "sess-1"})
 q.enqueue("att_queue", {"caller": PHONE, "reason": "tech", "session_id": "sess-2"})
@@ -176,8 +176,8 @@ print(f"    [PASS] Queued 2 calls, claimed: {item1 is not None and item2 is not 
 
 # 12. Supervisor routing 
 print("\n[12/12] Supervisor Routing Logic")
-from apps.api.services.orchestrator import Orchestrator
-from apps.api.services.actions import Actions as Acts
+from api.services.orchestrator import Orchestrator
+from api.services.actions import Actions as Acts
 with patch("langchain_core.language_models.FakeListChatModel") as mf:
     mf.return_value = AsyncMock()
     mf.return_value.ainvoke.return_value = AsyncMock(content="Simulated")
