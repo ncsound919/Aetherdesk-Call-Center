@@ -106,7 +106,7 @@ python_files = ["test_*.py"]
 asyncio_default_fixture_loop_scope = "function"
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --cov=apps --cov-report=term-missing --cov-report=html"
+addopts = "-v --cov=src --cov-report=term-missing --cov-report=html"
 markers = [
     "e2e_core: Core E2E tests that gate every PR (no ML dependencies, deterministic)",
     "e2e_ml: ML-dependent E2E tests run nightly with pinned scientific deps",
@@ -114,17 +114,17 @@ markers = [
 
 [tool.coverage.run]
 omit = [
-    "apps/api/services/celery_*.py",
-    "apps/api/services/mcp_client.py",
-    "apps/api/services/rag.py",
-    "apps/api/services/task_queue.py",
-    "apps/api/services/worker.py",
-    "apps/api/services/voice_profile_store.py",
-    "apps/api/services/db_migrations.py",
-    "apps/api/mock_voice_client.py",
-    "apps/api/fonoster_client.py",
-    "apps/api/twilio_client.py",
-    "apps/api/websocket_server.py",
+    "src/api/services/celery_*.py",
+    "src/api/services/mcp_client.py",
+    "src/api/services/rag.py",
+    "src/api/services/task_queue.py",
+    "src/api/services/worker.py",
+    "src/api/services/voice_profile_store.py",
+    "src/api/services/db_migrations.py",
+    "src/api/mock_voice_client.py",
+    "src/api/fonoster_client.py",
+    "src/api/twilio_client.py",
+    "src/api/websocket_server.py",
     "tests/*",
 ]
 
@@ -133,7 +133,7 @@ fail_under = 65
 skip_empty = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["apps"]
+packages = ["src"]
 
 [project.urls]
 Homepage = "https://github.com/your-org/aetherdesk"

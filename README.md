@@ -1,139 +1,152 @@
 # AetherDesk Call Center Platform
 
-A privacy-focused, cost-efficient digital call center SaaS platform built with Fonoster and FreeSWITCH as alternatives to Twilio. Self-hosted on Google Cloud with HIPAA/GDPR compliance.
+AI-powered SaaS call center that any business can set up in minutes. Self-hosted voice infrastructure with Twilio integration, real-time analytics, and autonomous agent management.
+
+## Quick Start
+
+```bash
+# One-time setup (generates keys, creates .env)
+make setup
+
+# Start everything (API + frontend in single terminal)
+make dev
+```
+
+- **Dashboard**: http://127.0.0.1:3001
+- **API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+
+Login: `admin@aetherdesk.com` / `admin123`
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                    Agent UI (React)                      │
-│  Dashboard | Agent Mgmt | Call Logs | Settings          │
+│                    Agent UI (React + Vite)               │
+│  Dashboard | Agents | Calls | Scripts | Analytics       │
 └─────────────────┬───────────────────────────────────────┘
                   │ REST API + WebSocket
 ┌─────────────────▼───────────────────────────────────────┐
 │              API Gateway (FastAPI)                       │
-│  Tenant Mgmt | Agent Mgmt | Call Control | Billing      │
+│  Tenants | Agents | Calls | Billing | Voice | Auth      │
 └──────┬──────────┬──────────┬──────────────┬─────────────┘
        │          │          │              │
 ┌──────▼──┐  ┌───▼────┐  ┌──▼────────┐  ┌──▼──────────┐
-│PostgreSQL│  │  Redis  │  │ Fonoster  │  │  FreeSWITCH  │
-│ (DB)     │  │ (Cache) │  │(Voice API)│  │ (SIP/RTP)   │
+│PostgreSQL│  │  Redis  │  │  Twilio   │  │ FreeSWITCH  │
+│ (DB)     │  │ (Cache) │  │ (Cloud)   │  │ (SIP/RTP)   │
 └──────────┘  └─────────┘  └───────────┘  └─────────────┘
-       │                                       │
-       │              ┌───────────────────────▼──┐
-       │              │   Google Cloud / GKE     │
-       │              │   - HIPAA/GDPR Compliant │
-       │              │   - Encrypted Storage    │
-       │              │   - Regional: us-east1   │
-       │              └─────────────────────────┘
 ```
 
-## Key Features
+## Features
 
-- **Agent Rental System**: Rent AI/human agents by hour, day, week, or month
+- **AI Agent Management**: Create, configure, and deploy voice agents with custom scripts
 - **Smart Call Routing**: AI-powered intent detection and agent matching
-- **Multi-Tenant Isolation**: Row-Level Security in PostgreSQL ensures data separation
-- **HIPAA/GDPR Compliant**: Encryption at rest, audit logs, data residency controls
-- **Real-Time Dashboard**: Live agent status, call monitoring, analytics
-- **Fonoster Voice API**: Modern voice application development (TwiML-compatible)
-- **FreeSWITCH Media Server**: Open-source SIP/RTP handling
+- **Multi-Tenant**: Isolated data per business with row-level security
+- **Real-Time Dashboard**: Live call monitoring, agent status, performance analytics
+- **Script Builder**: Templates for Sales, Support, Billing, Technical with branching logic
+- **Voice Cloning**: Record and deploy custom agent voices
+- **Lead Management**: Track, score, and convert leads through the pipeline
+- **Twilio Integration**: Place and receive calls via Twilio cloud telephony
+- **Self-Hosted Option**: Fonoster + FreeSWITCH for full infrastructure control
 
-## Quick Start
+## Project Structure
 
-### Prerequisites
-- Google Cloud SDK installed and authenticated
-- Docker and Docker Compose
-- kubectl configured for your GKE cluster
-
-### 1. Set Environment Variables
-```bash
-cp .env.example .env
-# Edit .env with your actual values
+```
+aetherdesk/
+├── src/                        # Backend (Python/FastAPI)
+│   └── api/
+│       ├── main.py             # App entrypoint
+│       ├── routers/            # API route handlers
+│       ├── services/           # Business logic
+│       ├── middleware/          # Auth, audit, security
+│       └── models/             # Pydantic DTOs
+├── agent-ui/                   # Frontend (React + Vite + Tailwind)
+│   └── src/
+│       ├── pages/              # Dashboard, Analytics, Settings, etc.
+│       ├── components/         # Reusable UI components
+│       ├── context/            # Socket, Auth context
+│       └── services/           # API client
+├── tests/                      # Test suite
+├── scripts/                    # Deploy and helper scripts
+│   └── dev/                    # Development-only scripts
+├── config/                     # DB, FreeSWITCH, protocol configs
+├── kubernetes/                 # K8s deployment manifests
+├── docker-compose.yml          # Local Docker deployment
+├── Makefile                    # One-command setup and dev
+└── .env.example                # Environment template
 ```
 
-### 2. Local Development (Docker)
-```bash
-docker-compose up -d
-```
+## Environment Variables
 
-### 3. Production Deployment (GKE)
-```bash
-# Set your environment variables first
-export DB_PASSWORD="your-secure-password"
-export REDIS_PASSWORD="your-redis-password"
-# ... other variables
+Copy `.env.example` to `.env` and configure:
 
-# Run deployment
-chmod +x scripts/deploy.sh
-./scripts/deploy.sh production
-```
-
-### 4. Access the Platform
-- **API**: http://localhost:3000 (local) or your GKE LoadBalancer IP
-- **Agent UI**: http://localhost:3001 (local)
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TWILIO_ACCOUNT_SID` | Yes | Twilio Account SID |
+| `TWILIO_AUTH_TOKEN` | Yes | Twilio Auth Token |
+| `TWILIO_FROM_NUMBER` | Yes | Twilio phone number |
+| `ENCRYPTION_KEY` | Auto | Generated by `make setup` |
+| `JWT_SECRET` | Auto | Generated by `make setup` |
+| `GROQ_API_KEY` | For AI | Groq API key for LLM |
+| `DEEPGRAM_API_KEY` | For STT | Deepgram API key |
 
 ## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | Health check |
+| `/api/v1/auth/login` | POST | Authenticate user |
 | `/api/v1/tenants` | POST/GET | Tenant management |
-| `/api/v1/tenants/{id}/agents` | POST/GET | Agent management |
-| `/api/v1/agents/{id}/status` | PATCH | Update agent status |
+| `/api/v1/tenants/{id}/agents` | POST/GET | Agent CRUD |
 | `/api/v1/calls` | POST/GET | Create/list calls |
-| `/api/v1/calls/{id}/action` | POST | Call actions (answer, hangup, transfer) |
-| `/api/v1/recordings/{id}` | GET | Access recordings (HIPAA-logged) |
+| `/api/v1/calls/{id}/action` | POST | Call actions |
+| `/api/v1/scripts` | POST/GET | Script management |
+| `/api/v1/leads` | POST/GET | Lead pipeline |
+| `/api/v1/voice/clone` | POST | Voice cloning |
 | `/api/v1/usage` | GET | Usage analytics |
 | `/api/v1/billing` | GET | Billing summary |
-| `/ws/calls/{tenantId}` | WS | Real-time call updates |
-| `/ws/agent/{agentId}` | WS | Agent call assignments |
 
-## Compliance
+## Development
 
-- **HIPAA**: AES-256 encryption at rest, TLS in transit, audit logging, PII redaction
-- **GDPR**: Data residency (US-East1), right to deletion, consent management
-- **SOC 2**: Network policies, RBAC, access controls
+```bash
+# Install dependencies
+make install
 
-## Cost Comparison: Twilio vs. Fonoster/FreeSWITCH
+# Run tests
+make test
 
-| Feature | Twilio | Fonoster + FreeSWITCH |
-|---------|--------|----------------------|
-| Per-minute voice | $0.0085+ | SIP trunk cost only |
-| Phone numbers | $1.15+/month | Port your own or SIP trunk |
-| Recording | $0.0025/min | Free (self-hosted storage) |
-| Transcription | $0.01/min | Deepgram/whisper (configurable) |
-| TTS | Free (self-hosted) | Chatterbox/OpenAI (configurable) |
-| Monthly platform | ~$50-200+ | Infrastructure only |
-| Privacy | Third-party | Full control, self-hosted |
+# Lint code
+make lint
 
-## Project Structure
+# Format code
+make format
 
+# Initialize database
+make db-init
 ```
-aetherdesk_scaffold/
-├── apps/
-│   ├── api/                    # FastAPI SaaS platform
-│   │   ├── main.py
-│   │   ├── Dockerfile
-│   │   └── routers/
-│   └── voice/                  # Fonoster voice application
-│       └── server.js
-├── agent-ui/                   # React agent dashboard
-│   ├── src/
-│   └── package.json
-├── config/
-│   ├── database/
-│   │   └── schema.sql
-│   ├── freeswitch/
-│   │   └── sip_profiles.xml
-│   └── protocols/
-├── kubernetes/
-│   ├── deployment.yml
-│   └── namespace.yaml
-├── scripts/
-│   └── deploy.sh
-├── tests/
-│   └── e2e/
-├── .env.example
-├── docker-compose.yml
-└── README.md
+
+## Deployment
+
+### Docker (Production)
+```bash
+make prod
 ```
+
+### Kubernetes (GKE)
+```bash
+./scripts/deploy.sh production
+```
+
+## Compliance Status
+
+| Standard | Status | Notes |
+|----------|--------|-------|
+| HIPAA | In Progress | Encryption at rest/transit implemented. Audit logging, BAA, and formal certification in progress. |
+| GDPR | In Progress | Data residency controls, right-to-deletion implemented. Consent management in progress. |
+| SOC 2 | Planned | Network policies and RBAC designed. Formal audit not yet scheduled. |
+
+**Current posture**: Encryption, access controls, and audit logging are implemented. Formal compliance certification is a work in progress. Do not claim compliance until audited.
+
+## License
+
+MIT
