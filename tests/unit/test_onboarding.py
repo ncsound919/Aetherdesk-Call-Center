@@ -6,11 +6,11 @@ from unittest.mock import AsyncMock, patch
 class TestOnboardingBusinessInfo:
     @pytest.mark.asyncio
     async def test_save_business_info(self):
-        from apps.api.routers.onboarding import save_business_info, BusinessInfoRequest
+        from api.routers.onboarding import save_business_info, BusinessInfoRequest
 
-        with patch("apps.api.services.db_tenants.get_user_by_id_db", new_callable=AsyncMock) as mock_user, \
-             patch("apps.api.services.db_tenants.create_tenant", new_callable=AsyncMock) as mock_tenant, \
-             patch("apps.api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
+        with patch("api.services.db_tenants.get_user_by_id_db", new_callable=AsyncMock) as mock_user, \
+             patch("api.services.db_tenants.create_tenant", new_callable=AsyncMock) as mock_tenant, \
+             patch("api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
 
             mock_user.return_value = {"id": "user-1", "email": "test@example.com"}
             mock_tenant.return_value = {"id": "tenant-123"}
@@ -29,11 +29,11 @@ class TestOnboardingBusinessInfo:
 class TestOnboardingImportLeads:
     @pytest.mark.asyncio
     async def test_import_csv_leads(self):
-        from apps.api.routers.onboarding import import_leads
+        from api.routers.onboarding import import_leads
         from fastapi import UploadFile
         import io
 
-        with patch("apps.api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
+        with patch("api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
 
             csv_content = b"company,phone,industry\nAcme Corp,+15551234567,tech\nGlobex Inc,+15559876543,healthcare"
             file = UploadFile(filename="leads.csv", file=io.BytesIO(csv_content))
@@ -48,9 +48,9 @@ class TestOnboardingImportLeads:
 class TestOnboardingCompletion:
     @pytest.mark.asyncio
     async def test_complete_onboarding(self):
-        from apps.api.routers.onboarding import complete_onboarding
+        from api.routers.onboarding import complete_onboarding
 
-        with patch("apps.api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock) as mock_update:
+        with patch("api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock) as mock_update:
             result = await complete_onboarding()
             assert result["message"] == "Onboarding completed"
             mock_update.assert_called_once_with("USER-ADMIN-001", step=5, completed=True)
@@ -59,10 +59,10 @@ class TestOnboardingCompletion:
 class TestSaveScript:
     @pytest.mark.asyncio
     async def test_save_script_success(self):
-        from apps.api.routers.onboarding import save_script, ScriptSaveRequest
+        from api.routers.onboarding import save_script, ScriptSaveRequest
 
-        with patch("apps.api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock), \
-             patch("apps.api.services.db_tenants.create_agent_profile_db", new_callable=AsyncMock) as mock_profile:
+        with patch("api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock), \
+             patch("api.services.db_tenants.create_agent_profile_db", new_callable=AsyncMock) as mock_profile:
 
             script = ScriptSaveRequest(
                 name="Sales Script",
@@ -81,9 +81,9 @@ class TestSaveScript:
 class TestGetStatus:
     @pytest.mark.asyncio
     async def test_get_onboarding_status_success(self):
-        from apps.api.routers.onboarding import get_onboarding_status
+        from api.routers.onboarding import get_onboarding_status
 
-        with patch("apps.api.services.db_tenants.get_user_by_id_db", new_callable=AsyncMock) as mock_user:
+        with patch("api.services.db_tenants.get_user_by_id_db", new_callable=AsyncMock) as mock_user:
             mock_user.return_value = {"onboarding_completed": False, "onboarding_step": 2}
             result = await get_onboarding_status()
             assert result["completed"] is False
@@ -91,9 +91,9 @@ class TestGetStatus:
 
     @pytest.mark.asyncio
     async def test_get_onboarding_status_completed(self):
-        from apps.api.routers.onboarding import get_onboarding_status
+        from api.routers.onboarding import get_onboarding_status
 
-        with patch("apps.api.services.db_tenants.get_user_by_id_db", new_callable=AsyncMock) as mock_user:
+        with patch("api.services.db_tenants.get_user_by_id_db", new_callable=AsyncMock) as mock_user:
             mock_user.return_value = {"onboarding_completed": True, "onboarding_step": 5}
             result = await get_onboarding_status()
             assert result["completed"] is True
@@ -101,10 +101,10 @@ class TestGetStatus:
 
     @pytest.mark.asyncio
     async def test_get_onboarding_status_user_not_found(self):
-        from apps.api.routers.onboarding import get_onboarding_status
+        from api.routers.onboarding import get_onboarding_status
         from fastapi import HTTPException
 
-        with patch("apps.api.services.db_tenants.get_user_by_id_db", new_callable=AsyncMock) as mock_user:
+        with patch("api.services.db_tenants.get_user_by_id_db", new_callable=AsyncMock) as mock_user:
             mock_user.return_value = None
             with pytest.raises(HTTPException) as exc:
                 await get_onboarding_status()
@@ -114,10 +114,10 @@ class TestGetStatus:
 class TestOnboardingBusinessInfoExtended:
     @pytest.mark.asyncio
     async def test_save_business_info_user_not_found(self):
-        from apps.api.routers.onboarding import save_business_info, BusinessInfoRequest
+        from api.routers.onboarding import save_business_info, BusinessInfoRequest
         from fastapi import HTTPException
 
-        with patch("apps.api.services.db_tenants.get_user_by_id_db", new_callable=AsyncMock) as mock_user:
+        with patch("api.services.db_tenants.get_user_by_id_db", new_callable=AsyncMock) as mock_user:
             mock_user.return_value = None
             info = BusinessInfoRequest(company_name="Test", industry="tech")
             with pytest.raises(HTTPException) as exc:
@@ -128,11 +128,11 @@ class TestOnboardingBusinessInfoExtended:
 class TestOnboardingImportLeadsExtended:
     @pytest.mark.asyncio
     async def test_import_rejects_non_csv(self):
-        from apps.api.routers.onboarding import import_leads
+        from api.routers.onboarding import import_leads
         from fastapi import UploadFile, HTTPException
         import io
 
-        with patch("apps.api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
+        with patch("api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
             file = UploadFile(filename="data.pdf", file=io.BytesIO(b"data"))
             with pytest.raises(HTTPException) as exc:
                 await import_leads(file=file)
@@ -141,11 +141,11 @@ class TestOnboardingImportLeadsExtended:
 
     @pytest.mark.asyncio
     async def test_import_rejects_too_large(self):
-        from apps.api.routers.onboarding import import_leads
+        from api.routers.onboarding import import_leads
         from fastapi import UploadFile, HTTPException
         import io
 
-        with patch("apps.api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
+        with patch("api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
             file = UploadFile(filename="leads.csv", file=io.BytesIO(b"x" * (10 * 1024 * 1024 + 1)))
             with pytest.raises(HTTPException) as exc:
                 await import_leads(file=file)
@@ -154,11 +154,11 @@ class TestOnboardingImportLeadsExtended:
 
     @pytest.mark.asyncio
     async def test_import_too_many_rows(self):
-        from apps.api.routers.onboarding import import_leads
+        from api.routers.onboarding import import_leads
         from fastapi import UploadFile, HTTPException
         import io
 
-        with patch("apps.api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
+        with patch("api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
             header = b"company,phone\n"
             rows = b"\n".join([f"Co{i},+1555{i:07d}".encode() for i in range(10001)])
             file = UploadFile(filename="leads.csv", file=io.BytesIO(header + rows))
@@ -168,11 +168,11 @@ class TestOnboardingImportLeadsExtended:
 
     @pytest.mark.asyncio
     async def test_import_missing_phone_and_company(self):
-        from apps.api.routers.onboarding import import_leads
+        from api.routers.onboarding import import_leads
         from fastapi import UploadFile
         import io, json
 
-        with patch("apps.api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
+        with patch("api.services.db_tenants.update_user_onboarding_db", new_callable=AsyncMock):
             csv_content = b"email,industry\na@b.com,tech\nc@d.com,health"
             file = UploadFile(filename="leads.csv", file=io.BytesIO(csv_content))
             mapping = json.dumps({"email": "email", "industry": "industry"})

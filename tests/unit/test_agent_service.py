@@ -5,14 +5,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 class TestAgentServiceInit:
     def test_default_init(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         assert svc.model == "llama3.2:1b"
         assert svc.host == "http://localhost:11434"
 
     def test_custom_init(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService(model="custom-model", host="http://custom:8080")
         assert svc.model == "custom-model"
@@ -21,7 +21,7 @@ class TestAgentServiceInit:
 
 class TestAgentServiceGetClient:
     def test_get_client_creates_new(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         with patch("httpx.AsyncClient") as mock_client_cls:
@@ -32,7 +32,7 @@ class TestAgentServiceGetClient:
             mock_client_cls.assert_called_once()
 
     def test_get_client_reuses_existing(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         mock_client = MagicMock()
@@ -45,7 +45,7 @@ class TestAgentServiceGetClient:
             mock_client_cls.assert_not_called()
 
     def test_get_client_recreates_closed(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         mock_client = MagicMock()
@@ -60,7 +60,7 @@ class TestAgentServiceGetClient:
 
     @pytest.mark.asyncio
     async def test_close_client(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         mock_client = AsyncMock()
@@ -72,7 +72,7 @@ class TestAgentServiceGetClient:
 
     @pytest.mark.asyncio
     async def test_close_no_client(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         svc._client = None
@@ -83,7 +83,7 @@ class TestAgentServiceGetClient:
 class TestAgentServiceAnswer:
     @pytest.mark.asyncio
     async def test_answer_with_context(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         svc._get_client = MagicMock()
@@ -104,7 +104,7 @@ class TestAgentServiceAnswer:
 
     @pytest.mark.asyncio
     async def test_answer_no_context(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
 
@@ -116,7 +116,7 @@ class TestAgentServiceAnswer:
 
     @pytest.mark.asyncio
     async def test_answer_with_history(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         svc._get_client = MagicMock()
@@ -137,7 +137,7 @@ class TestAgentServiceAnswer:
 
     @pytest.mark.asyncio
     async def test_answer_detects_need_agent_keyword(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         svc._get_client = MagicMock()
@@ -156,7 +156,7 @@ class TestAgentServiceAnswer:
 
     @pytest.mark.asyncio
     async def test_answer_http_error(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         svc._get_client = MagicMock()
@@ -173,7 +173,7 @@ class TestAgentServiceAnswer:
 
     @pytest.mark.asyncio
     async def test_answer_no_context_results_sources_empty(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
 
@@ -185,12 +185,12 @@ class TestAgentServiceAnswer:
 class TestAgentServiceAnswerWithRag:
     @pytest.mark.asyncio
     async def test_answer_with_rag_enabled(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         mock_context = [{"content": "RAG result", "metadata": {"source": "kb"}}]
 
-        with patch("apps.api.services.rag.rag_service") as mock_rag, \
+        with patch("api.services.rag.rag_service") as mock_rag, \
              patch.object(svc, "answer", new_callable=AsyncMock) as mock_answer:
             mock_rag.query = AsyncMock(return_value=mock_context)
             mock_answer.return_value = MagicMock(text="RAG answer", sources=["kb"], needs_agent=False)
@@ -203,7 +203,7 @@ class TestAgentServiceAnswerWithRag:
 
     @pytest.mark.asyncio
     async def test_answer_with_rag_disabled(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
 
@@ -217,12 +217,12 @@ class TestAgentServiceAnswerWithRag:
 
     @pytest.mark.asyncio
     async def test_answer_with_rag_and_history(self):
-        from apps.api.services.agent import AgentService
+        from api.services.agent import AgentService
 
         svc = AgentService()
         history = [{"customer": "Hi", "agent": "Hello"}]
 
-        with patch("apps.api.services.rag.rag_service") as mock_rag, \
+        with patch("api.services.rag.rag_service") as mock_rag, \
              patch.object(svc, "answer", new_callable=AsyncMock) as mock_answer:
             mock_rag.query = AsyncMock(return_value=[])
             mock_answer.return_value = MagicMock(text="With history", sources=[], needs_agent=False)
@@ -236,7 +236,7 @@ class TestAgentServiceAnswerWithRag:
 class TestDynamicAgent:
     @pytest.mark.asyncio
     async def test_step_returns_response(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
@@ -258,7 +258,7 @@ class TestDynamicAgent:
 
     @pytest.mark.asyncio
     async def test_step_tool_call_then_response(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
@@ -289,7 +289,7 @@ class TestDynamicAgent:
 
     @pytest.mark.asyncio
     async def test_step_handoff_sets_needs_agent(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
@@ -311,7 +311,7 @@ class TestDynamicAgent:
 
     @pytest.mark.asyncio
     async def test_step_max_steps_exceeded(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
@@ -335,7 +335,7 @@ class TestDynamicAgent:
 
     @pytest.mark.asyncio
     async def test_step_json_decode_error_retry(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
@@ -360,7 +360,7 @@ class TestDynamicAgent:
 
     @pytest.mark.asyncio
     async def test_step_json_decode_error_fails_after_retry(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
@@ -380,7 +380,7 @@ class TestDynamicAgent:
 
     @pytest.mark.asyncio
     async def test_step_http_error(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
@@ -397,7 +397,7 @@ class TestDynamicAgent:
 
     @pytest.mark.asyncio
     async def test_step_uses_history(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
@@ -423,7 +423,7 @@ class TestDynamicAgent:
 class TestDynamicAgentExecuteTool:
     @pytest.mark.asyncio
     async def test_execute_tool_lookup_invoice(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         mock_actions.run.return_value = {"success": True, "data": {"status": "paid"}}
@@ -434,7 +434,7 @@ class TestDynamicAgentExecuteTool:
 
     @pytest.mark.asyncio
     async def test_execute_tool_lookup_invoice_not_found(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         mock_actions.run.return_value = {"success": False}
@@ -445,7 +445,7 @@ class TestDynamicAgentExecuteTool:
 
     @pytest.mark.asyncio
     async def test_execute_tool_get_order_status(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
@@ -455,12 +455,12 @@ class TestDynamicAgentExecuteTool:
 
     @pytest.mark.asyncio
     async def test_execute_tool_search_kb(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
 
-        with patch("apps.api.services.rag.rag_service") as mock_rag:
+        with patch("api.services.rag.rag_service") as mock_rag:
             mock_rag.query = AsyncMock(return_value=[{"content": "Return policy is 30 days."}])
             result = await agent._execute_tool("search_knowledge_base", "return policy")
 
@@ -468,12 +468,12 @@ class TestDynamicAgentExecuteTool:
 
     @pytest.mark.asyncio
     async def test_execute_tool_search_kb_no_results(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
 
-        with patch("apps.api.services.rag.rag_service") as mock_rag:
+        with patch("api.services.rag.rag_service") as mock_rag:
             mock_rag.query = AsyncMock(return_value=[])
             result = await agent._execute_tool("search_knowledge_base", "unknown")
 
@@ -481,7 +481,7 @@ class TestDynamicAgentExecuteTool:
 
     @pytest.mark.asyncio
     async def test_execute_tool_handoff(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
@@ -491,7 +491,7 @@ class TestDynamicAgentExecuteTool:
 
     @pytest.mark.asyncio
     async def test_execute_tool_unknown(self):
-        from apps.api.services.agent import DynamicAgent
+        from api.services.agent import DynamicAgent
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)

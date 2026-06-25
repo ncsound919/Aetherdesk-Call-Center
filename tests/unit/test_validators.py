@@ -1,5 +1,5 @@
 import pytest
-from apps.api.services.validators import Validators
+from api.services.validators import Validators
 
 
 class TestValidators:

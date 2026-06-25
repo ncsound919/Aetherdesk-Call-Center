@@ -8,7 +8,7 @@ class TestHealthCheck:
     """Tests for health check endpoint — verifies 503 on degraded services."""
 
     def test_health_returns_200_when_healthy(self):
-        from apps.api.main import app
+        from api.main import app
 
         with TestClient(app) as client:
             resp = client.get("/health")
@@ -22,7 +22,7 @@ class TestHealthCheck:
             assert "redis" in body["services"]
 
     def test_readiness_probe_returns_200(self):
-        from apps.api.main import app
+        from api.main import app
 
         with TestClient(app) as client:
             resp = client.get("/api/v1/health/ready")
@@ -30,7 +30,7 @@ class TestHealthCheck:
             assert resp.json() == {"status": "ready"}
 
     def test_liveness_probe_returns_200(self):
-        from apps.api.main import app
+        from api.main import app
 
         with TestClient(app) as client:
             resp = client.get("/api/v1/health/live")

@@ -7,8 +7,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END
 
-from apps.api.services import orchestrator
-from apps.api.services.orchestrator import create_langchain_agent, Orchestrator, AgentResponse
+from api.services import orchestrator
+from api.services.orchestrator import create_langchain_agent, Orchestrator, AgentResponse
 
 
 class AsyncFakeModel:
@@ -103,8 +103,8 @@ async def test_orchestrator_step_fallback_when_langchain_disabled(orch_no_init, 
     mock_conn.fetchval = AsyncMock(return_value="rental-123")
     mock_conn.fetchrow = AsyncMock(return_value={"prompt": "Fallback system prompt", "parameters": "{}"})
     
-    monkeypatch.setattr("apps.api.services.database.db_context", lambda: mock_db_context)
-    monkeypatch.setattr("apps.api.services.database.USE_POSTGRES", True)
+    monkeypatch.setattr("api.services.database.db_context", lambda: mock_db_context)
+    monkeypatch.setattr("api.services.database.USE_POSTGRES", True)
 
     # Mock fallback HTTP client calls to Ollama
     async def mock_post(*args, **kwargs):
@@ -117,8 +117,8 @@ async def test_orchestrator_step_fallback_when_langchain_disabled(orch_no_init, 
     monkeypatch.setattr("httpx.AsyncClient.post", mock_post)
     
     # Patch security and escalation
-    monkeypatch.setattr("apps.api.services.orchestrator.detect_prompt_injection", lambda t: (False, 0.0))
-    monkeypatch.setattr("apps.api.routers.campaign.push_escalation_alert", AsyncMock())
+    monkeypatch.setattr("api.services.orchestrator.detect_prompt_injection", lambda t: (False, 0.0))
+    monkeypatch.setattr("api.routers.campaign.push_escalation_alert", AsyncMock())
 
     session_state = {"active_agent": None}
     response = await orch.step(session_state, [], "Hello from user", "tenant-123", "PROF-001")

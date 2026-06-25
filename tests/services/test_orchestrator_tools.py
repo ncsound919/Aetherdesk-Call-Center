@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from apps.api.services import orchestrator
+from api.services import orchestrator
 
 
 @pytest.fixture
@@ -81,7 +81,7 @@ class TestGetOrderStatusTool:
 class TestSearchKnowledgeBaseTool:
     @pytest.mark.asyncio
     async def test_knowledge_results(self, mock_actions):
-        with patch("apps.api.services.rag.rag_service") as mock_rag:
+        with patch("api.services.rag.rag_service") as mock_rag:
             mock_rag.query = AsyncMock(return_value=[
                 {"content": "Refunds are processed within 5-7 business days."},
                 {"content": "Contact support@company.com for expedited processing."}
@@ -98,7 +98,7 @@ class TestSearchKnowledgeBaseTool:
 
     @pytest.mark.asyncio
     async def test_no_knowledge_results(self, mock_actions):
-        with patch("apps.api.services.rag.rag_service") as mock_rag:
+        with patch("api.services.rag.rag_service") as mock_rag:
             mock_rag.query = AsyncMock(return_value=[])
 
             result = await orchestrator.search_knowledge_base(

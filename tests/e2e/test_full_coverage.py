@@ -123,7 +123,7 @@ class TestHealthAndAuth:
         """Expired JWT token returns 401."""
         skip_if_api_unavailable()
         try:
-            from apps.api.main import create_access_token
+            from api.main import create_access_token
             import jwt
             expired_token = create_access_token(
                 {"sub": "test"},

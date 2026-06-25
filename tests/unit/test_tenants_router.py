@@ -5,16 +5,16 @@ from datetime import datetime
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from apps.api.services.auth import verify_api_key, verify_tenant_access
+from api.services.auth import verify_api_key, verify_tenant_access
 
 
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with just the tenants router."""
-    from apps.api.routers.tenants import router
+    from api.routers.tenants import router
 
     application = FastAPI()
-    application.include_router(router)
+    application.include_router(router, prefix="/api/v1")
 
     fonster = AsyncMock()
     fonster.create_application = AsyncMock(return_value={"success": True})
@@ -44,8 +44,8 @@ class TestCreateTenant:
     """Tests for POST /api/v1/tenants."""
 
     def test_create_tenant_success(self, client):
-        with patch("apps.api.routers.tenants.create_tenant_db", new_callable=AsyncMock) as mock_create, \
-             patch("apps.api.routers.tenants.get_pg_pool", new_callable=AsyncMock) as mock_pool:
+        with patch("api.routers.tenants.create_tenant_db", new_callable=AsyncMock) as mock_create, \
+             patch("api.routers.tenants.get_pg_pool", new_callable=AsyncMock) as mock_pool:
 
             mock_create.return_value = {
                 "id": "tenant-1",
@@ -74,7 +74,7 @@ class TestCreateTenant:
     def test_create_tenant_without_fonster(self, app, client):
         app.state.fonster_client = None
 
-        with patch("apps.api.routers.tenants.create_tenant_db", new_callable=AsyncMock) as mock_create:
+        with patch("api.routers.tenants.create_tenant_db", new_callable=AsyncMock) as mock_create:
             mock_create.return_value = {
                 "id": "tenant-2",
                 "plan_id": None,
@@ -94,8 +94,8 @@ class TestCreateTenant:
             assert body["plan_name"] == "Starter"
 
     def test_create_tenant_plan_name_fallback(self, client):
-        with patch("apps.api.routers.tenants.create_tenant_db", new_callable=AsyncMock) as mock_create, \
-             patch("apps.api.routers.tenants.get_pg_pool", new_callable=AsyncMock) as mock_pool:
+        with patch("api.routers.tenants.create_tenant_db", new_callable=AsyncMock) as mock_create, \
+             patch("api.routers.tenants.get_pg_pool", new_callable=AsyncMock) as mock_pool:
 
             mock_create.return_value = {
                 "id": "tenant-3",
@@ -125,7 +125,7 @@ class TestGetTenant:
     """Tests for GET /api/v1/tenants/{tenant_id}."""
 
     def test_get_tenant_found(self, client):
-        with patch("apps.api.routers.tenants.get_tenant_db", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.tenants.get_tenant_db", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {
                 "id": "tenant-1",
                 "name": "Acme Corp",
@@ -148,7 +148,7 @@ class TestGetTenant:
             assert body["gdpr_consent"] is True
 
     def test_get_tenant_inactive(self, client):
-        with patch("apps.api.routers.tenants.get_tenant_db", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.tenants.get_tenant_db", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = {
                 "id": "tenant-1",
                 "name": "Inactive Co",
@@ -165,7 +165,7 @@ class TestGetTenant:
             assert resp.json()["status"] == "inactive"
 
     def test_get_tenant_not_found(self, client):
-        with patch("apps.api.routers.tenants.get_tenant_db", new_callable=AsyncMock) as mock_get:
+        with patch("api.routers.tenants.get_tenant_db", new_callable=AsyncMock) as mock_get:
             mock_get.return_value = None
 
             resp = client.get("/api/v1/tenants/missing-tenant")

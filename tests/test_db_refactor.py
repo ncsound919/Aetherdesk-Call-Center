@@ -14,35 +14,35 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 class TestDatabaseConfig(unittest.TestCase):
     def test_db_config_constants(self):
-        from apps.api.services.db_config import USE_POSTGRES, SQLITE_PATH
+        from api.services.db_config import USE_POSTGRES, SQLITE_PATH
         self.assertIn("aetherdesk.db", SQLITE_PATH)
         self.assertFalse(USE_POSTGRES)
 
     def test_sqlite_path_exists(self):
-        from apps.api.services.db_config import SQLITE_PATH
+        from api.services.db_config import SQLITE_PATH
         self.assertTrue(os.path.exists(SQLITE_PATH), f"DB not found at {SQLITE_PATH}")
 
 
 class TestDatabaseErrors(unittest.TestCase):
     def test_error_hierarchy(self):
-        from apps.api.services.db_errors import DatabaseError, NotFoundError, PoolNotAvailableError
+        from api.services.db_errors import DatabaseError, NotFoundError, PoolNotAvailableError
         self.assertTrue(issubclass(NotFoundError, DatabaseError))
         self.assertTrue(issubclass(PoolNotAvailableError, DatabaseError))
 
     def test_not_found_error_message(self):
-        from apps.api.services.db_errors import NotFoundError
+        from api.services.db_errors import NotFoundError
         err = NotFoundError("tenant", "t-123")
         self.assertIn("t-123", str(err))
         self.assertIn("tenant", str(err))
         self.assertEqual(err.detail, {"resource": "tenant", "id": "t-123"})
 
     def test_pool_unavailable_error(self):
-        from apps.api.services.db_errors import PoolNotAvailableError
+        from api.services.db_errors import PoolNotAvailableError
         err = PoolNotAvailableError()
         self.assertEqual(str(err), "Database pool not available")
 
     def test_database_error_with_detail(self):
-        from apps.api.services.db_errors import DatabaseError
+        from api.services.db_errors import DatabaseError
         err = DatabaseError("oops", {"code": 42})
         self.assertEqual(err.message, "oops")
         self.assertEqual(err.detail, {"code": 42})
@@ -50,7 +50,7 @@ class TestDatabaseErrors(unittest.TestCase):
 
 class TestTranscriptStore(unittest.TestCase):
     def setUp(self):
-        from apps.api.services.transcript_store import TranscriptStore
+        from api.services.transcript_store import TranscriptStore
         self.store = TranscriptStore(max_calls=100, max_transcripts_per_call=50, stale_ttl=3600)
 
     def test_store_and_get_transcript(self):
@@ -109,7 +109,7 @@ class TestTranscriptStore(unittest.TestCase):
 
 class TestVoiceProfileStore(unittest.TestCase):
     def setUp(self):
-        from apps.api.services.voice_profile_store import VoiceProfileStore
+        from api.services.voice_profile_store import VoiceProfileStore
         self.store = VoiceProfileStore(max_profiles=100)
 
     def test_put_and_get(self):
@@ -174,7 +174,7 @@ class TestVoiceProfileStore(unittest.TestCase):
 
 class TestInMemoryQueue(unittest.TestCase):
     def setUp(self):
-        from apps.api.services.queue import InMemoryQueue
+        from api.services.queue import InMemoryQueue
         self.q = InMemoryQueue()
 
     def test_lpush_rpop(self):
@@ -243,7 +243,7 @@ class TestInMemoryQueue(unittest.TestCase):
 
 class TestQueueManager(unittest.TestCase):
     def setUp(self):
-        from apps.api.services.queue import QueueManager, InMemoryQueue
+        from api.services.queue import QueueManager, InMemoryQueue
         mock_redis = MagicMock()
         mock_redis.ping.return_value = False
         self.qm = QueueManager(mock_redis, use_fallback=True)
@@ -287,7 +287,7 @@ class TestQueueManager(unittest.TestCase):
 class TestDatabaseLayer(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from apps.api.services.database import init_sqlite_schema
+        from api.services.database import init_sqlite_schema
         init_sqlite_schema()
 
     def setUp(self):
@@ -295,7 +295,7 @@ class TestDatabaseLayer(unittest.TestCase):
         self.agent_id = None
 
     def _create_tenant(self):
-        from apps.api.services.database import create_tenant
+        from api.services.database import create_tenant
         slug = f"test-{uuid.uuid4().hex[:8]}"
         result = asyncio.run(create_tenant(
             name=f"Test {slug}", email=f"{slug}@test.com", slug=slug,
@@ -307,7 +307,7 @@ class TestDatabaseLayer(unittest.TestCase):
         return result
 
     def _create_agent(self, agent_type="voice"):
-        from apps.api.services.database import create_agent
+        from api.services.database import create_agent
         agent_name = f"agent-{uuid.uuid4().hex[:8]}"
         result = asyncio.run(create_agent(
             tenant_id=self.tenant_id, name=agent_name, display_name=agent_name,
@@ -319,7 +319,7 @@ class TestDatabaseLayer(unittest.TestCase):
         return result
 
     def _create_call(self):
-        from apps.api.services.database import create_call_session
+        from api.services.database import create_call_session
         call_id = f"call-{uuid.uuid4().hex[:8]}"
         result = asyncio.run(create_call_session(
             tenant_id=self.tenant_id, agent_id=self.agent_id,
@@ -329,7 +329,7 @@ class TestDatabaseLayer(unittest.TestCase):
         return result
 
     def test_tenant_crud(self):
-        from apps.api.services.database import create_tenant, get_tenant_db, get_tenant_by_api_key
+        from api.services.database import create_tenant, get_tenant_db, get_tenant_by_api_key
         tenant = self._create_tenant()
         tenant_id = tenant["id"]
 
@@ -342,12 +342,12 @@ class TestDatabaseLayer(unittest.TestCase):
         self.assertEqual(fetched_by_key["id"], tenant_id)
 
     def test_nonexistent_tenant_returns_none(self):
-        from apps.api.services.database import get_tenant_db
+        from api.services.database import get_tenant_db
         result = asyncio.run(get_tenant_db("no-such-tenant"))
         self.assertIsNone(result)
 
     def test_agent_crud(self):
-        from apps.api.services.database import create_agent, get_agent_db
+        from api.services.database import create_agent, get_agent_db
         self._create_tenant()
         agent = self._create_agent()
 
@@ -357,12 +357,12 @@ class TestDatabaseLayer(unittest.TestCase):
         self.assertEqual(fetched["tenant_id"], self.tenant_id)
 
     def test_nonexistent_agent_returns_none(self):
-        from apps.api.services.database import get_agent_db
+        from api.services.database import get_agent_db
         result = asyncio.run(get_agent_db("no-such-agent"))
         self.assertIsNone(result)
 
     def test_call_session_crud(self):
-        from apps.api.services.database import create_call_session, get_call_session, update_call_status
+        from api.services.database import create_call_session, get_call_session, update_call_status
         self._create_tenant()
         self._create_agent()
         call = self._create_call()
@@ -377,12 +377,12 @@ class TestDatabaseLayer(unittest.TestCase):
         self.assertEqual(fetched2["call_status"], "completed")
 
     def test_nonexistent_call_returns_none(self):
-        from apps.api.services.database import get_call_session
+        from api.services.database import get_call_session
         result = asyncio.run(get_call_session("no-such-call"))
         self.assertIsNone(result)
 
     def test_list_calls(self):
-        from apps.api.services.database import list_calls
+        from api.services.database import list_calls
         self._create_tenant()
         self._create_agent()
         self._create_call()
@@ -390,20 +390,20 @@ class TestDatabaseLayer(unittest.TestCase):
         self.assertGreaterEqual(len(calls), 1)
 
     def test_enqueue_dequeue(self):
-        from apps.api.services.database import enqueue_call, dequeue_call
+        from api.services.database import enqueue_call, dequeue_call
         self._create_tenant()
         asyncio.run(enqueue_call(self.tenant_id, "+15551234567"))
         dequeued = asyncio.run(dequeue_call(self.tenant_id, "any-agent"))
         self.assertIsNotNone(dequeued)
 
     def test_usage_stats(self):
-        from apps.api.services.database import get_usage_stats
+        from api.services.database import get_usage_stats
         self._create_tenant()
         stats = asyncio.run(get_usage_stats(self.tenant_id))
         self.assertIsNotNone(stats)
 
     def test_audit_log(self):
-        from apps.api.services.database import log_audit_event
+        from api.services.database import log_audit_event
         self._create_tenant()
         asyncio.run(log_audit_event(
             tenant_id=self.tenant_id, user_id="test-user",
@@ -412,7 +412,7 @@ class TestDatabaseLayer(unittest.TestCase):
         ))
 
     def test_full_user_journey(self):
-        from apps.api.services.database import (
+        from api.services.database import (
             create_tenant, create_agent, create_call_session,
             get_tenant_db, get_agent_db, get_call_session,
             update_call_status, get_usage_stats,
@@ -440,7 +440,7 @@ class TestDatabaseLayer(unittest.TestCase):
         self.assertIsNotNone(stats)
 
     def test_duplicate_slug_raises_integrity_error(self):
-        from apps.api.services.database import create_tenant
+        from api.services.database import create_tenant
         slug = f"dup-{uuid.uuid4().hex[:8]}"
         asyncio.run(create_tenant(
             name="First", email=f"{slug}@test.com", slug=slug, gdpr_consent=True
@@ -454,11 +454,11 @@ class TestDatabaseLayer(unittest.TestCase):
 class TestDatabaseLayerEdgeCases(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from apps.api.services.database import init_sqlite_schema
+        from api.services.database import init_sqlite_schema
         init_sqlite_schema()
 
     def test_get_tenant_settings(self):
-        from apps.api.services.database import (get_tenant_settings_db,
+        from api.services.database import (get_tenant_settings_db,
                                                  update_tenant_settings_db, create_tenant)
         slug = f"settings-{uuid.uuid4().hex[:8]}"
         tenant = asyncio.run(create_tenant(
@@ -470,7 +470,7 @@ class TestDatabaseLayerEdgeCases(unittest.TestCase):
         self.assertEqual(settings["tenant_id"], tenant["id"])
 
     def test_update_tenant_settings(self):
-        from apps.api.services.database import update_tenant_settings_db, create_tenant
+        from api.services.database import update_tenant_settings_db, create_tenant
         slug = f"upset-{uuid.uuid4().hex[:8]}"
         tenant = asyncio.run(create_tenant(
             name="UpSet", email=f"{slug}@test.com", slug=slug, gdpr_consent=True
@@ -479,7 +479,7 @@ class TestDatabaseLayerEdgeCases(unittest.TestCase):
         self.assertIsNone(result)
 
     def test_verify_tenant_api_key(self):
-        from apps.api.services.database import verify_tenant_api_key, create_tenant
+        from api.services.database import verify_tenant_api_key, create_tenant
         slug = f"vkey-{uuid.uuid4().hex[:8]}"
         tenant = asyncio.run(create_tenant(
             name="VKey", email=f"{slug}@test.com", slug=slug, gdpr_consent=True
@@ -488,12 +488,12 @@ class TestDatabaseLayerEdgeCases(unittest.TestCase):
         self.assertTrue(result)
 
     def test_list_tenants(self):
-        from apps.api.services.database import list_tenants_db
+        from api.services.database import list_tenants_db
         tenants = asyncio.run(list_tenants_db())
         self.assertGreaterEqual(len(tenants), 0)
 
     def test_list_agents(self):
-        from apps.api.services.database import list_agents, create_tenant, create_agent
+        from api.services.database import list_agents, create_tenant, create_agent
         slug = f"lagent-{uuid.uuid4().hex[:8]}"
         tenant = asyncio.run(create_tenant(
             name="LAgent", email=f"{slug}@test.com", slug=slug, gdpr_consent=True
@@ -506,7 +506,7 @@ class TestDatabaseLayerEdgeCases(unittest.TestCase):
         self.assertGreaterEqual(len(agents), 1)
 
     def test_get_available_agents(self):
-        from apps.api.services.database import get_available_agents, create_tenant, create_agent
+        from api.services.database import get_available_agents, create_tenant, create_agent
         slug = f"avail-{uuid.uuid4().hex[:8]}"
         tenant = asyncio.run(create_tenant(
             name="Avail", email=f"{slug}@test.com", slug=slug, gdpr_consent=True
@@ -517,35 +517,35 @@ class TestDatabaseLayerEdgeCases(unittest.TestCase):
 
 class TestEncryptionUtils(unittest.TestCase):
     def test_encrypt_none(self):
-        from apps.api.services.database import encrypt_val
+        from api.services.database import encrypt_val
         result = encrypt_val(None)
         self.assertIsNone(result)
 
     def test_decrypt_none(self):
-        from apps.api.services.database import decrypt_val
+        from api.services.database import decrypt_val
         result = decrypt_val(None)
         self.assertIsNone(result)
 
     def test_encrypt_empty_string(self):
-        from apps.api.services.database import encrypt_val
+        from api.services.database import encrypt_val
         result = encrypt_val("")
         self.assertIsNotNone(result)
 
     def test_encrypt_string_returns_string(self):
-        from apps.api.services.database import encrypt_val
+        from api.services.database import encrypt_val
         result = encrypt_val("hello")
         self.assertIsNotNone(result)
         self.assertIsInstance(result, str)
 
     def test_decrypt_roundtrip(self):
-        from apps.api.services.database import encrypt_val, decrypt_val
+        from api.services.database import encrypt_val, decrypt_val
         original = "sensitive-data-123"
         encrypted = encrypt_val(original)
         decrypted = decrypt_val(encrypted)
         self.assertEqual(decrypted, original)
 
     def test_decrypt_garbage_returns_input_when_unencrypted(self):
-        from apps.api.services.database import decrypt_val
+        from api.services.database import decrypt_val
         result = decrypt_val("not-valid-encrypted-data")
         self.assertEqual(result, "not-valid-encrypted-data")
 
@@ -553,21 +553,21 @@ class TestEncryptionUtils(unittest.TestCase):
 class TestWebhookAndOrders(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from apps.api.services.database import init_sqlite_schema
+        from api.services.database import init_sqlite_schema
         init_sqlite_schema()
 
     def test_lookup_nonexistent_invoice(self):
-        from apps.api.services.database import lookup_invoice_db
+        from api.services.database import lookup_invoice_db
         result = asyncio.run(lookup_invoice_db("FAKE-000"))
         self.assertIsNone(result)
 
     def test_get_nonexistent_order(self):
-        from apps.api.services.database import get_order_status_db
+        from api.services.database import get_order_status_db
         result = asyncio.run(get_order_status_db("FAKE-000"))
         self.assertIsNone(result)
 
     def test_get_webhook_url(self):
-        from apps.api.services.database import get_webhook_url_db, create_tenant
+        from api.services.database import get_webhook_url_db, create_tenant
         slug = f"wh-{uuid.uuid4().hex[:8]}"
         tenant = asyncio.run(create_tenant(
             name="Webhook", email=f"{slug}@test.com", slug=slug, gdpr_consent=True
@@ -576,7 +576,7 @@ class TestWebhookAndOrders(unittest.TestCase):
         self.assertIsNone(result)
 
     def test_process_approval(self):
-        from apps.api.services.database import process_approval_db, create_tenant
+        from api.services.database import process_approval_db, create_tenant
         slug = f"pa-{uuid.uuid4().hex[:8]}"
         tenant = asyncio.run(create_tenant(
             name="ProcApp", email=f"{slug}@test.com", slug=slug, gdpr_consent=True
@@ -584,7 +584,7 @@ class TestWebhookAndOrders(unittest.TestCase):
         asyncio.run(process_approval_db("approval-1", "approved", tenant["id"]))
 
     def test_get_pending_approvals(self):
-        from apps.api.services.database import get_pending_approvals_db, create_tenant
+        from api.services.database import get_pending_approvals_db, create_tenant
         slug = f"pa2-{uuid.uuid4().hex[:8]}"
         tenant = asyncio.run(create_tenant(
             name="PendingApp", email=f"{slug}@test.com", slug=slug, gdpr_consent=True

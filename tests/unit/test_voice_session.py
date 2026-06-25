@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from apps.api.services.call_session import VoiceSession
+from api.services.call_session import VoiceSession
 
 
 class TestVoiceSession:
@@ -76,8 +76,8 @@ class TestVoiceSessionProcessAudio:
         with patch("numpy.frombuffer") as mock_fb, \
              patch("numpy.sqrt") as mock_sqrt, \
              patch("numpy.mean") as mock_mean, \
-             patch("apps.api.services.call_session.asr_service") as mock_asr, \
-             patch("apps.api.services.call_session._get_broadcast_transcript") as mock_get_bc:
+             patch("api.services.call_session.asr_service") as mock_asr, \
+             patch("api.services.call_session._get_broadcast_transcript") as mock_get_bc:
 
             mock_arr = MagicMock()
             mock_arr.astype.return_value = mock_arr
@@ -108,7 +108,7 @@ class TestVoiceSessionProcessAudio:
         with patch("numpy.frombuffer") as mock_fb, \
              patch("numpy.sqrt") as mock_sqrt, \
              patch("numpy.mean") as mock_mean, \
-             patch("apps.api.services.call_session.asr_service") as mock_asr:
+             patch("api.services.call_session.asr_service") as mock_asr:
 
             mock_arr = MagicMock()
             mock_arr.astype.return_value = mock_arr
@@ -152,8 +152,8 @@ class TestVoiceSessionProcessAudio:
         with patch("numpy.frombuffer") as mock_fb, \
              patch("numpy.sqrt") as mock_sqrt, \
              patch("numpy.mean") as mock_mean, \
-             patch("apps.api.services.call_session.asr_service") as mock_asr, \
-             patch("apps.api.services.call_session._get_broadcast_transcript") as mock_get_bc:
+             patch("api.services.call_session.asr_service") as mock_asr, \
+             patch("api.services.call_session._get_broadcast_transcript") as mock_get_bc:
 
             mock_arr = MagicMock()
             mock_arr.astype.return_value = mock_arr
@@ -178,8 +178,8 @@ class TestVoiceSessionProcessAudio:
         with patch("numpy.frombuffer") as mock_fb, \
              patch("numpy.sqrt") as mock_sqrt, \
              patch("numpy.mean") as mock_mean, \
-             patch("apps.api.services.call_session.asr_service") as mock_asr, \
-             patch("apps.api.services.call_session._get_broadcast_transcript") as mock_get_bc:
+             patch("api.services.call_session.asr_service") as mock_asr, \
+             patch("api.services.call_session._get_broadcast_transcript") as mock_get_bc:
 
             mock_arr = MagicMock()
             mock_arr.astype.return_value = mock_arr
@@ -204,8 +204,8 @@ class TestVoiceSessionProcessAudio:
         with patch("numpy.frombuffer") as mock_fb, \
              patch("numpy.sqrt") as mock_sqrt, \
              patch("numpy.mean") as mock_mean, \
-             patch("apps.api.services.call_session.asr_service") as mock_asr, \
-             patch("apps.api.services.call_session._get_broadcast_transcript") as mock_get_bc:
+             patch("api.services.call_session.asr_service") as mock_asr, \
+             patch("api.services.call_session._get_broadcast_transcript") as mock_get_bc:
 
             mock_arr = MagicMock()
             mock_arr.astype.return_value = mock_arr
@@ -228,8 +228,8 @@ class TestVoiceSessionSpeak:
     async def test_speak_returns_audio(self):
         session = VoiceSession("SESS-SPK1", "CALL-SPK1")
 
-        with patch("apps.api.services.call_session.tts_service") as mock_tts, \
-             patch("apps.api.services.call_session._get_broadcast_transcript") as mock_get_bc:
+        with patch("api.services.call_session.tts_service") as mock_tts, \
+             patch("api.services.call_session._get_broadcast_transcript") as mock_get_bc:
 
             mock_tts.synthesize = AsyncMock(return_value=b"wav_audio_data")
             mock_bc = MagicMock()
@@ -253,8 +253,8 @@ class TestVoiceSessionSpeakStream:
             yield b"chunk_a"
             yield b"chunk_b"
 
-        with patch("apps.api.services.call_session.tts_service") as mock_tts, \
-             patch("apps.api.services.call_session._get_broadcast_transcript") as mock_get_bc:
+        with patch("api.services.call_session.tts_service") as mock_tts, \
+             patch("api.services.call_session._get_broadcast_transcript") as mock_get_bc:
 
             mock_tts.synthesize_streaming = mock_stream
             mock_bc = MagicMock()
@@ -278,8 +278,8 @@ class TestVoiceSessionSpeakStream:
         async def mock_stream(text):
             yield b"data"
 
-        with patch("apps.api.services.call_session.tts_service") as mock_tts, \
-             patch("apps.api.services.call_session._get_broadcast_transcript") as mock_get_bc:
+        with patch("api.services.call_session.tts_service") as mock_tts, \
+             patch("api.services.call_session._get_broadcast_transcript") as mock_get_bc:
 
             mock_tts.synthesize_streaming = mock_stream
             mock_get_bc.return_value = MagicMock()
@@ -300,8 +300,8 @@ class TestVoiceSessionManagement:
         mock_qm = MagicMock()
         mock_app.state.qm = mock_qm
 
-        with patch("apps.api.services.call_session._get_queue_manager", return_value=mock_qm):
-            from apps.api.services.call_session import store_session
+        with patch("api.services.call_session._get_queue_manager", return_value=mock_qm):
+            from api.services.call_session import store_session
             store_session(mock_app, "SESS-MGT1", session)
 
         mock_qm.session_set.assert_called_once_with("SESS-MGT1", session.to_dict())
@@ -311,8 +311,8 @@ class TestVoiceSessionManagement:
         mock_qm = MagicMock()
         mock_app.state.qm = mock_qm
 
-        with patch("apps.api.services.call_session._get_queue_manager", return_value=mock_qm):
-            from apps.api.services.call_session import remove_session
+        with patch("api.services.call_session._get_queue_manager", return_value=mock_qm):
+            from api.services.call_session import remove_session
             remove_session(mock_app, "SESS-MGT2")
 
         mock_qm.session_delete.assert_called_once_with("SESS-MGT2")
@@ -324,10 +324,10 @@ class TestVoiceSessionManagement:
         mock_qm.session_get.return_value = None
         mock_app.state.qm = mock_qm
 
-        with patch("apps.api.services.call_session._get_queue_manager", return_value=mock_qm), \
-             patch("apps.api.services.call_session.store_session") as mock_store:
+        with patch("api.services.call_session._get_queue_manager", return_value=mock_qm), \
+             patch("api.services.call_session.store_session") as mock_store:
 
-            from apps.api.services.call_session import get_or_create_session
+            from api.services.call_session import get_or_create_session
             result = get_or_create_session(mock_app, "SESS-MGT3", "CALL-MGT3", "PROF-002", "TENANT-002")
 
         assert isinstance(result, VoiceSession)
@@ -352,10 +352,10 @@ class TestVoiceSessionManagement:
         mock_qm.session_get.return_value = existing_data
         mock_app.state.qm = mock_qm
 
-        with patch("apps.api.services.call_session._get_queue_manager", return_value=mock_qm), \
-             patch("apps.api.services.call_session.store_session") as mock_store:
+        with patch("api.services.call_session._get_queue_manager", return_value=mock_qm), \
+             patch("api.services.call_session.store_session") as mock_store:
 
-            from apps.api.services.call_session import get_or_create_session
+            from api.services.call_session import get_or_create_session
             result = get_or_create_session(mock_app, "SESS-MGT4")
 
         assert isinstance(result, VoiceSession)
@@ -367,7 +367,7 @@ class TestVoiceSessionManagement:
         mock_app = MagicMock()
         mock_app.state.qm = None
 
-        from apps.api.services.call_session import _get_queue_manager
+        from api.services.call_session import _get_queue_manager
         qm1 = _get_queue_manager(mock_app)
         qm2 = _get_queue_manager(mock_app)
 

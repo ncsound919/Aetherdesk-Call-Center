@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 class TestTwoQuestionRouter:
     def test_route_hit(self):
-        from apps.api.services.router import TwoQuestionRouter
+        from api.services.router import TwoQuestionRouter
 
         table = {
             "refill:id_lookup": {
@@ -22,7 +22,7 @@ class TestTwoQuestionRouter:
         assert result["fields"] == ["rx_number"]
 
     def test_route_miss_returns_fallback(self):
-        from apps.api.services.router import TwoQuestionRouter
+        from api.services.router import TwoQuestionRouter
 
         router = TwoQuestionRouter({})
         result = router.route("unknown", "missing")
@@ -32,7 +32,7 @@ class TestTwoQuestionRouter:
         assert result["fields"] == []
 
     def test_route_empty_table(self):
-        from apps.api.services.router import TwoQuestionRouter
+        from api.services.router import TwoQuestionRouter
 
         router = TwoQuestionRouter({})
         result = router.route("refill", "id_lookup")
@@ -42,7 +42,7 @@ class TestTwoQuestionRouter:
 
 class TestLLMIntentRouter:
     def test_route_known_intent(self):
-        from apps.api.services.router import LLMIntentRouter
+        from api.services.router import LLMIntentRouter
 
         router = LLMIntentRouter()
         result = router.route("pharmacy_refill", {"rx_number": "12345"})
@@ -54,7 +54,7 @@ class TestLLMIntentRouter:
         assert result["intent"] == "pharmacy_refill"
 
     def test_route_unknown_intent_fallback(self):
-        from apps.api.services.router import LLMIntentRouter
+        from api.services.router import LLMIntentRouter
 
         router = LLMIntentRouter()
         result = router.route("unknown_intent", {})
@@ -64,7 +64,7 @@ class TestLLMIntentRouter:
         assert result["fields"] == []
 
     def test_route_billing_invoice(self):
-        from apps.api.services.router import LLMIntentRouter
+        from api.services.router import LLMIntentRouter
 
         router = LLMIntentRouter()
         result = router.route("billing_invoice", {"invoice_id": "INV-001"})
@@ -73,7 +73,7 @@ class TestLLMIntentRouter:
         assert result["queue"] == "billing"
 
     def test_route_tech_support_password(self):
-        from apps.api.services.router import LLMIntentRouter
+        from api.services.router import LLMIntentRouter
 
         router = LLMIntentRouter()
         result = router.route("tech_support_password", {"customer_id": "CUST-001"})
@@ -83,7 +83,7 @@ class TestLLMIntentRouter:
 
     @pytest.mark.asyncio
     async def test_route_from_transcript(self):
-        from apps.api.services.router import LLMIntentRouter
+        from api.services.router import LLMIntentRouter
 
         router = LLMIntentRouter()
         mock_classifier = MagicMock()
@@ -102,8 +102,8 @@ class TestLLMIntentRouter:
         mock_classifier.classify_with_fallback.assert_called_once_with("Where is my order?")
 
     def test_get_classifier_returns_global_classifier(self):
-        from apps.api.services.router import LLMIntentRouter
-        from apps.api.services.intent_classifier import classifier
+        from api.services.router import LLMIntentRouter
+        from api.services.intent_classifier import classifier
 
         router = LLMIntentRouter()
         cls = router._get_classifier()
@@ -113,16 +113,16 @@ class TestLLMIntentRouter:
 class TestGetRouter:
     @patch.dict(os.environ, {}, clear=True)
     def test_default_returns_two_question_router(self):
-        from apps.api.services.router import get_router
-        from apps.api.services.router import TwoQuestionRouter
+        from api.services.router import get_router
+        from api.services.router import TwoQuestionRouter
 
         router = get_router()
         assert isinstance(router, TwoQuestionRouter)
 
     @patch.dict(os.environ, {"USE_LLM_ROUTING": "true"}, clear=True)
     def test_llm_routing_enabled(self):
-        from apps.api.services.router import get_router
-        from apps.api.services.router import LLMIntentRouter
+        from api.services.router import get_router
+        from api.services.router import LLMIntentRouter
 
         router = get_router()
         assert isinstance(router, LLMIntentRouter)
@@ -130,7 +130,7 @@ class TestGetRouter:
 
 class TestRouterModuleConstants:
     def test_intent_to_protocol_mapping(self):
-        from apps.api.services.router import INTENT_TO_PROTOCOL
+        from api.services.router import INTENT_TO_PROTOCOL
 
         assert "pharmacy_refill" in INTENT_TO_PROTOCOL
         assert "pharmacy_refill_doc" in INTENT_TO_PROTOCOL
@@ -143,13 +143,13 @@ class TestRouterModuleConstants:
         assert "retry" in INTENT_TO_PROTOCOL
 
     def test_two_question_router_instantiated(self):
-        from apps.api.services.router import two_question_router, route_table
+        from api.services.router import two_question_router, route_table
         assert two_question_router is not None
 
     def test_llm_router_instantiated(self):
-        from apps.api.services.router import llm_router
+        from api.services.router import llm_router
         assert llm_router is not None
 
     def test_module_router_instantiation(self):
-        from apps.api.services.router import router
+        from api.services.router import router
         assert router is not None

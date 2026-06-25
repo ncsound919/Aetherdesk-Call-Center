@@ -1,7 +1,7 @@
 
 import pytest
 
-from apps.api.services.mcp_client import MCPClientManager
+from api.services.mcp_client import MCPClientManager
 
 
 @pytest.mark.asyncio

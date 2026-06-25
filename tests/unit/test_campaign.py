@@ -8,14 +8,14 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_list_leads_no_filter(self):
-        from apps.api.routers.campaign import list_leads
+        from api.routers.campaign import list_leads
 
         mock_rows = [
             {"id": "LEAD-1", "tenant_id": "tenant-1", "company_name": "Acme", "phone": "+15551234567", "status": "new"},
             {"id": "LEAD-2", "tenant_id": "tenant-1", "company_name": "Globex", "phone": "+15559876543", "status": "interested"},
         ]
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchall.return_value = mock_rows
@@ -29,13 +29,13 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_list_leads_with_status_filter(self):
-        from apps.api.routers.campaign import list_leads
+        from api.routers.campaign import list_leads
 
         mock_rows = [
             {"id": "LEAD-1", "tenant_id": "tenant-1", "company_name": "Acme", "phone": "+15551234567", "status": "new"},
         ]
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchall.return_value = mock_rows
@@ -49,9 +49,9 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_create_lead_success(self):
-        from apps.api.routers.campaign import create_lead, LeadCreate
+        from api.routers.campaign import create_lead, LeadCreate
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_conn.cursor.return_value = mock_cursor
@@ -75,7 +75,7 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_create_lead_invalid_phone(self):
-        from apps.api.routers.campaign import LeadCreate
+        from api.routers.campaign import LeadCreate
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError) as exc:
@@ -87,9 +87,9 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_bulk_import_leads(self):
-        from apps.api.routers.campaign import bulk_import_leads, LeadBulkImport, LeadCreate
+        from api.routers.campaign import bulk_import_leads, LeadBulkImport, LeadCreate
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_conn.cursor.return_value = mock_cursor
@@ -109,7 +109,7 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_bulk_import_respects_max_limit(self):
-        from apps.api.routers.campaign import LeadBulkImport, LeadCreate
+        from api.routers.campaign import LeadBulkImport, LeadCreate
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError) as exc:
@@ -119,9 +119,9 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_update_lead_status(self):
-        from apps.api.routers.campaign import update_lead
+        from api.routers.campaign import update_lead
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchone.return_value = {"id": "LEAD-1"}
@@ -136,10 +136,10 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_update_lead_not_found(self):
-        from apps.api.routers.campaign import update_lead
+        from api.routers.campaign import update_lead
         from fastapi import HTTPException
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchone.return_value = None
@@ -152,7 +152,7 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_update_lead_invalid_status(self):
-        from apps.api.routers.campaign import update_lead
+        from api.routers.campaign import update_lead
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc:
@@ -161,9 +161,9 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_update_lead_notes(self):
-        from apps.api.routers.campaign import update_lead
+        from api.routers.campaign import update_lead
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchone.return_value = {"id": "LEAD-1"}
@@ -176,9 +176,9 @@ class TestCampaignLeads:
 
     @pytest.mark.asyncio
     async def test_update_lead_notes_truncated(self):
-        from apps.api.routers.campaign import update_lead
+        from api.routers.campaign import update_lead
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchone.return_value = {"id": "LEAD-1"}
@@ -198,14 +198,14 @@ class TestCampaignCalls:
 
     @pytest.mark.asyncio
     async def test_list_campaign_calls_no_filter(self):
-        from apps.api.routers.campaign import list_campaign_calls
+        from api.routers.campaign import list_campaign_calls
 
         mock_rows = [
             {"id": "CC-1", "tenant_id": "tenant-1", "lead_id": "LEAD-1", "outcome": "interested", "company_name": "Acme"},
             {"id": "CC-2", "tenant_id": "tenant-1", "lead_id": "LEAD-2", "outcome": "voicemail", "company_name": "Globex"},
         ]
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchall.return_value = mock_rows
@@ -218,13 +218,13 @@ class TestCampaignCalls:
 
     @pytest.mark.asyncio
     async def test_list_campaign_calls_with_outcome_filter(self):
-        from apps.api.routers.campaign import list_campaign_calls
+        from api.routers.campaign import list_campaign_calls
 
         mock_rows = [
             {"id": "CC-1", "tenant_id": "tenant-1", "lead_id": "LEAD-1", "outcome": "interested", "company_name": "Acme"},
         ]
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchall.return_value = mock_rows
@@ -241,7 +241,7 @@ class TestCampaignStats:
 
     @pytest.mark.asyncio
     async def test_campaign_stats_with_data(self):
-        from apps.api.routers.campaign import campaign_stats
+        from api.routers.campaign import campaign_stats
 
         mock_row = {
             "total_leads": 100,
@@ -251,7 +251,7 @@ class TestCampaignStats:
             "needs_human": 2
         }
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchone.return_value = mock_row
@@ -268,7 +268,7 @@ class TestCampaignStats:
 
     @pytest.mark.asyncio
     async def test_campaign_stats_zero_calls(self):
-        from apps.api.routers.campaign import campaign_stats
+        from api.routers.campaign import campaign_stats
 
         mock_row = {
             "total_leads": 100,
@@ -278,7 +278,7 @@ class TestCampaignStats:
             "needs_human": 0
         }
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchone.return_value = mock_row
@@ -290,7 +290,7 @@ class TestCampaignStats:
 
     @pytest.mark.asyncio
     async def test_campaign_stats_none_values(self):
-        from apps.api.routers.campaign import campaign_stats
+        from api.routers.campaign import campaign_stats
 
         mock_row = {
             "total_leads": None,
@@ -300,7 +300,7 @@ class TestCampaignStats:
             "needs_human": None
         }
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db:
+        with patch("api.routers.campaign.db_context_sync") as mock_db:
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_cursor.fetchone.return_value = mock_row
@@ -317,17 +317,17 @@ class TestCampaignLaunch:
 
     @pytest.mark.asyncio
     async def test_launch_campaign_success(self):
-        from apps.api.routers.campaign import launch_campaign, CampaignLaunch
+        from api.routers.campaign import launch_campaign, CampaignLaunch
 
         mock_leads = [
             {"id": "LEAD-1", "phone": "+15551111111", "company_name": "Acme"},
             {"id": "LEAD-2", "phone": "+15552222222", "company_name": "Globex"},
         ]
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db, \
-             patch("apps.api.routers.campaign._campaign_running", False), \
-             patch("apps.api.routers.campaign._campaign_lock", AsyncMock()), \
-             patch("apps.api.routers.campaign.asyncio.create_task") as mock_create_task:
+        with patch("api.routers.campaign.db_context_sync") as mock_db, \
+             patch("api.routers.campaign._campaign_running", False), \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("api.routers.campaign.asyncio.create_task") as mock_create_task:
 
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
@@ -346,11 +346,11 @@ class TestCampaignLaunch:
 
     @pytest.mark.asyncio
     async def test_launch_campaign_no_leads(self):
-        from apps.api.routers.campaign import launch_campaign, CampaignLaunch
+        from api.routers.campaign import launch_campaign, CampaignLaunch
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db, \
-             patch("apps.api.routers.campaign._campaign_running", False), \
-             patch("apps.api.routers.campaign._campaign_lock", AsyncMock()):
+        with patch("api.routers.campaign.db_context_sync") as mock_db, \
+             patch("api.routers.campaign._campaign_running", False), \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()):
 
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
@@ -366,11 +366,11 @@ class TestCampaignLaunch:
 
     @pytest.mark.asyncio
     async def test_launch_campaign_already_running(self):
-        from apps.api.routers.campaign import launch_campaign, CampaignLaunch
+        from api.routers.campaign import launch_campaign, CampaignLaunch
         from fastapi import HTTPException
 
-        with patch("apps.api.routers.campaign._campaign_running", True), \
-             patch("apps.api.routers.campaign._campaign_lock", AsyncMock()):
+        with patch("api.routers.campaign._campaign_running", True), \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()):
 
             config = CampaignLaunch(filter_status="new")
             with pytest.raises(HTTPException) as exc:
@@ -384,28 +384,28 @@ class TestPhoneValidation:
 
     @pytest.mark.asyncio
     async def test_valid_e164_phone(self):
-        from apps.api.routers.campaign import LeadCreate
+        from api.routers.campaign import LeadCreate
 
         lead = LeadCreate(company_name="Test", phone="+15551234567")
         assert lead.phone == "+15551234567"
 
     @pytest.mark.asyncio
     async def test_valid_phone_without_plus(self):
-        from apps.api.routers.campaign import LeadCreate
+        from api.routers.campaign import LeadCreate
 
         lead = LeadCreate(company_name="Test", phone="15551234567")
         assert lead.phone == "+15551234567"
 
     @pytest.mark.asyncio
     async def test_valid_phone_with_spaces_dashes(self):
-        from apps.api.routers.campaign import LeadCreate
+        from api.routers.campaign import LeadCreate
 
         lead = LeadCreate(company_name="Test", phone="+1 (555) 123-4567")
         assert lead.phone == "+15551234567"
 
     @pytest.mark.asyncio
     async def test_invalid_phone_too_short(self):
-        from apps.api.routers.campaign import LeadCreate
+        from api.routers.campaign import LeadCreate
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
@@ -413,7 +413,7 @@ class TestPhoneValidation:
 
     @pytest.mark.asyncio
     async def test_invalid_phone_letters(self):
-        from apps.api.routers.campaign import LeadCreate
+        from api.routers.campaign import LeadCreate
         from pydantic import ValidationError
 
         with pytest.raises(ValidationError):
@@ -423,11 +423,11 @@ class TestPhoneValidation:
 class TestEscalationAlert:
     @pytest.mark.asyncio
     async def test_push_escalation_alert_high_severity(self):
-        from apps.api.routers.campaign import push_escalation_alert
+        from api.routers.campaign import push_escalation_alert
 
         mock_mgr = MagicMock()
         mock_mgr.broadcast_to_queue = AsyncMock()
-        with patch("apps.api.routers.realtime.manager", mock_mgr):
+        with patch("api.routers.realtime.manager", mock_mgr):
             await push_escalation_alert("CC-123", "Customer requested manager", "Agent-1")
             mock_mgr.broadcast_to_queue.assert_called_once()
             args = mock_mgr.broadcast_to_queue.call_args
@@ -439,11 +439,11 @@ class TestEscalationAlert:
 
     @pytest.mark.asyncio
     async def test_push_escalation_alert_medium_severity(self):
-        from apps.api.routers.campaign import push_escalation_alert
+        from api.routers.campaign import push_escalation_alert
 
         mock_mgr = MagicMock()
         mock_mgr.broadcast_to_queue = AsyncMock()
-        with patch("apps.api.routers.realtime.manager", mock_mgr):
+        with patch("api.routers.realtime.manager", mock_mgr):
             await push_escalation_alert("CC-456", "Technical issue", "Agent-2")
             alert = mock_mgr.broadcast_to_queue.call_args[0][1]
             assert alert["severity"] == "medium"
@@ -452,7 +452,7 @@ class TestEscalationAlert:
 class TestRunCampaign:
     @pytest.mark.asyncio
     async def test_run_campaign_all_calls_succeed(self):
-        from apps.api.routers.campaign import _run_campaign, CampaignLaunch
+        from api.routers.campaign import _run_campaign, CampaignLaunch
 
         leads = [
             {"id": "LEAD-1", "phone": "+15551111111", "company_name": "Acme"},
@@ -466,9 +466,9 @@ class TestRunCampaign:
         mock_http.post.return_value = mock_response
         mock_http.__aenter__.return_value = mock_http
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db, \
-             patch("apps.api.routers.campaign._campaign_lock", AsyncMock()), \
-             patch("apps.api.routers.campaign.httpx.AsyncClient", return_value=mock_http):
+        with patch("api.routers.campaign.db_context_sync") as mock_db, \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("api.routers.campaign.httpx.AsyncClient", return_value=mock_http):
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_conn.cursor.return_value = mock_cursor
@@ -483,7 +483,7 @@ class TestRunCampaign:
 
     @pytest.mark.asyncio
     async def test_run_campaign_call_fails(self):
-        from apps.api.routers.campaign import _run_campaign, CampaignLaunch
+        from api.routers.campaign import _run_campaign, CampaignLaunch
 
         leads = [{"id": "LEAD-1", "phone": "+15551111111", "company_name": "Acme"}]
         config = CampaignLaunch(profile_id="PROF-TEST", delay_between_calls=2.0)
@@ -492,9 +492,9 @@ class TestRunCampaign:
         mock_http.post.side_effect = Exception("Voice API unavailable")
         mock_http.__aenter__.return_value = mock_http
 
-        with patch("apps.api.routers.campaign.db_context_sync") as mock_db, \
-             patch("apps.api.routers.campaign._campaign_lock", AsyncMock()), \
-             patch("apps.api.routers.campaign.httpx.AsyncClient", return_value=mock_http):
+        with patch("api.routers.campaign.db_context_sync") as mock_db, \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("api.routers.campaign.httpx.AsyncClient", return_value=mock_http):
             mock_conn = MagicMock()
             mock_cursor = MagicMock()
             mock_conn.cursor.return_value = mock_cursor

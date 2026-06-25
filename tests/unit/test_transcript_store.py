@@ -1,7 +1,7 @@
 import time
 import pytest
 from unittest.mock import patch
-from apps.api.services.transcript_store import TranscriptStore
+from api.services.transcript_store import TranscriptStore
 
 
 class TestTranscriptStore:
@@ -59,7 +59,7 @@ class TestTranscriptStore:
         self.store._last_activity["call-stale"] = time.time() - 7200
         self.store._last_activity["call-fresh"] = time.time()
 
-        with patch("apps.api.services.transcript_store.asyncio.sleep", side_effect=[None, Exception("break")]):
+        with patch("api.services.transcript_store.asyncio.sleep", side_effect=[None, Exception("break")]):
             with pytest.raises(Exception, match="break"):
                 await self.store.cleanup_stale_loop()
 

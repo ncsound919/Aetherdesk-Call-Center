@@ -3,14 +3,14 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from celery.exceptions import Retry
-from apps.api.services import celery_tasks
+from api.services import celery_tasks
 
 
 class TestProcessRagQueryTask:
     def test_apply_returns_result(self, monkeypatch):
         mock_rag = MagicMock()
         mock_rag.query = AsyncMock(return_value=[{"content": "RAG result"}])
-        monkeypatch.setattr("apps.api.services.rag.rag_service", mock_rag)
+        monkeypatch.setattr("api.services.rag.rag_service", mock_rag)
 
         result = celery_tasks.process_rag_query.apply(args=("test query", 3, "tenant-1"))
 
@@ -20,7 +20,7 @@ class TestProcessRagQueryTask:
     def test_retry_on_failure(self, monkeypatch):
         mock_rag = MagicMock()
         mock_rag.query = AsyncMock(side_effect=Exception("RAG down"))
-        monkeypatch.setattr("apps.api.services.rag.rag_service", mock_rag)
+        monkeypatch.setattr("api.services.rag.rag_service", mock_rag)
 
         with pytest.raises(Retry):
             celery_tasks.process_rag_query.apply(args=("test query", 3, "tenant-1"), throw=True)
@@ -30,7 +30,7 @@ class TestProcessIntentClassifyTask:
     def test_apply_returns_classification(self, monkeypatch):
         mock_classifier = MagicMock()
         mock_classifier.classify = AsyncMock(return_value={"intent": "billing", "confidence": 0.95})
-        monkeypatch.setattr("apps.api.services.intent_classifier.classifier", mock_classifier)
+        monkeypatch.setattr("api.services.intent_classifier.classifier", mock_classifier)
 
         result = celery_tasks.process_intent_classify.apply(args=("Where is my refund?", "tenant-1"))
 
@@ -40,7 +40,7 @@ class TestProcessIntentClassifyTask:
     def test_retry_on_failure(self, monkeypatch):
         mock_classifier = MagicMock()
         mock_classifier.classify = AsyncMock(side_effect=Exception("Classifier down"))
-        monkeypatch.setattr("apps.api.services.intent_classifier.classifier", mock_classifier)
+        monkeypatch.setattr("api.services.intent_classifier.classifier", mock_classifier)
 
         with pytest.raises(Retry):
             celery_tasks.process_intent_classify.apply(args=("query", "tenant-1"), throw=True)
@@ -50,7 +50,7 @@ class TestProcessAgentResponseTask:
     def test_apply_returns_answer(self, monkeypatch):
         mock_agent = MagicMock()
         mock_agent.answer = AsyncMock(return_value="Your refund is being processed.")
-        monkeypatch.setattr("apps.api.services.agent.agent_service", mock_agent)
+        monkeypatch.setattr("api.services.agent.agent_service", mock_agent)
 
         result = celery_tasks.process_agent_response.apply(args=(
             "When will I get my refund?",
@@ -65,7 +65,7 @@ class TestProcessAgentResponseTask:
     def test_retry_on_failure(self, monkeypatch):
         mock_agent = MagicMock()
         mock_agent.answer = AsyncMock(side_effect=Exception("Agent down"))
-        monkeypatch.setattr("apps.api.services.agent.agent_service", mock_agent)
+        monkeypatch.setattr("api.services.agent.agent_service", mock_agent)
 
         with pytest.raises(Retry):
             celery_tasks.process_agent_response.apply(args=("query", [], [], "tenant-1"), throw=True)

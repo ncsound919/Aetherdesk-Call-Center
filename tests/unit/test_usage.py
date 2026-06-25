@@ -11,16 +11,16 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 import pytest
 
-from apps.api.services.auth import verify_tenant_access
+from api.services.auth import verify_tenant_access
 
 
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with just the usage router."""
-    from apps.api.routers.usage import router
+    from api.routers.usage import router
 
     application = FastAPI()
-    application.include_router(router)
+    application.include_router(router, prefix="/api/v1")
 
     # Override the auth dependency to skip real verification
     application.dependency_overrides[verify_tenant_access] = lambda: "TENANT-001"
@@ -51,8 +51,8 @@ class TestGetUsage:
         mock_pool = AsyncMock()
         mock_pool.fetchval = AsyncMock(return_value=2)
 
-        with patch("apps.api.routers.usage.get_usage_stats", new_callable=AsyncMock) as mock_get_stats, \
-             patch("apps.api.routers.usage.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
+        with patch("api.routers.usage.get_usage_stats", new_callable=AsyncMock) as mock_get_stats, \
+             patch("api.routers.usage.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
 
             mock_get_stats.return_value = mock_stats
             mock_get_pool.return_value = mock_pool
@@ -82,8 +82,8 @@ class TestGetUsage:
             "total_minutes": 0.0,
         }
 
-        with patch("apps.api.routers.usage.get_usage_stats", new_callable=AsyncMock) as mock_get_stats, \
-             patch("apps.api.routers.usage.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
+        with patch("api.routers.usage.get_usage_stats", new_callable=AsyncMock) as mock_get_stats, \
+             patch("api.routers.usage.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
 
             mock_get_stats.return_value = mock_stats
             mock_get_pool.return_value = None  # no pool
@@ -101,8 +101,8 @@ class TestGetUsage:
             "total_minutes": 0.0,
         }
 
-        with patch("apps.api.routers.usage.get_usage_stats", new_callable=AsyncMock) as mock_get_stats, \
-             patch("apps.api.routers.usage.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
+        with patch("api.routers.usage.get_usage_stats", new_callable=AsyncMock) as mock_get_stats, \
+             patch("api.routers.usage.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
 
             mock_get_stats.return_value = mock_stats
             mock_get_pool.return_value = None
@@ -123,8 +123,8 @@ class TestGetUsage:
             "total_minutes": 120.0,
         }
 
-        with patch("apps.api.routers.usage.get_usage_stats", new_callable=AsyncMock) as mock_get_stats, \
-             patch("apps.api.routers.usage.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
+        with patch("api.routers.usage.get_usage_stats", new_callable=AsyncMock) as mock_get_stats, \
+             patch("api.routers.usage.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
 
             mock_get_stats.return_value = mock_stats
             mock_get_pool.return_value = None
@@ -137,8 +137,8 @@ class TestGetUsage:
 
     def test_get_usage_returns_json_content_type(self, client):
         """Usage endpoint returns JSON."""
-        with patch("apps.api.routers.usage.get_usage_stats", new_callable=AsyncMock) as mock_get_stats, \
-             patch("apps.api.routers.usage.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
+        with patch("api.routers.usage.get_usage_stats", new_callable=AsyncMock) as mock_get_stats, \
+             patch("api.routers.usage.get_pg_pool", new_callable=AsyncMock) as mock_get_pool:
 
             mock_get_stats.return_value = {
                 "total_agents": 1, "active_agents": 1,

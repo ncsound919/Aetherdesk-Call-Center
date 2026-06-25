@@ -1,5 +1,5 @@
 import pytest
-from apps.api.services.db_errors import DatabaseError, NotFoundError, PoolNotAvailableError
+from api.services.db_errors import DatabaseError, NotFoundError, PoolNotAvailableError
 
 
 class TestDatabaseError:

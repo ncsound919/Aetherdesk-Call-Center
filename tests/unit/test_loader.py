@@ -6,7 +6,7 @@ import pytest
 
 class TestFileLoader:
     def test_load_existing_file(self):
-        from apps.api.services.loader import FileLoader
+        from api.services.loader import FileLoader
 
         with tempfile.TemporaryDirectory() as tmpdir:
             data = {"nodes": {"start": {"prompt": "Hello"}}}
@@ -19,7 +19,7 @@ class TestFileLoader:
             assert result == data
 
     def test_load_nonexistent_file_returns_none(self):
-        from apps.api.services.loader import FileLoader
+        from api.services.loader import FileLoader
 
         with tempfile.TemporaryDirectory() as tmpdir:
             loader = FileLoader(base_path=tmpdir)
@@ -27,7 +27,7 @@ class TestFileLoader:
             assert result is None
 
     def test_default_base_path(self):
-        from apps.api.services.loader import FileLoader
+        from api.services.loader import FileLoader
         loader = FileLoader()
         assert loader.base_path is not None
         assert "config" in loader.base_path

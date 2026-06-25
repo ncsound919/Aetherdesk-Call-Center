@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from apps.api.services.intent_classifier import IntentClassifier, IntentResult
+from api.services.intent_classifier import IntentClassifier, IntentResult
 
 
 class TestIntentClassifierInit:
@@ -17,8 +17,8 @@ class TestIntentClassifierInit:
         assert cls.host == "http://custom:8080"
 
     def test_env_vars(self):
-        with patch("apps.api.services.intent_classifier.OLLAMA_MODEL", "mistral:7b"), \
-             patch("apps.api.services.intent_classifier.OLLAMA_HOST", "http://ollama:11434"):
+        with patch("api.services.intent_classifier.OLLAMA_MODEL", "mistral:7b"), \
+             patch("api.services.intent_classifier.OLLAMA_HOST", "http://ollama:11434"):
             cls = IntentClassifier()
             assert cls.model == "mistral:7b"
             assert cls.host == "http://ollama:11434"
@@ -91,7 +91,7 @@ class TestIntentClassifierClassify:
             }
         }
         with patch.object(cls, "_call_ollama", AsyncMock(return_value=ollama_response)), \
-             patch("apps.api.services.intent_classifier.track_llm_latency") as mock_track:
+             patch("api.services.intent_classifier.track_llm_latency") as mock_track:
             result = await cls.classify("I need to refill RX 12345")
 
         assert result.intent == "pharmacy_refill"
@@ -161,7 +161,7 @@ class TestIntentClassifierCallOllama:
         mock_response.json.return_value = {"message": {"content": '{"intent":"test"}'}}
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("apps.api.services.intent_classifier.get_http_client") as mock_get_client:
+        with patch("api.services.intent_classifier.get_http_client") as mock_get_client:
             mock_get_client.return_value.__aenter__.return_value = mock_client
             result = await cls._call_ollama("test transcript")
 
@@ -176,8 +176,8 @@ class TestIntentClassifierCallOllama:
         mock_response.json.return_value = {"message": {"content": '{}'}}
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("apps.api.services.intent_classifier.get_http_client") as mock_get_client, \
-             patch("apps.api.services.intent_classifier.memory_service") as mock_memory:
+        with patch("api.services.intent_classifier.get_http_client") as mock_get_client, \
+             patch("api.services.intent_classifier.memory_service") as mock_memory:
             mock_get_client.return_value.__aenter__.return_value = mock_client
             mock_memory.search_memories = AsyncMock(return_value=[
                 {"content": "Customer mentioned order ORD-001"},
@@ -198,8 +198,8 @@ class TestIntentClassifierCallOllama:
         mock_response.json.return_value = {"message": {"content": '{}'}}
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("apps.api.services.intent_classifier.get_http_client") as mock_get_client, \
-             patch("apps.api.services.intent_classifier.memory_service") as mock_memory:
+        with patch("api.services.intent_classifier.get_http_client") as mock_get_client, \
+             patch("api.services.intent_classifier.memory_service") as mock_memory:
             mock_get_client.return_value.__aenter__.return_value = mock_client
             mock_memory.search_memories = AsyncMock(side_effect=Exception("Memory error"))
             result = await cls._call_ollama("test", session_id="SESS-001")
@@ -213,7 +213,7 @@ class TestIntentClassifierCallOllama:
         mock_client = MagicMock()
         mock_client.post = AsyncMock(side_effect=Exception("HTTP 500"))
 
-        with patch("apps.api.services.intent_classifier.get_http_client") as mock_get_client, \
+        with patch("api.services.intent_classifier.get_http_client") as mock_get_client, \
              pytest.raises(Exception, match="HTTP 500"):
             mock_get_client.return_value.__aenter__.return_value = mock_client
             await cls._call_ollama("test")

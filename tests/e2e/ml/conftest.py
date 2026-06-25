@@ -9,8 +9,8 @@ os.environ.setdefault("GROQ_API_KEY", "test-key")
 
 import pytest
 from fastapi.testclient import TestClient
-from apps.api.main import app
-from apps.api.services.rate_limit import reset_rate_limiter
+from api.main import app
+from api.services.rate_limit import reset_rate_limiter
 
 reset_rate_limiter()
 

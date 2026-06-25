@@ -2,8 +2,8 @@ import asyncio
 import unittest
 from unittest.mock import MagicMock
 
-from apps.api.services.actions import Actions
-from apps.api.services.database import init_sqlite_schema
+from api.services.actions import Actions
+from api.services.database import init_sqlite_schema
 
 
 class TestAffiliateFunnel(unittest.TestCase):

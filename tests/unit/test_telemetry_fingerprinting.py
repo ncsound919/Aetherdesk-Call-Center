@@ -1,7 +1,7 @@
 import time
 import unittest
 
-from apps.api.services.call_session import VoiceSession
+from api.services.call_session import VoiceSession
 
 
 class TestTelemetryFingerprinting(unittest.TestCase):
@@ -15,7 +15,7 @@ class TestTelemetryFingerprinting(unittest.TestCase):
 
     def test_agent_latency_fingerprint(self):
         """Test that agent response metadata correctly captures turn latency."""
-        from apps.api.services.orchestrator import AgentResponse
+        from api.services.orchestrator import AgentResponse
 
         start = time.time()
         time.sleep(0.05) # Simulate work

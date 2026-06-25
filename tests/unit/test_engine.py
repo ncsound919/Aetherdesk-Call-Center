@@ -9,7 +9,7 @@ class TestEngineUtils:
     """Tests for engine utility functions."""
 
     def test_build_xml_response(self):
-        from apps.api.routers.engine import build_xml_response
+        from api.routers.engine import build_xml_response
 
         xml = build_xml_response("Hello World")
         assert "<?xml version=" in xml
@@ -17,7 +17,7 @@ class TestEngineUtils:
         assert xml.startswith('<?xml version="1.0" encoding="UTF-8"?><Response>')
 
     def test_prompt_for(self):
-        from apps.api.routers.engine import prompt_for, VMState
+        from api.routers.engine import prompt_for, VMState
 
         # Test ask_q1
         state = VMState(protocol_id="bootstrap_q1", node="ask_q1", fields={}, transcript=[])
@@ -54,15 +54,15 @@ class TestInboundSMS:
 
     @pytest.mark.asyncio
     async def test_inbound_sms_new_session(self):
-        from apps.api.routers.engine import inbound_sms
+        from api.routers.engine import inbound_sms
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
         mock_redis.get.return_value = None
         mock_request.app.state.redis = mock_redis
 
-        with patch("apps.api.routers.engine.ProtocolVM") as mock_vm_class, \
-             patch("apps.api.routers.engine.Actions") as mock_actions_class:
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class:
             
             mock_vm = MagicMock()
             mock_vm_class.return_value = mock_vm
@@ -81,7 +81,7 @@ class TestInboundSMS:
 
     @pytest.mark.asyncio
     async def test_inbound_sms_existing_session(self):
-        from apps.api.routers.engine import inbound_sms, VMState
+        from api.routers.engine import inbound_sms, VMState
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
@@ -96,8 +96,8 @@ class TestInboundSMS:
         mock_redis.get.return_value = json.dumps(existing_state.__dict__)
         mock_request.app.state.redis = mock_redis
 
-        with patch("apps.api.routers.engine.ProtocolVM") as mock_vm_class, \
-             patch("apps.api.routers.engine.Actions") as mock_actions_class:
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class:
             
             mock_vm = MagicMock()
             mock_vm_class.return_value = mock_vm
@@ -113,15 +113,15 @@ class TestInboundSMS:
 
     @pytest.mark.asyncio
     async def test_inbound_sms_q1_selection(self):
-        from apps.api.routers.engine import inbound_sms
+        from api.routers.engine import inbound_sms
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
         mock_redis.get.return_value = None
         mock_request.app.state.redis = mock_redis
 
-        with patch("apps.api.routers.engine.ProtocolVM") as mock_vm_class, \
-             patch("apps.api.routers.engine.Actions") as mock_actions_class:
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class:
             
             # Test valid selection
             response = await inbound_sms(mock_request, From="+15551234567", Body="1")  # Refill
@@ -136,15 +136,15 @@ class TestInboundSMS:
 
     @pytest.mark.asyncio
     async def test_inbound_sms_q1_invalid_selection(self):
-        from apps.api.routers.engine import inbound_sms
+        from api.routers.engine import inbound_sms
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
         mock_redis.get.return_value = None
         mock_request.app.state.redis = mock_redis
 
-        with patch("apps.api.routers.engine.ProtocolVM") as mock_vm_class, \
-             patch("apps.api.routers.engine.Actions") as mock_actions_class:
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class:
             
             # Test invalid selection
             response = await inbound_sms(mock_request, From="+15551234567", Body="invalid")
@@ -153,7 +153,7 @@ class TestInboundSMS:
 
     @pytest.mark.asyncio
     async def test_inbound_sms_q2_selection(self):
-        from apps.api.routers.engine import inbound_sms, VMState
+        from api.routers.engine import inbound_sms, VMState
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
@@ -168,9 +168,9 @@ class TestInboundSMS:
         mock_redis.get.return_value = json.dumps(existing_state.__dict__)
         mock_request.app.state.redis = mock_redis
 
-        with patch("apps.api.routers.engine.ProtocolVM") as mock_vm_class, \
-             patch("apps.api.routers.engine.Actions") as mock_actions_class, \
-             patch("apps.api.routers.engine.route_resolver.route") as mock_route:
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class, \
+             patch("api.routers.engine.route_resolver.route") as mock_route:
             
             mock_route.return_value = {
                 "protocol_id": "refill_protocol",
@@ -190,7 +190,7 @@ class TestInboundSMS:
 
     @pytest.mark.asyncio
     async def test_inbound_sms_non_bootstrap_protocol(self):
-        from apps.api.routers.engine import inbound_sms, VMState
+        from api.routers.engine import inbound_sms, VMState
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
@@ -205,8 +205,8 @@ class TestInboundSMS:
         mock_redis.get.return_value = json.dumps(existing_state.__dict__)
         mock_request.app.state.redis = mock_redis
 
-        with patch("apps.api.routers.engine.ProtocolVM") as mock_vm_class, \
-             patch("apps.api.routers.engine.Actions") as mock_actions_class:
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class:
             
             mock_vm = AsyncMock()
             mock_vm.step.return_value = existing_state
@@ -222,16 +222,16 @@ class TestInboundSMS:
 
     @pytest.mark.asyncio
     async def test_inbound_sms_error_handling(self):
-        from apps.api.routers.engine import inbound_sms
+        from api.routers.engine import inbound_sms
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
         mock_redis.get.side_effect = Exception("Redis error")
         mock_request.app.state.redis = mock_redis
 
-        with patch("apps.api.routers.engine.ProtocolVM") as mock_vm_class, \
-             patch("apps.api.routers.engine.Actions") as mock_actions_class, \
-             patch("apps.api.routers.engine.logger.warning") as mock_logger:
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class, \
+             patch("api.routers.engine.logger.warning") as mock_logger:
             
             response = await inbound_sms(mock_request, From="+15551234567", Body="1")
             
@@ -247,8 +247,8 @@ class TestRouteResolver:
 
     @pytest.mark.asyncio
     async def test_route_resolver_integration(self):
-        from apps.api.routers.engine import inbound_sms
-        from apps.api.services.router import router as route_resolver
+        from api.routers.engine import inbound_sms
+        from api.services.router import router as route_resolver
 
         mock_request = MagicMock(spec=Request)
         mock_redis = MagicMock()
@@ -256,9 +256,9 @@ class TestRouteResolver:
         mock_request.app.state.redis = mock_redis
 
         # Test the full flow: q1 -> q2 -> route resolution
-        with patch("apps.api.routers.engine.ProtocolVM") as mock_vm_class, \
-             patch("apps.api.routers.engine.Actions") as mock_actions_class, \
-             patch("apps.api.routers.engine.route_resolver.route") as mock_route:
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class, \
+             patch("api.routers.engine.route_resolver.route") as mock_route:
             
             mock_route.return_value = {
                 "protocol_id": "refill_protocol",
@@ -293,12 +293,12 @@ class TestProtocolVM:
         mock_validators.validate.return_value = True
         mock_actions = MagicMock()
         mock_actions.run = AsyncMock(return_value={"success": True})
-        from apps.api.services.engine import ProtocolVM
+        from api.services.engine import ProtocolVM
         return ProtocolVM(mock_loader, mock_validators, mock_actions), mock_loader, mock_validators, mock_actions
 
     @pytest.mark.asyncio
     async def test_step_escape_hatch(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         vm, _, _, _ = self.make_vm()
         state = VMState(protocol_id="test", node="start", fields={}, transcript=[])
@@ -310,7 +310,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_escape_hatch_operator(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         vm, _, _, _ = self.make_vm()
         state = VMState(protocol_id="test", node="start", fields={}, transcript=[])
@@ -321,7 +321,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_escape_hatch_zero(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         vm, _, _, _ = self.make_vm()
         state = VMState(protocol_id="test", node="start", fields={}, transcript=[])
@@ -331,7 +331,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_protocol_not_found(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         vm, mock_loader, _, _ = self.make_vm()
         mock_loader.load.return_value = None
@@ -343,7 +343,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_node_not_found(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         proto = {"nodes": {"other_node": {}}}
         vm, _, _, _ = self.make_vm(proto)
@@ -355,7 +355,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_field_node_valid(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         proto = {
             "nodes": {
@@ -377,7 +377,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_field_node_validation_fails(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         proto = {
             "nodes": {
@@ -399,7 +399,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_field_node_default_next(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         proto = {
             "nodes": {
@@ -418,7 +418,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_options_node_hit(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         proto = {
             "nodes": {
@@ -436,7 +436,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_options_node_miss(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         proto = {
             "nodes": {
@@ -454,7 +454,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_action_node_success(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         proto = {
             "nodes": {
@@ -476,7 +476,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_action_node_failure(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         proto = {
             "nodes": {
@@ -497,7 +497,7 @@ class TestProtocolVM:
 
     @pytest.mark.asyncio
     async def test_step_no_rule_fallback(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         proto = {"nodes": {"weird_node": {"unknown_key": "value"}}}
         vm, _, _, _ = self.make_vm(proto)
@@ -508,28 +508,28 @@ class TestProtocolVM:
         assert result.transcript[0]["reason"] == "no_rule"
 
     def test_resolve_hit(self):
-        from apps.api.services.engine import ProtocolVM
+        from api.services.engine import ProtocolVM
 
         vm, _, _, _ = self.make_vm()
         result = vm._resolve(["1:option_a", "2:option_b"], "2")
         assert result == "option_b"
 
     def test_resolve_miss(self):
-        from apps.api.services.engine import ProtocolVM
+        from api.services.engine import ProtocolVM
 
         vm, _, _, _ = self.make_vm()
         result = vm._resolve(["1:option_a"], "3")
         assert result is None
 
     def test_resolve_case_insensitive(self):
-        from apps.api.services.engine import ProtocolVM
+        from api.services.engine import ProtocolVM
 
         vm, _, _, _ = self.make_vm()
         result = vm._resolve(["YES:got_it", "NO:skip"], "yes")
         assert result == "got_it"
 
     def test_render_prompt(self):
-        from apps.api.services.engine import ProtocolVM
+        from api.services.engine import ProtocolVM
 
         vm, _, _, _ = self.make_vm()
         prompt = "Hello {{ name }}, your order {{ order_id }} is ready."
@@ -538,14 +538,14 @@ class TestProtocolVM:
         assert result == "Hello Alice, your order ORD-123 is ready."
 
     def test_render_prompt_empty(self):
-        from apps.api.services.engine import ProtocolVM
+        from api.services.engine import ProtocolVM
 
         vm, _, _, _ = self.make_vm()
         assert vm._render_prompt("", {"k": "v"}) == ""
         assert vm._render_prompt(None, {"k": "v"}) == ""
 
     def test_render_prompt_missing_field(self):
-        from apps.api.services.engine import ProtocolVM
+        from api.services.engine import ProtocolVM
 
         vm, _, _, _ = self.make_vm()
         prompt = "Hello {{ name }}, your id is {{ missing }}."
@@ -561,7 +561,7 @@ class TestProtocolVM:
                 }
             }
         }
-        from apps.api.services.engine import VMState, ProtocolVM
+        from api.services.engine import VMState, ProtocolVM
 
         mock_loader = MagicMock()
         mock_loader.load.return_value = proto
@@ -571,7 +571,7 @@ class TestProtocolVM:
         assert result == "Hello Alice!"
 
     def test_get_prompt_proto_not_found(self):
-        from apps.api.services.engine import VMState, ProtocolVM
+        from api.services.engine import VMState, ProtocolVM
 
         mock_loader = MagicMock()
         mock_loader.load.return_value = None
@@ -581,7 +581,7 @@ class TestProtocolVM:
 
     def test_get_prompt_node_not_found(self):
         proto = {"nodes": {"other": {}}}
-        from apps.api.services.engine import VMState, ProtocolVM
+        from api.services.engine import VMState, ProtocolVM
 
         mock_loader = MagicMock()
         mock_loader.load.return_value = proto
@@ -590,7 +590,7 @@ class TestProtocolVM:
         assert vm.get_prompt(state) == ""
 
     def test_vmstate_dataclass(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         s = VMState(protocol_id="p1", node="n1", fields={"k": "v"}, transcript=[], route_key="rk", prompt="pr", audio_prompt=b"ap")
         assert s.protocol_id == "p1"
@@ -601,7 +601,7 @@ class TestProtocolVM:
         assert s.audio_prompt == b"ap"
 
     def test_vmstate_defaults(self):
-        from apps.api.services.engine import VMState
+        from api.services.engine import VMState
 
         s = VMState(protocol_id="p1", node="n1", fields={}, transcript=[])
         assert s.route_key is None

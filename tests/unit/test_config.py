@@ -1,6 +1,6 @@
 import os
 import pytest
-from apps.api.services.config import Config
+from api.services.config import Config
 
 
 class TestConfig:

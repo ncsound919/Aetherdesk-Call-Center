@@ -20,15 +20,15 @@ class DatabaseTests(unittest.TestCase):
     """Tests for the CRM database layer."""
 
     def setUp(self):
-        from apps.api.services.database import init_sqlite_schema
+        from api.services.database import init_sqlite_schema
         init_sqlite_schema()
 
     def test_database_file_exists(self):
-        from apps.api.services.database import SQLITE_PATH
+        from api.services.database import SQLITE_PATH
         self.assertTrue(os.path.exists(SQLITE_PATH), f"Database file not found at {SQLITE_PATH}")
 
     def test_tables_exist(self):
-        from apps.api.services.database import db_context_sync
+        from api.services.database import db_context_sync
         with db_context_sync() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
@@ -38,7 +38,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertIn("orders", tables)
 
     def test_seed_data_present(self):
-        from apps.api.services.database import db_context_sync
+        from api.services.database import db_context_sync
         with db_context_sync() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT COUNT(*) as cnt FROM customers")
@@ -49,7 +49,7 @@ class DatabaseTests(unittest.TestCase):
             self.assertGreaterEqual(cursor.fetchone()["cnt"], 2)
 
     def test_invoice_lookup_returns_correct_data(self):
-        from apps.api.services.database import db_context_sync
+        from api.services.database import db_context_sync
         with db_context_sync() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT amount, status, due_date FROM invoices WHERE id = ?", ("INV-5001",))
@@ -59,7 +59,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(row["amount"], 150.00)
 
     def test_order_lookup_returns_correct_data(self):
-        from apps.api.services.database import db_context_sync
+        from api.services.database import db_context_sync
         with db_context_sync() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT status, expected_delivery FROM orders WHERE id = ?", ("ORD-9002",))
@@ -68,7 +68,7 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(row["status"], "Shipped")
 
     def test_nonexistent_invoice_returns_none(self):
-        from apps.api.services.database import db_context_sync
+        from api.services.database import db_context_sync
         with db_context_sync() as conn:
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM invoices WHERE id = ?", ("FAKE-9999",))
@@ -83,7 +83,7 @@ class ActionsTests(unittest.TestCase):
     """Tests that Actions.run() queries the real SQLite database."""
 
     def setUp(self):
-        from apps.api.services.actions import Actions
+        from api.services.actions import Actions
         # Pass a mock redis (queue operations don't need real redis for these tests)
         mock_redis = MagicMock()
         mock_redis.ping.return_value = False
@@ -143,7 +143,7 @@ class InMemoryQueueTests(unittest.TestCase):
     """Tests for InMemoryQueue Redis-compatible semantics."""
 
     def setUp(self):
-        from apps.api.services.queue import InMemoryQueue
+        from api.services.queue import InMemoryQueue
         self.q = InMemoryQueue()
 
     def test_lpush_and_rpop_fifo(self):
@@ -180,7 +180,7 @@ class QueueManagerTests(unittest.TestCase):
     """Tests for QueueManager with fallback behavior."""
 
     def test_enqueue_and_peek(self):
-        from apps.api.services.queue import InMemoryQueue, QueueManager
+        from api.services.queue import InMemoryQueue, QueueManager
         mock_redis = MagicMock()
         mock_redis.ping.return_value = False
         qm = QueueManager(mock_redis, use_fallback=True)
@@ -193,7 +193,7 @@ class QueueManagerTests(unittest.TestCase):
         self.assertEqual(items[0]["session_id"], "s1")
 
     def test_claim_returns_item_and_marks_agent(self):
-        from apps.api.services.queue import QueueManager
+        from api.services.queue import QueueManager
         mock_redis = MagicMock()
         mock_redis.ping.return_value = False
         qm = QueueManager(mock_redis, use_fallback=True)
@@ -205,14 +205,14 @@ class QueueManagerTests(unittest.TestCase):
         self.assertIn("claimed_ts", item)
 
     def test_claim_empty_queue_returns_none(self):
-        from apps.api.services.queue import QueueManager
+        from api.services.queue import QueueManager
         mock_redis = MagicMock()
         mock_redis.ping.return_value = False
         qm = QueueManager(mock_redis, use_fallback=True)
         self.assertIsNone(qm.claim("empty", "agent-1"))
 
     def test_peek_empty_queue(self):
-        from apps.api.services.queue import QueueManager
+        from api.services.queue import QueueManager
         mock_redis = MagicMock()
         mock_redis.ping.return_value = False
         qm = QueueManager(mock_redis, use_fallback=True)
@@ -227,18 +227,18 @@ class AgentResponseTests(unittest.TestCase):
     """Tests for AgentResponse dataclass integrity."""
 
     def test_basic_construction(self):
-        from apps.api.services.agent import AgentResponse
+        from api.services.agent import AgentResponse
         r = AgentResponse(text="hello", sources=[], needs_agent=False)
         self.assertEqual(r.text, "hello")
         self.assertIsNone(r.action_taken)
 
     def test_with_action_taken(self):
-        from apps.api.services.agent import AgentResponse
+        from api.services.agent import AgentResponse
         r = AgentResponse(text="ok", sources=[], needs_agent=False, action_taken="lookup_invoice")
         self.assertEqual(r.action_taken, "lookup_invoice")
 
     def test_escalate_action(self):
-        from apps.api.services.agent import AgentResponse
+        from api.services.agent import AgentResponse
         r = AgentResponse(text="", sources=[], needs_agent=False, action_taken="escalate")
         self.assertEqual(r.action_taken, "escalate")
         self.assertFalse(r.needs_agent)
@@ -251,7 +251,7 @@ class VoiceSessionTests(unittest.TestCase):
     """Tests for VoiceSession state management."""
 
     def test_session_initializes_with_empty_state(self):
-        from apps.api.services.call_session import VoiceSession
+        from api.services.call_session import VoiceSession
         s = VoiceSession("test-1", "call-1")
         self.assertEqual(s.transcript, [])
         self.assertEqual(s.agent_state, {})
@@ -259,13 +259,13 @@ class VoiceSessionTests(unittest.TestCase):
         self.assertEqual(s.audio_buffer, b"")
 
     def test_process_audio_rejects_tiny_chunks(self):
-        from apps.api.services.call_session import VoiceSession
+        from api.services.call_session import VoiceSession
         s = VoiceSession("test-1", "call-1")
         result = asyncio.run(s.process_audio(b"\x00" * 100))
         self.assertIsNone(result)
 
     def test_audio_buffer_caps_at_max(self):
-        from apps.api.services.call_session import VoiceSession
+        from api.services.call_session import VoiceSession
         s = VoiceSession("test-1", "call-1")
         # Fill buffer to near max, then add more
         s.audio_buffer = b"\x00" * (VoiceSession.MAX_BUFFER_SIZE - 100)
@@ -282,7 +282,7 @@ class SessionRegistryTests(unittest.TestCase):
     """Tests for store/get/remove session functions."""
 
     def test_store_and_retrieve_session(self):
-        from apps.api.services.call_session import (
+        from api.services.call_session import (
             VoiceSession,
             get_or_create_session,
         )
@@ -304,7 +304,7 @@ class SessionRegistryTests(unittest.TestCase):
         self.assertEqual(s2.agent_state["test"], True)
 
     def test_remove_nonexistent_session_no_crash(self):
-        from apps.api.services.call_session import remove_session
+        from api.services.call_session import remove_session
         app = MagicMock()
         app.state.redis = MagicMock()
         app.state.qm = MagicMock()
@@ -312,7 +312,7 @@ class SessionRegistryTests(unittest.TestCase):
         remove_session(app, "nonexistent")
 
     def test_get_or_create_session(self):
-        from apps.api.services.call_session import get_or_create_session
+        from api.services.call_session import get_or_create_session
         app = MagicMock()
         app.state.redis = MagicMock()
         app.state.qm = MagicMock()
@@ -333,7 +333,7 @@ class APIEndpointTests(unittest.TestCase):
 
         os.environ.setdefault("ENCRYPTION_KEY", "dGVzdGtleWZvcmVuY3J5cHRpb25vbjEyMzQ1Njc4OTA=")
         os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-unit-tests-only")
-        from apps.api.main import app
+        from api.main import app
         self.client = TestClient(app, raise_server_exceptions=False)
 
     def test_root_returns_ok(self):
@@ -359,7 +359,7 @@ class APIEndpointTests(unittest.TestCase):
             data = r.json()
             self.assertFalse(data["ok"])
 
-    @patch("apps.api.routers.voice.asr_service.transcribe", new_callable=AsyncMock)
+    @patch("api.routers.voice.asr_service.transcribe", new_callable=AsyncMock)
     def test_transcribe_returns_text(self, mock_asr):
         mock_asr.return_value = "hello world"
         r = self.client.post(
@@ -379,7 +379,7 @@ class APIEndpointTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("error", r.json())
 
-    @patch("apps.api.routers.voice.tts_service.synthesize", new_callable=AsyncMock)
+    @patch("api.routers.voice.tts_service.synthesize", new_callable=AsyncMock)
     def test_synthesize_returns_base64(self, mock_tts):
         import base64
         mock_tts.return_value = b"test-audio-bytes"
@@ -393,7 +393,7 @@ class APIEndpointTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn("error", r.json())
 
-    @patch("apps.api.routers.voice.classifier.classify_with_fallback", new_callable=AsyncMock)
+    @patch("api.routers.voice.classifier.classify_with_fallback", new_callable=AsyncMock)
     def test_intent_classification(self, mock_classify):
         mock_classify.return_value = MagicMock(
             intent="billing_invoice",
@@ -426,33 +426,33 @@ class IntentClassifierTests(unittest.TestCase):
     """Tests for keyword fallback and edge cases."""
 
     def test_keyword_fallback_refund(self):
-        from apps.api.services.intent_classifier import IntentClassifier
+        from api.services.intent_classifier import IntentClassifier
         c = IntentClassifier()
         result = asyncio.run(c._keyword_fallback("I need a refund"))
         self.assertEqual(result.intent, "billing_refund")
 
     def test_keyword_fallback_agent_handoff(self):
-        from apps.api.services.intent_classifier import IntentClassifier
+        from api.services.intent_classifier import IntentClassifier
         c = IntentClassifier()
         result = asyncio.run(c._keyword_fallback("let me speak to a human"))
         self.assertEqual(result.intent, "agent_handoff")
 
     def test_keyword_fallback_no_match(self):
-        from apps.api.services.intent_classifier import IntentClassifier
+        from api.services.intent_classifier import IntentClassifier
         c = IntentClassifier()
         result = asyncio.run(c._keyword_fallback("asdfghjkl random noise"))
         self.assertEqual(result.intent, "generalInquiry")
         self.assertEqual(result.confidence, 0.2)
 
     def test_classify_empty_string(self):
-        from apps.api.services.intent_classifier import IntentClassifier
+        from api.services.intent_classifier import IntentClassifier
         c = IntentClassifier()
         result = asyncio.run(c.classify(""))
         self.assertEqual(result.intent, "generalInquiry")
         self.assertEqual(result.confidence, 0.0)
 
     def test_classify_whitespace_only(self):
-        from apps.api.services.intent_classifier import IntentClassifier
+        from api.services.intent_classifier import IntentClassifier
         c = IntentClassifier()
         result = asyncio.run(c.classify("   "))
         self.assertEqual(result.intent, "generalInquiry")
@@ -466,8 +466,8 @@ class OrchestratorTests(unittest.TestCase):
     """Tests for Orchestrator routing and session state."""
 
     def _make_orchestrator(self):
-        from apps.api.services.actions import Actions
-        from apps.api.services.orchestrator import Orchestrator
+        from api.services.actions import Actions
+        from api.services.orchestrator import Orchestrator
         mock_redis = MagicMock()
         mock_redis.ping.return_value = False
         actions = Actions(mock_redis)
@@ -508,8 +508,8 @@ class OrchestratorTests(unittest.TestCase):
         result = asyncio.run(orch.route_to_agent([], "hello"))
         self.assertEqual(result, "human")
 
-    @patch("apps.api.services.database.db_context")
-    @patch("apps.api.services.orchestrator.TenantAgent")
+    @patch("api.services.database.db_context")
+    @patch("api.services.orchestrator.TenantAgent")
     def test_session_state_persists_active_agent(self, mock_tenant_agent, mock_db):
         """After routing, session_state should remember the active agent."""
         # Mock rental check to return an active rental via async context manager
@@ -528,15 +528,15 @@ class OrchestratorTests(unittest.TestCase):
 
         # Mock the billing agent's step
         with patch.object(agent_mock, "step", new_callable=AsyncMock) as mock_step:
-            from apps.api.services.agent import AgentResponse
+            from api.services.agent import AgentResponse
             mock_step.return_value = AgentResponse(text="Your invoice is paid.", sources=[], needs_agent=False)
             result = asyncio.run(orch.step(state, [], "check invoice", "TENANT-001", profile_id="billing"))
 
         self.assertEqual(result.text, "Your invoice is paid.")
         self.assertEqual(state["active_agent"], "billing")
 
-    @patch("apps.api.services.database.db_context")
-    @patch("apps.api.services.orchestrator.TenantAgent")
+    @patch("api.services.database.db_context")
+    @patch("api.services.orchestrator.TenantAgent")
     def test_escalate_clears_active_agent(self, mock_tenant_agent, mock_db):
         # Mock rental check via async context manager
         mock_conn = MagicMock()
@@ -551,7 +551,7 @@ class OrchestratorTests(unittest.TestCase):
         state = {"active_agent": "ops"}
 
         with patch.object(agent_mock, "step", new_callable=AsyncMock) as mock_step:
-            from apps.api.services.agent import AgentResponse
+            from api.services.agent import AgentResponse
             mock_step.return_value = AgentResponse(text="", sources=[], needs_agent=False, action_taken="escalate")
             result = asyncio.run(orch.step(state, [], "actually it's a billing issue", "TENANT-001", profile_id="ops"))
 
@@ -566,11 +566,11 @@ class BroadcastTests(unittest.TestCase):
     """Tests for transcript broadcast and memory bounds."""
 
     def test_broadcast_caps_transcript_length(self):
-        from apps.api.routers.realtime import (
+        from api.routers.realtime import (
             MAX_TRANSCRIPT_PER_CALL,
             broadcast_transcript,
         )
-        from apps.api.services.transcript_store import TranscriptStore
+        from api.services.transcript_store import TranscriptStore
         
         call_sid = "test-cap-call"
         store = TranscriptStore()

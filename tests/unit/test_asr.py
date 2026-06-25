@@ -5,7 +5,7 @@ import numpy as np
 
 class TestASRServiceInit:
     def test_default_initialization(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         assert svc.model_size == "base"
@@ -13,7 +13,7 @@ class TestASRServiceInit:
         assert svc._model is None
 
     def test_custom_initialization(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService(model_size="large-v3", device="cpu")
         assert svc.model_size == "large-v3"
@@ -23,7 +23,7 @@ class TestASRServiceInit:
 class TestASRServiceLoadModel:
     @pytest.mark.asyncio
     async def test_initialize_loads_model(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
 
@@ -33,7 +33,7 @@ class TestASRServiceLoadModel:
 
     @pytest.mark.asyncio
     async def test_initialize_skips_if_loaded(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         svc._model = MagicMock()
@@ -43,22 +43,22 @@ class TestASRServiceLoadModel:
             mock_load.assert_not_called()
 
     def test_load_model_success(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
 
-        with patch("apps.api.services.asr.WhisperModel") as mock_whisper:
+        with patch("api.services.asr.WhisperModel") as mock_whisper:
             svc._load_model()
             mock_whisper.assert_called_once_with("base", device="auto", compute_type="int8")
             assert svc._model is not None
 
     def test_load_model_fallback_on_error(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
         from faster_whisper import WhisperModel
 
         svc = ASRService(device="cuda")
 
-        with patch("apps.api.services.asr.WhisperModel") as mock_whisper:
+        with patch("api.services.asr.WhisperModel") as mock_whisper:
             mock_whisper.side_effect = [
                 Exception("float16 not supported"),
                 MagicMock(spec=WhisperModel)
@@ -73,7 +73,7 @@ class TestASRServiceLoadModel:
 class TestASRServiceTranscribe:
     @pytest.mark.asyncio
     async def test_transcribe_success(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         mock_model = MagicMock()
@@ -84,14 +84,14 @@ class TestASRServiceTranscribe:
 
         audio_data = np.array([100, 200, 300], dtype=np.int16).tobytes()
 
-        with patch("apps.api.middleware.metrics.ASR_LATENCY"):
+        with patch("api.middleware.metrics.ASR_LATENCY"):
             result = await svc.transcribe(audio_data, language="en")
 
         assert result == "hello world"
 
     @pytest.mark.asyncio
     async def test_transcribe_auto_initialize(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         mock_model = MagicMock()
@@ -102,7 +102,7 @@ class TestASRServiceTranscribe:
         audio_data = np.array([100, 200], dtype=np.int16).tobytes()
 
         with patch.object(svc, "initialize", new_callable=AsyncMock) as mock_init, \
-             patch("apps.api.middleware.metrics.ASR_LATENCY"):
+             patch("api.middleware.metrics.ASR_LATENCY"):
             svc._model = mock_model
             result = await svc.transcribe(audio_data)
 
@@ -110,7 +110,7 @@ class TestASRServiceTranscribe:
 
     @pytest.mark.asyncio
     async def test_transcribe_error_returns_empty_string(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         mock_model = MagicMock()
@@ -119,14 +119,14 @@ class TestASRServiceTranscribe:
 
         audio_data = np.array([100], dtype=np.int16).tobytes()
 
-        with patch("apps.api.middleware.metrics.ASR_LATENCY"):
+        with patch("api.middleware.metrics.ASR_LATENCY"):
             result = await svc.transcribe(audio_data)
 
         assert result == ""
 
     @pytest.mark.asyncio
     async def test_transcribe_tracks_latency(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         mock_model = MagicMock()
@@ -137,7 +137,7 @@ class TestASRServiceTranscribe:
 
         audio_data = np.array([100], dtype=np.int16).tobytes()
 
-        with patch("apps.api.services.asr.track_asr_latency") as mock_track:
+        with patch("api.services.asr.track_asr_latency") as mock_track:
             await svc.transcribe(audio_data)
 
         mock_track.assert_called_once()
@@ -148,7 +148,7 @@ class TestASRServiceTranscribe:
 class TestASRServiceTranscribeStreaming:
     @pytest.mark.asyncio
     async def test_transcribe_streaming_success(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         mock_model = MagicMock()
@@ -159,14 +159,14 @@ class TestASRServiceTranscribeStreaming:
 
         audio_data = np.zeros(32000, dtype=np.int16).tobytes()
 
-        with patch("apps.api.middleware.metrics.ASR_LATENCY"):
+        with patch("api.middleware.metrics.ASR_LATENCY"):
             result = await svc.transcribe_streaming(audio_data)
 
         assert result == "streaming result"
 
     @pytest.mark.asyncio
     async def test_transcribe_streaming_short_audio_returns_none(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         svc._model = MagicMock()
@@ -178,7 +178,7 @@ class TestASRServiceTranscribeStreaming:
 
     @pytest.mark.asyncio
     async def test_transcribe_streaming_auto_initialize(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         mock_model = MagicMock()
@@ -189,7 +189,7 @@ class TestASRServiceTranscribeStreaming:
         audio_data = np.zeros(32000, dtype=np.int16).tobytes()
 
         with patch.object(svc, "initialize", new_callable=AsyncMock) as mock_init, \
-             patch("apps.api.middleware.metrics.ASR_LATENCY"):
+             patch("api.middleware.metrics.ASR_LATENCY"):
             svc._model = mock_model
             result = await svc.transcribe_streaming(audio_data)
 
@@ -197,7 +197,7 @@ class TestASRServiceTranscribeStreaming:
 
     @pytest.mark.asyncio
     async def test_transcribe_streaming_error_returns_none(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         mock_model = MagicMock()
@@ -206,14 +206,14 @@ class TestASRServiceTranscribeStreaming:
 
         audio_data = np.zeros(32000, dtype=np.int16).tobytes()
 
-        with patch("apps.api.middleware.metrics.ASR_LATENCY"):
+        with patch("api.middleware.metrics.ASR_LATENCY"):
             result = await svc.transcribe_streaming(audio_data)
 
         assert result is None
 
     @pytest.mark.asyncio
     async def test_transcribe_streaming_empty_text_returns_none(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         mock_model = MagicMock()
@@ -224,14 +224,14 @@ class TestASRServiceTranscribeStreaming:
 
         audio_data = np.zeros(32000, dtype=np.int16).tobytes()
 
-        with patch("apps.api.middleware.metrics.ASR_LATENCY"):
+        with patch("api.middleware.metrics.ASR_LATENCY"):
             result = await svc.transcribe_streaming(audio_data)
 
         assert result is None
 
     @pytest.mark.asyncio
     async def test_transcribe_streaming_tracks_latency(self):
-        from apps.api.services.asr import ASRService
+        from api.services.asr import ASRService
 
         svc = ASRService()
         mock_model = MagicMock()
@@ -242,7 +242,7 @@ class TestASRServiceTranscribeStreaming:
 
         audio_data = np.zeros(32000, dtype=np.int16).tobytes()
 
-        with patch("apps.api.services.asr.track_asr_latency") as mock_track:
+        with patch("api.services.asr.track_asr_latency") as mock_track:
             await svc.transcribe_streaming(audio_data)
 
         mock_track.assert_called_once()

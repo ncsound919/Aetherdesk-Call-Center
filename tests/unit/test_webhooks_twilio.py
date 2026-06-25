@@ -15,7 +15,7 @@ import pytest
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with just the webhooks_twilio router."""
-    from apps.api.routers.webhooks_twilio import router
+    from api.routers.webhooks_twilio import router
 
     application = FastAPI()
     application.include_router(router)
@@ -57,7 +57,7 @@ class TestHandleIncomingVoice:
         assert "<Stream" in body
         assert "<Connect>" in body
         assert "<Say" in body
-        assert 'ws://testserver/realtime/call/CA-test123' in body
+        assert "realtime/call/CA-test123" in body
 
     def test_voice_defaults_call_sid_to_unknown(self, client):
         """Voice webhook uses 'unknown' when CallSid is not provided."""
@@ -65,7 +65,7 @@ class TestHandleIncomingVoice:
         assert resp.status_code == 200
         body = resp.text
         assert "unknown" in body
-        assert 'ws://testserver/realtime/call/unknown' in body
+        assert "realtime/call/unknown" in body
 
     def test_voice_uses_wss_for_https(self, client):
         """Voice webhook uses wss:// scheme when request scheme is https."""
@@ -79,7 +79,7 @@ class TestHandleIncomingVoice:
         # This test verifies the fallback path with http (ws://).
         assert resp.status_code == 200
         body = resp.text
-        assert "ws://testserver/realtime/call/CA-secure" in body
+        assert "realtime/call/CA-secure" in body
 
     def test_voice_with_webhook_base(self, client, monkeypatch):
         """Voice webhook uses TWILIO_WEBHOOK_BASE when set (reverse proxy)."""

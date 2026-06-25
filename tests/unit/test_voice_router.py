@@ -44,13 +44,13 @@ sys.modules["transformers.dependency_versions_check"] = _fake_transformers_depve
 sys.modules["transformers.utils"] = _fake_transformers_utils
 sys.modules["transformers.utils.import_utils"] = _fake_transformers_utils_import
 
-# Prevent apps.api.main from importing fully when the outbound endpoint
+# Prevent api.main from importing fully when the outbound endpoint
 # does its local import. Provide a minimal module since only fonster_client
 # is accessed.
-_fake_main = types.ModuleType("apps.api.main")
+_fake_main = types.ModuleType("api.main")
 _fake_main.redis_client = None
 _fake_main.fonster_client = None
-sys.modules["apps.api.main"] = _fake_main
+sys.modules["api.main"] = _fake_main
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -58,13 +58,13 @@ from fastapi import WebSocket
 from fastapi.websockets import WebSocketDisconnect
 import pytest
 
-from apps.api.services.auth import verify_api_key
+from api.services.auth import verify_api_key
 
 
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with just the voice router."""
-    from apps.api.routers.voice import router
+    from api.routers.voice import router
 
     application = FastAPI()
     application.include_router(router)
@@ -90,7 +90,7 @@ class TestIncomingCall:
 
     def test_incoming_json_with_session_ref(self, client):
         """Sending JSON with sessionRef returns connect verb response."""
-        with patch("apps.api.routers.voice.create_call_session", new_callable=AsyncMock) as mock_create:
+        with patch("api.routers.voice.create_call_session", new_callable=AsyncMock) as mock_create:
             mock_create.return_value = {"id": "session-001"}
 
             resp = client.post(
@@ -114,7 +114,7 @@ class TestIncomingCall:
 
     def test_incoming_json_minimal_fields(self, client):
         """Sending JSON with minimal fields uses defaults for missing values."""
-        with patch("apps.api.routers.voice.create_call_session", new_callable=AsyncMock):
+        with patch("api.routers.voice.create_call_session", new_callable=AsyncMock):
             resp = client.post(
                 "/voice/incoming",
                 json={"sessionRef": "sess-minimal"},
@@ -129,7 +129,7 @@ class TestIncomingCall:
 
     def test_incoming_form_data(self, client):
         """Sending form data works and returns connect verb."""
-        with patch("apps.api.routers.voice.create_call_session", new_callable=AsyncMock):
+        with patch("api.routers.voice.create_call_session", new_callable=AsyncMock):
             resp = client.post(
                 "/voice/incoming",
                 data={
@@ -146,7 +146,7 @@ class TestIncomingCall:
 
     def test_incoming_empty_body_uses_defaults(self, client):
         """Sending empty/malformed body uses defaults (uuid session, no tenant)."""
-        with patch("apps.api.routers.voice.create_call_session", new_callable=AsyncMock):
+        with patch("api.routers.voice.create_call_session", new_callable=AsyncMock):
             resp = client.post(
                 "/voice/incoming",
                 json={},
@@ -165,7 +165,7 @@ class TestClassifyIntent:
     def test_classify_with_text(self, client):
         """Sending text returns intent classification result."""
         with patch(
-            "apps.api.routers.voice.classifier.classify_with_fallback",
+            "api.routers.voice.classifier.classify_with_fallback",
             new_callable=AsyncMock,
         ) as mock_classify:
             mock_classify.return_value = MagicMock(
@@ -203,7 +203,7 @@ class TestTranscribeAudio:
     def test_transcribe_with_audio(self, client):
         """Sending audio bytes returns transcription."""
         with patch(
-            "apps.api.routers.voice.asr_service.transcribe",
+            "api.routers.voice.asr_service.transcribe",
             new_callable=AsyncMock,
         ) as mock_transcribe:
             mock_transcribe.return_value = "hello world"
@@ -243,7 +243,7 @@ class TestSynthesizeSpeech:
     def test_synthesize_with_text(self, client):
         """Sending text returns synthesized audio."""
         with patch(
-            "apps.api.routers.voice.tts_service.synthesize",
+            "api.routers.voice.tts_service.synthesize",
             new_callable=AsyncMock,
         ) as mock_synth:
             mock_synth.return_value = b"fake-audio-data"
@@ -277,7 +277,7 @@ class TestOutboundCall:
             return_value={"ref": "call-ref-123"}
         )
 
-        with patch("apps.api.main.fonster_client", mock_fonster):
+        with patch("api.main.fonster_client", mock_fonster):
             resp = client.post(
                 "/voice/outbound",
                 json={"to_phone": "+15551234567"},
@@ -316,7 +316,7 @@ class TestOutboundCall:
             side_effect=RuntimeError("API failure"),
         )
 
-        with patch("apps.api.main.fonster_client", mock_fonster):
+        with patch("api.main.fonster_client", mock_fonster):
             resp = client.post(
                 "/voice/outbound",
                 json={"to_phone": "+15551234567"},
@@ -330,7 +330,7 @@ class TestIncomingCallEdgeCases:
 
     def test_incoming_create_call_session_fails(self, client):
         """When create_call_session raises, handler still returns connect response."""
-        with patch("apps.api.routers.voice.create_call_session", new_callable=AsyncMock) as mock_create:
+        with patch("api.routers.voice.create_call_session", new_callable=AsyncMock) as mock_create:
             mock_create.side_effect = RuntimeError("DB error")
 
             resp = client.post(
@@ -351,14 +351,14 @@ class TestHandleMediaStream:
     """Tests for the /voice/media-stream WebSocket endpoint.
 
     The handle_media_stream function uses lazy imports inside its body:
-        from apps.api.services.auth import verify_websocket_token
-        from apps.api.routers.realtime import manager
+        from api.services.auth import verify_websocket_token
+        from api.routers.realtime import manager
     Therefore patching must target the source modules.
     """
 
     @pytest.mark.asyncio
     async def test_missing_token(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = None
@@ -369,12 +369,12 @@ class TestHandleMediaStream:
 
     @pytest.mark.asyncio
     async def test_invalid_token(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "bad-token"
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify:
             mock_verify.return_value = None
             await handle_media_stream(mock_ws)
 
@@ -382,7 +382,7 @@ class TestHandleMediaStream:
 
     @pytest.mark.asyncio
     async def test_connected_event(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
@@ -395,7 +395,7 @@ class TestHandleMediaStream:
 
         mock_ws.iter_text = _iter_text
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify:
             mock_verify.return_value = {"agent_id": "agent-1"}
             await handle_media_stream(mock_ws)
 
@@ -403,7 +403,7 @@ class TestHandleMediaStream:
 
     @pytest.mark.asyncio
     async def test_start_event(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
@@ -426,12 +426,12 @@ class TestHandleMediaStream:
 
         speak_stream_result = _empty_gen()
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.register_voice_ws") as mock_register, \
-             patch("apps.api.routers.voice.get_or_create_session") as mock_get_session, \
-             patch("apps.api.routers.voice.store_session") as mock_store, \
-             patch("apps.api.routers.voice.Actions") as mock_actions_cls, \
-             patch("apps.api.routers.voice.Orchestrator") as mock_orch_cls:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.register_voice_ws") as mock_register, \
+             patch("api.routers.voice.get_or_create_session") as mock_get_session, \
+             patch("api.routers.voice.store_session") as mock_store, \
+             patch("api.routers.voice.Actions") as mock_actions_cls, \
+             patch("api.routers.voice.Orchestrator") as mock_orch_cls:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_session = AsyncMock()
@@ -450,7 +450,7 @@ class TestHandleMediaStream:
 
     @pytest.mark.asyncio
     async def test_media_event(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
         import base64
 
         mock_ws = AsyncMock(spec=WebSocket)
@@ -476,14 +476,14 @@ class TestHandleMediaStream:
 
         speak_stream_result = _empty_gen()
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.register_voice_ws") as mock_register, \
-             patch("apps.api.routers.realtime.manager.unregister_voice_ws") as mock_unregister, \
-             patch("apps.api.routers.voice.get_or_create_session") as mock_get_session, \
-             patch("apps.api.routers.voice.store_session") as mock_store, \
-             patch("apps.api.routers.realtime.cleanup_call_transcripts") as mock_cleanup, \
-             patch("apps.api.routers.voice.Actions") as mock_actions_cls, \
-             patch("apps.api.routers.voice.Orchestrator") as mock_orch_cls:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.register_voice_ws") as mock_register, \
+             patch("api.routers.realtime.manager.unregister_voice_ws") as mock_unregister, \
+             patch("api.routers.voice.get_or_create_session") as mock_get_session, \
+             patch("api.routers.voice.store_session") as mock_store, \
+             patch("api.routers.realtime.cleanup_call_transcripts") as mock_cleanup, \
+             patch("api.routers.voice.Actions") as mock_actions_cls, \
+             patch("api.routers.voice.Orchestrator") as mock_orch_cls:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_session = AsyncMock()
@@ -513,7 +513,7 @@ class TestHandleMediaStream:
 
     @pytest.mark.asyncio
     async def test_media_event_needs_agent(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
         import base64
 
         mock_ws = AsyncMock(spec=WebSocket)
@@ -538,14 +538,14 @@ class TestHandleMediaStream:
 
         speak_stream_result = _empty_gen()
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.register_voice_ws") as mock_register, \
-             patch("apps.api.routers.realtime.manager.unregister_voice_ws") as mock_unregister, \
-             patch("apps.api.routers.voice.get_or_create_session") as mock_get_session, \
-             patch("apps.api.routers.voice.store_session") as mock_store, \
-             patch("apps.api.routers.realtime.cleanup_call_transcripts") as mock_cleanup, \
-             patch("apps.api.routers.voice.Actions") as mock_actions_cls, \
-             patch("apps.api.routers.voice.Orchestrator") as mock_orch_cls:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.register_voice_ws") as mock_register, \
+             patch("api.routers.realtime.manager.unregister_voice_ws") as mock_unregister, \
+             patch("api.routers.voice.get_or_create_session") as mock_get_session, \
+             patch("api.routers.voice.store_session") as mock_store, \
+             patch("api.routers.realtime.cleanup_call_transcripts") as mock_cleanup, \
+             patch("api.routers.voice.Actions") as mock_actions_cls, \
+             patch("api.routers.voice.Orchestrator") as mock_orch_cls:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_session = AsyncMock()
@@ -576,7 +576,7 @@ class TestHandleMediaStream:
 
     @pytest.mark.asyncio
     async def test_media_event_no_session_id(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
         import base64
 
         mock_ws = AsyncMock(spec=WebSocket)
@@ -593,7 +593,7 @@ class TestHandleMediaStream:
 
         mock_ws.iter_text = _iter_text
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify:
             mock_verify.return_value = {"agent_id": "agent-1"}
             await handle_media_stream(mock_ws)
 
@@ -601,7 +601,7 @@ class TestHandleMediaStream:
 
     @pytest.mark.asyncio
     async def test_stop_event(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
@@ -623,15 +623,15 @@ class TestHandleMediaStream:
 
         speak_stream_result = _empty_gen()
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.register_voice_ws") as mock_register, \
-             patch("apps.api.routers.realtime.manager.unregister_voice_ws") as mock_unregister, \
-             patch("apps.api.routers.voice.get_or_create_session") as mock_get_session, \
-             patch("apps.api.routers.voice.store_session") as mock_store, \
-             patch("apps.api.routers.voice.remove_session") as mock_remove, \
-             patch("apps.api.routers.realtime.cleanup_call_transcripts") as mock_cleanup, \
-             patch("apps.api.routers.voice.Actions") as mock_actions_cls, \
-             patch("apps.api.routers.voice.Orchestrator") as mock_orch_cls:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.register_voice_ws") as mock_register, \
+             patch("api.routers.realtime.manager.unregister_voice_ws") as mock_unregister, \
+             patch("api.routers.voice.get_or_create_session") as mock_get_session, \
+             patch("api.routers.voice.store_session") as mock_store, \
+             patch("api.routers.voice.remove_session") as mock_remove, \
+             patch("api.routers.realtime.cleanup_call_transcripts") as mock_cleanup, \
+             patch("api.routers.voice.Actions") as mock_actions_cls, \
+             patch("api.routers.voice.Orchestrator") as mock_orch_cls:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_session = AsyncMock()
@@ -650,7 +650,7 @@ class TestHandleMediaStream:
 
     @pytest.mark.asyncio
     async def test_websocket_disconnect(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
@@ -661,7 +661,7 @@ class TestHandleMediaStream:
 
         mock_ws.iter_text = _iter_text
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify:
             mock_verify.return_value = {"agent_id": "agent-1"}
             await handle_media_stream(mock_ws)
 
@@ -669,7 +669,7 @@ class TestHandleMediaStream:
 
     @pytest.mark.asyncio
     async def test_websocket_disconnect_after_start(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
@@ -686,15 +686,15 @@ class TestHandleMediaStream:
 
         speak_stream_result = _empty_gen()
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.register_voice_ws") as mock_register, \
-             patch("apps.api.routers.realtime.manager.unregister_voice_ws") as mock_unregister, \
-             patch("apps.api.routers.voice.get_or_create_session") as mock_get_session, \
-             patch("apps.api.routers.voice.store_session") as mock_store, \
-             patch("apps.api.routers.voice.remove_session") as mock_remove, \
-             patch("apps.api.routers.realtime.cleanup_call_transcripts") as mock_cleanup, \
-             patch("apps.api.routers.voice.Actions") as mock_actions_cls, \
-             patch("apps.api.routers.voice.Orchestrator") as mock_orch_cls:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.register_voice_ws") as mock_register, \
+             patch("api.routers.realtime.manager.unregister_voice_ws") as mock_unregister, \
+             patch("api.routers.voice.get_or_create_session") as mock_get_session, \
+             patch("api.routers.voice.store_session") as mock_store, \
+             patch("api.routers.voice.remove_session") as mock_remove, \
+             patch("api.routers.realtime.cleanup_call_transcripts") as mock_cleanup, \
+             patch("api.routers.voice.Actions") as mock_actions_cls, \
+             patch("api.routers.voice.Orchestrator") as mock_orch_cls:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_session = AsyncMock()
@@ -714,7 +714,7 @@ class TestHandleMediaStream:
 
     @pytest.mark.asyncio
     async def test_generic_exception(self):
-        from apps.api.routers.voice import handle_media_stream
+        from api.routers.voice import handle_media_stream
 
         mock_ws = AsyncMock(spec=WebSocket)
         mock_ws.query_params.get.return_value = "valid-token"
@@ -731,15 +731,15 @@ class TestHandleMediaStream:
 
         speak_stream_result = _empty_gen()
 
-        with patch("apps.api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
-             patch("apps.api.routers.realtime.manager.register_voice_ws") as mock_register, \
-             patch("apps.api.routers.realtime.manager.unregister_voice_ws") as mock_unregister, \
-             patch("apps.api.routers.voice.get_or_create_session") as mock_get_session, \
-             patch("apps.api.routers.voice.store_session") as mock_store, \
-             patch("apps.api.routers.voice.remove_session") as mock_remove, \
-             patch("apps.api.routers.realtime.cleanup_call_transcripts") as mock_cleanup, \
-             patch("apps.api.routers.voice.Actions") as mock_actions_cls, \
-             patch("apps.api.routers.voice.Orchestrator") as mock_orch_cls:
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.register_voice_ws") as mock_register, \
+             patch("api.routers.realtime.manager.unregister_voice_ws") as mock_unregister, \
+             patch("api.routers.voice.get_or_create_session") as mock_get_session, \
+             patch("api.routers.voice.store_session") as mock_store, \
+             patch("api.routers.voice.remove_session") as mock_remove, \
+             patch("api.routers.realtime.cleanup_call_transcripts") as mock_cleanup, \
+             patch("api.routers.voice.Actions") as mock_actions_cls, \
+             patch("api.routers.voice.Orchestrator") as mock_orch_cls:
 
             mock_verify.return_value = {"agent_id": "agent-1"}
             mock_session = AsyncMock()
