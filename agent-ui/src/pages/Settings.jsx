@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '../context/AuthContext'
 import { settingsApi } from '../services/api'
+import api from '../services/api'
 import {
   Building2, Globe, Clock, PhoneCall, Shield, Lock, CreditCard,
   Plug, Key, Bell, Save, Loader2, CheckCircle2, XCircle, Headphones,
@@ -8,11 +10,11 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 
-const BUSINESS_TYPES = [
-  { id: 'sales', label: 'Sales Center', icon: ShoppingCart, desc: 'Lead generation, outbound campaigns, conversion optimization' },
-  { id: 'support', label: 'Support Center', icon: Headphones, desc: 'Customer service, issue resolution, CSAT optimization' },
-  { id: 'billing', label: 'Billing Center', icon: DollarSign, desc: 'Payment processing, dispute resolution, account management' },
-  { id: 'technical', label: 'Technical Support', icon: Wrench, desc: 'Troubleshooting, escalation management, fix rate optimization' },
+const BUSINESS_TYPES = (t) => [
+  { id: 'sales', label: t('settings.salesCenter'), icon: ShoppingCart, desc: t('settings.salesCenterDesc') },
+  { id: 'support', label: t('settings.supportCenter'), icon: Headphones, desc: t('settings.supportCenterDesc') },
+  { id: 'billing', label: t('settings.billingCenter'), icon: DollarSign, desc: t('settings.billingCenterDesc') },
+  { id: 'technical', label: t('settings.technicalSupport'), icon: Wrench, desc: t('settings.technicalSupportDesc') },
 ]
 
 const LANGUAGES = [
@@ -30,9 +32,14 @@ const TIMEZONES = [
 ]
 
 export default function Settings() {
+  const { t } = useTranslation()
   const { tenant, user, logout } = useAuth()
   const [activeTab, setActiveTab] = useState('general')
   const [saving, setSaving] = useState(false)
+  const [mfaStatus, setMfaStatus] = useState({ enrolled: false, enabled: false })
+  const [mfaSetup, setMfaSetup] = useState(null) // {secret, otpauth_url, backup_codes}
+  const [showMFAModal, setShowMFAModal] = useState(false)
+  const [mfaCode, setMfaCode] = useState('')
   const [formData, setFormData] = useState({
     companyName: 'AetherDesk',
     businessType: 'sales',
@@ -62,6 +69,12 @@ export default function Settings() {
     }
   }, [tenant])
 
+  useEffect(() => {
+    if (activeTab === 'security' && tenant?.id) {
+      api.get('/auth/mfa/status').then(res => setMfaStatus(res.data)).catch(() => {})
+    }
+  }, [activeTab, tenant])
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!tenant?.id) return
@@ -83,26 +96,51 @@ export default function Settings() {
           call_recording: formData.callRecording,
         }
       })
-      toast.success('Settings saved successfully')
+      toast.success(t('settings.savedSuccess'))
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to save settings')
+      toast.error(err.response?.data?.detail || t('common.error'))
     } finally { setSaving(false) }
   }
 
+  async function handleMFASetup() {
+    try {
+      const res = await api.post('/auth/mfa/setup')
+      setMfaSetup(res.data)
+      setShowMFAModal(true)
+    } catch (err) {       toast.error(t('common.error')) }
+  }
+
+  async function handleMFAVerify() {
+    try {
+      await api.post('/auth/mfa/verify', { code: mfaCode })
+      toast.success(t('settings.mfaEnabled'))
+      setShowMFAModal(false)
+      setMfaStatus({ enrolled: true, enabled: true })
+    } catch (err) {       toast.error(t('settings.invalidCode')) }
+  }
+
+  async function handleMFADisable() {
+    try {
+      await api.post('/auth/mfa/disable')
+      toast.success(t('settings.mfaDisabled'))
+      setMfaStatus({ enrolled: false, enabled: false })
+    } catch (err) { toast.error('Failed to disable MFA') }
+  }
+
   const tabs = [
-    { id: 'general', label: 'General', icon: Sliders },
-    { id: 'compliance', label: 'Compliance', icon: Shield },
-    { id: 'billing', label: 'Billing', icon: CreditCard },
-    { id: 'integrations', label: 'Integrations', icon: Plug },
-    { id: 'security', label: 'Security', icon: Lock },
+    { id: 'general', label: t('settings.general'), icon: Sliders },
+    { id: 'compliance', label: t('settings.compliance'), icon: Shield },
+    { id: 'billing', label: t('settings.billing'), icon: CreditCard },
+    { id: 'integrations', label: t('settings.integrations'), icon: Plug },
+    { id: 'security', label: t('settings.security'), icon: Lock },
   ]
 
   return (
     <div className="p-6 max-w-5xl mx-auto animate-slide-up">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-ink tracking-tight">Settings</h1>
-          <p className="text-sm text-ink-muted mt-0.5">Manage your platform configuration and business profile</p>
+          <h1 className="text-2xl font-semibold text-ink tracking-tight">{t('settings.title')}</h1>
+          <p className="text-sm text-ink-muted mt-0.5">{t('settings.subtitle')}</p>
         </div>
       </div>
 
@@ -113,7 +151,7 @@ export default function Settings() {
             {tabs.map((tab) => {
               const Icon = tab.icon
               return (
-                <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                <button key={tab.id} onClick={() => setActiveTab(tab.id)} role="tab" aria-selected={activeTab === tab.id} aria-controls={`tabpanel-${tab.id}`}
                   className={`flex items-center gap-2 py-3.5 px-4 border-b-2 font-medium text-sm whitespace-nowrap transition-colors ${
                     activeTab === tab.id
                       ? 'border-accent text-accent'
@@ -130,28 +168,28 @@ export default function Settings() {
         <div className="p-6">
           {/* General Tab */}
           {activeTab === 'general' && (
-            <form onSubmit={handleSubmit} className="space-y-8">
+            <form onSubmit={handleSubmit} className="space-y-8" role="tabpanel" id="tabpanel-general" aria-labelledby="tab-general">
               {/* Business Profile */}
               <section>
                 <div className="flex items-center gap-2 mb-4">
                   <Building2 className="h-5 w-5 text-accent" />
-                  <h2 className="text-base font-semibold text-ink">Business Profile</h2>
+                  <h2 className="text-base font-semibold text-ink">{t('settings.businessProfile')}</h2>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-ink mb-1.5">Company Name</label>
-                    <input type="text" value={formData.companyName}
+                    <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="company-name">{t('settings.companyName')}</label>
+                    <input id="company-name" type="text" value={formData.companyName}
                       onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                      className="input-field" />
+                      className="input-field" aria-label={t('settings.companyName')} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-ink mb-1.5">Business Type</label>
-                    <select value={formData.businessType}
+                    <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="business-type">{t('settings.businessType')}</label>
+                    <select id="business-type" value={formData.businessType}
                       onChange={(e) => setFormData({ ...formData, businessType: e.target.value })}
-                      className="input-field">
-                      {BUSINESS_TYPES.map(bt => <option key={bt.id} value={bt.id}>{bt.label}</option>)}
+                      className="input-field" aria-label={t('settings.businessType')}>
+                      {BUSINESS_TYPES(t).map(bt => <option key={bt.id} value={bt.id}>{bt.label}</option>)}
                     </select>
-                    <p className="text-xs text-ink-muted mt-1">{BUSINESS_TYPES.find(b => b.id === formData.businessType)?.desc}</p>
+                    <p className="text-xs text-ink-muted mt-1">{BUSINESS_TYPES(t).find(b => b.id === formData.businessType)?.desc}</p>
                   </div>
                 </div>
               </section>
@@ -160,22 +198,22 @@ export default function Settings() {
               <section>
                 <div className="flex items-center gap-2 mb-4">
                   <Globe className="h-5 w-5 text-accent" />
-                  <h2 className="text-base font-semibold text-ink">Region & Language</h2>
+                  <h2 className="text-base font-semibold text-ink">{t('settings.regionLanguage')}</h2>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-ink mb-1.5">Timezone</label>
-                    <select value={formData.timezone}
+                    <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="timezone">{t('settings.timezone')}</label>
+                    <select id="timezone" value={formData.timezone}
                       onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
-                      className="input-field">
+                      className="input-field" aria-label={t('settings.timezone')}>
                       {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-ink mb-1.5">Language</label>
-                    <select value={formData.language}
+                    <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="language-setting">{t('settings.language')}</label>
+                    <select id="language-setting" value={formData.language}
                       onChange={(e) => setFormData({ ...formData, language: e.target.value })}
-                      className="input-field">
+                      className="input-field" aria-label={t('settings.language')}>
                       {LANGUAGES.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
                     </select>
                   </div>
@@ -186,44 +224,44 @@ export default function Settings() {
               <section>
                 <div className="flex items-center gap-2 mb-4">
                   <PhoneCall className="h-5 w-5 text-accent" />
-                  <h2 className="text-base font-semibold text-ink">Call Handling</h2>
+                  <h2 className="text-base font-semibold text-ink">{t('settings.callHandling')}</h2>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-sm font-medium text-ink mb-1.5">Max Concurrent Calls</label>
-                    <input type="number" value={formData.maxConcurrentCalls}
+                    <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="max-calls">{t('settings.maxConcurrentCalls')}</label>
+                    <input id="max-calls" type="number" value={formData.maxConcurrentCalls}
                       onChange={(e) => setFormData({ ...formData, maxConcurrentCalls: e.target.value })}
-                      className="input-field" min="1" max="100" />
+                      className="input-field" min="1" max="100" aria-label={t('settings.maxConcurrentCalls')} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-ink mb-1.5">Script Requirement</label>
-                    <select value={formData.scriptRequirement}
+                    <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="script-req">{t('settings.scriptRequirement')}</label>
+                    <select id="script-req" value={formData.scriptRequirement}
                       onChange={(e) => setFormData({ ...formData, scriptRequirement: e.target.value })}
-                      className="input-field">
-                      <option value="required">Required — agents must use scripts</option>
-                      <option value="encouraged">Encouraged — suggested but optional</option>
-                      <option value="optional">Optional — agents choose</option>
+                      className="input-field" aria-label={t('settings.scriptRequirement')}>
+                      <option value="required">{t('settings.scriptRequired')}</option>
+                      <option value="encouraged">{t('settings.scriptEncouraged')}</option>
+                      <option value="optional">{t('settings.scriptOptional')}</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-ink mb-1.5">Holiday Routing</label>
-                    <select value={formData.holidayRouting}
+                    <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="holiday-routing">{t('settings.holidayRouting')}</label>
+                    <select id="holiday-routing" value={formData.holidayRouting}
                       onChange={(e) => setFormData({ ...formData, holidayRouting: e.target.value })}
-                      className="input-field">
-                      <option value="voicemail">Send to voicemail</option>
-                      <option value="message">Play holiday message then disconnect</option>
-                      <option value="alternate">Route to alternate number</option>
+                      className="input-field" aria-label={t('settings.holidayRouting')}>
+                      <option value="voicemail">{t('settings.holidayVoicemail')}</option>
+                      <option value="message">{t('settings.holidayMessage')}</option>
+                      <option value="alternate">{t('settings.holidayAlternate')}</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-ink mb-1.5">Call Recording Retention</label>
-                    <select value={formData.recordingRetention}
+                    <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="recording-retention">{t('settings.callRecordingRetention')}</label>
+                    <select id="recording-retention" value={formData.recordingRetention}
                       onChange={(e) => setFormData({ ...formData, recordingRetention: parseInt(e.target.value) })}
-                      className="input-field">
-                      <option value={30}>30 days</option>
-                      <option value={90}>90 days</option>
-                      <option value={180}>180 days</option>
-                      <option value={365}>365 days (recommended)</option>
+                      className="input-field" aria-label={t('settings.callRecordingRetention')}>
+                      <option value={30}>{t('settings.days30')}</option>
+                      <option value={90}>{t('settings.days90')}</option>
+                      <option value={180}>{t('settings.days180')}</option>
+                      <option value={365}>{t('settings.days365')}</option>
                     </select>
                   </div>
                 </div>
@@ -233,13 +271,13 @@ export default function Settings() {
               <section>
                 <div className="flex items-center gap-2 mb-4">
                   <Sliders className="h-5 w-5 text-accent" />
-                  <h2 className="text-base font-semibold text-ink">Features</h2>
+                  <h2 className="text-base font-semibold text-ink">{t('settings.features')}</h2>
                 </div>
                 <div className="space-y-3">
                   {[
-                    { key: 'autoAttendant', label: 'Auto Attendant', desc: 'Automated greeting and menu system for incoming calls' },
-                    { key: 'qualityMonitoring', label: 'Quality Monitoring', desc: 'Record and review calls for quality assurance and training' },
-                    { key: 'callRecording', label: 'Call Recording', desc: 'Record all calls for compliance and dispute resolution' },
+                    { key: 'autoAttendant', label: t('settings.autoAttendant'), desc: t('settings.autoAttendantDesc') },
+                    { key: 'qualityMonitoring', label: t('settings.qualityMonitoring'), desc: t('settings.qualityMonitoringDesc') },
+                    { key: 'callRecording', label: t('settings.callRecording'), desc: t('settings.callRecordingDesc') },
                   ].map((f) => (
                     <label key={f.key} className="flex items-center justify-between p-3 rounded-lg border border-hairline hover:bg-surface-hover cursor-pointer transition-colors">
                       <div>
@@ -247,7 +285,9 @@ export default function Settings() {
                         <p className="text-xs text-ink-muted">{f.desc}</p>
                       </div>
                       <div className={`relative w-10 h-6 rounded-full transition-colors ${formData[f.key] ? 'bg-accent' : 'bg-hairline'}`}
-                        onClick={() => setFormData({ ...formData, [f.key]: !formData[f.key] })}>
+                        onClick={() => setFormData({ ...formData, [f.key]: !formData[f.key] })}
+                        role="switch" aria-checked={formData[f.key]} tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFormData({ ...formData, [f.key]: !formData[f.key] }) } }}>
                         <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${formData[f.key] ? 'translate-x-4' : ''}`} />
                       </div>
                     </label>
@@ -257,9 +297,9 @@ export default function Settings() {
 
               {/* Save */}
               <div className="flex justify-end pt-4 border-t border-hairline">
-                <button type="submit" disabled={saving} className="btn-primary">
+                <button type="submit" disabled={saving} className="btn-primary" aria-label={saving ? t('settings.saving') : t('settings.saveChanges')}>
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  {saving ? 'Saving...' : 'Save Changes'}
+                  {saving ? t('settings.saving') : t('settings.saveChanges')}
                 </button>
               </div>
             </form>
@@ -267,19 +307,19 @@ export default function Settings() {
 
           {/* Compliance Tab */}
           {activeTab === 'compliance' && (
-            <div className="space-y-6">
+            <div className="space-y-6" role="tabpanel" id="tabpanel-compliance" aria-labelledby="tab-compliance">
               <div className="flex items-center gap-2 mb-4">
                 <Shield className="h-5 w-5 text-call-green" />
-                <h2 className="text-base font-semibold text-ink">Compliance Status</h2>
+                <h2 className="text-base font-semibold text-ink">{t('settings.complianceStatus')}</h2>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  { label: 'GDPR Compliant', status: true, desc: 'Data protection and privacy for EU customers' },
-                  { label: 'HIPAA Compliant', status: true, desc: 'Healthcare data protection (US) — enabled' },
-                  { label: 'PCI Compliant', status: true, desc: 'Payment card industry data security' },
-                  { label: 'Data Encryption at Rest', status: true, desc: 'AES-256-GCM encryption for stored call data' },
-                  { label: 'Data Encryption in Transit', status: true, desc: 'TLS 1.3 for all API and media traffic' },
-                  { label: 'Call Recording', status: formData.callRecording, desc: 'Call recording — configurable in General settings' },
+                  { label: t('settings.gdpr'), status: true, desc: t('settings.gdprDesc') },
+                  { label: t('settings.hipaa'), status: true, desc: t('settings.hipaaDesc') },
+                  { label: t('settings.pci'), status: true, desc: t('settings.pciDesc') },
+                  { label: t('settings.encryptionAtRest'), status: true, desc: t('settings.encryptionAtRestDesc') },
+                  { label: t('settings.encryptionInTransit'), status: true, desc: t('settings.encryptionInTransitDesc') },
+                  { label: t('settings.callRecording'), status: formData.callRecording, desc: t('settings.callRecordingDesc') },
                 ].map((item, i) => (
                   <div key={i} className="flex items-start gap-3 p-4 rounded-xl border border-hairline">
                     {item.status ? <CheckCircle2 className="h-5 w-5 text-call-green shrink-0 mt-0.5" /> : <XCircle className="h-5 w-5 text-call-red shrink-0 mt-0.5" />}
@@ -295,18 +335,18 @@ export default function Settings() {
 
           {/* Billing Tab */}
           {activeTab === 'billing' && (
-            <div className="text-center py-12">
+            <div className="text-center py-12" role="tabpanel" id="tabpanel-billing" aria-labelledby="tab-billing">
               <CreditCard className="h-10 w-10 mx-auto text-ink-subtle mb-3" />
-              <p className="text-sm text-ink-muted">Billing information managed through your subscription portal.</p>
+              <p className="text-sm text-ink-muted">{t('settings.billingInfo')}</p>
             </div>
           )}
 
           {/* Integrations Tab */}
           {activeTab === 'integrations' && (
-            <div className="space-y-4">
+            <div className="space-y-4" role="tabpanel" id="tabpanel-integrations" aria-labelledby="tab-integrations">
               <div className="flex items-center gap-2 mb-4">
                 <Plug className="h-5 w-5 text-accent" />
-                <h2 className="text-base font-semibold text-ink">Connected Services</h2>
+                <h2 className="text-base font-semibold text-ink">{t('settings.connectedServices')}</h2>
               </div>
               {[
                 { name: 'Twilio Voice', status: 'connected', desc: 'Primary telephony provider for outbound calls' },
@@ -335,31 +375,92 @@ export default function Settings() {
 
           {/* Security Tab */}
           {activeTab === 'security' && (
-            <div className="space-y-6">
+            <div className="space-y-6" role="tabpanel" id="tabpanel-security" aria-labelledby="tab-security">
               <div className="flex items-center gap-2 mb-4">
                 <Lock className="h-5 w-5 text-accent" />
-                <h2 className="text-base font-semibold text-ink">Security Settings</h2>
+                <h2 className="text-base font-semibold text-ink">{t('settings.securitySettings')}</h2>
               </div>
               <div className="bg-call-amber-soft border border-call-amber/20 rounded-xl p-4">
-                <p className="text-sm text-call-amber">Password management and session controls are managed through your account profile.</p>
+                <p className="text-sm text-call-amber">{t('settings.passwordManagement')}</p>
               </div>
+
+              {/* MFA Section */}
               <div className="flex items-center justify-between p-4 rounded-xl border border-hairline">
                 <div>
-                  <p className="text-sm font-medium text-ink">Active Sessions</p>
-                  <p className="text-xs text-ink-muted mt-0.5">You have 1 active session</p>
+                  <p className="text-sm font-medium text-ink">{t('settings.mfa')}</p>
+                  <p className="text-xs text-ink-muted mt-0.5">{t('settings.mfaDesc')}</p>
+                </div>
+                {mfaStatus.enrolled ? (
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${mfaStatus.enabled ? 'bg-call-green-soft text-call-green' : 'bg-call-amber-soft text-call-amber'}`}>
+                      {mfaStatus.enabled ? t('settings.enabled') : t('settings.setupPending')}
+                    </span>
+                    {mfaStatus.enabled ? (
+                      <button onClick={handleMFADisable} className="btn-secondary text-xs text-call-red hover:text-call-red">{t('settings.disable')}</button>
+                    ) : (
+                      <button onClick={handleMFASetup} className="btn-secondary text-xs">{t('settings.completeSetup')}</button>
+                    )}
+                  </div>
+                ) : (
+                  <button onClick={handleMFASetup} className="btn-secondary text-xs">{t('settings.enableMFA')}</button>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between p-4 rounded-xl border border-hairline">
+                <div>
+                  <p className="text-sm font-medium text-ink">{t('settings.activeSessions')}</p>
+                  <p className="text-xs text-ink-muted mt-0.5">{t('settings.activeSessionDesc')}</p>
                 </div>
               </div>
               <div className="flex items-center justify-between p-4 rounded-xl border border-hairline">
                 <div>
-                  <p className="text-sm font-medium text-ink">API Keys</p>
-                  <p className="text-xs text-ink-muted mt-0.5">Manage API keys for programmatic access</p>
+                  <p className="text-sm font-medium text-ink">{t('settings.apiKeys')}</p>
+                  <p className="text-xs text-ink-muted mt-0.5">{t('settings.apiKeysDesc')}</p>
                 </div>
-                <span className="text-xs text-ink-subtle">Coming soon</span>
+                <span className="text-xs text-ink-subtle">{t('settings.comingSoon')}</span>
               </div>
             </div>
           )}
         </div>
       </div>
+
+      {/* MFA Setup Modal */}
+      {showMFAModal && mfaSetup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-modal w-full max-w-md mx-4 p-6">
+            <h3 className="text-lg font-semibold text-ink mb-4">{t('settings.setUpMFA')}</h3>
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-ink-muted mb-2">{t('settings.scanQR')}</p>
+                <div className="bg-hairline rounded-lg p-4 text-center">
+                  <p className="text-xs font-mono break-all">{mfaSetup.otpauth_url}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm text-ink-muted mb-2">{t('settings.enterSecret')}</p>
+                <p className="text-sm font-mono bg-surface p-2 rounded">{mfaSetup.secret}</p>
+              </div>
+              <div>
+                <p className="text-sm text-ink-muted mb-2">{t('settings.backupCodes')}</p>
+                <div className="grid grid-cols-2 gap-1">
+                  {mfaSetup.backup_codes.map((code, i) => (
+                    <p key={i} className="text-xs font-mono bg-surface p-1 rounded text-center">{code}</p>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-ink mb-1.5" htmlFor="mfa-verify-code">{t('settings.verificationCode')}</label>
+                <input id="mfa-verify-code" type="text" value={mfaCode} onChange={(e) => setMfaCode(e.target.value)}
+                  placeholder="000000" maxLength={6} className="input-field" aria-label={t('settings.verificationCode')} />
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => { setShowMFAModal(false); setMfaCode('') }} className="btn-secondary flex-1">{t('common.cancel')}</button>
+                <button onClick={handleMFAVerify} disabled={mfaCode.length !== 6} className="btn-primary flex-1">{t('settings.verifyAndEnable')}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
