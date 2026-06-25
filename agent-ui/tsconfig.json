@@ -2,9 +2,7 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "types": [],
-    "allowJs": true,
-    "checkJs": true
+    "types": []
   },
   "include": ["src"],
   "exclude": ["node_modules", "dist", "src/test", "src/services/__mocks__", "../scripts"]
