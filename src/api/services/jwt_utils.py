@@ -121,10 +121,11 @@ def create_access_token(
 
 
 def verify_access_token(token: str) -> dict | None:
-    """Verify a JWT access token.
+    """Verify a JWT access token signed with RS256.
 
-    Tries RS256 first, falls back to HS256 for backward compatibility
-    during the migration period.
+    The `algorithms=` parameter is always passed explicitly. PyJWT 2.10+
+    rejects the `alg=none` confusion attack (CVE-2025-61152) and refuses
+    to decode without an explicit algorithm list.
     """
     try:
         return jwt.decode(
@@ -135,19 +136,7 @@ def verify_access_token(token: str) -> dict | None:
     except jwt.ExpiredSignatureError:
         return None
     except jwt.InvalidTokenError:
-        pass
-
-    # HS256 fallback for tokens signed before the RS256 migration
-    secret = os.getenv("JWT_SECRET")
-    if secret:
-        try:
-            payload = jwt.decode(token, secret, algorithms=["HS256"])
-            logger.warning("HS256 token verified (legacy) — consider re-issuing as RS256")
-            return payload
-        except jwt.InvalidTokenError:
-            pass
-
-    return None
+        return None
 
 
 def generate_dev_key_pair() -> dict:
