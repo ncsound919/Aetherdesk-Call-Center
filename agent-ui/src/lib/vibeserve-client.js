@@ -1,58 +1,55 @@
-// VibeServe MCP Client for Aetherdesk
-// Connects to VibeServe MCP tools for AI agent capabilities
+// VibeServe MCP Client for Aetherdesk (Frontend Proxy)
+// SECURITY: This client calls the Aetherdesk backend proxy, not VibeServe directly.
+// The API key is NEVER exposed to the browser bundle.
 
-const VIBESERVE_URL = (typeof process !== 'undefined' ? process.env.VIBESERVE_URL : '') || 'http://localhost:8000';
-const VIBESERVE_API_KEY = (typeof process !== 'undefined' ? process.env.VIBESERVE_API_KEY : '') || '';
+const AETHERDESK_API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL) || '';
 
-function vibeserveHeaders() {
-  const headers = { 'Content-Type': 'application/json' };
-  if (VIBESERVE_API_KEY) headers['Authorization'] = `Bearer ${VIBESERVE_API_KEY}`;
-  return headers;
-}
-
-/** Check VibeServe health */
+/** Check VibeServe health via Aetherdesk backend proxy */
 export async function checkVibeServeHealth() {
   try {
-    const response = await fetch(`${VIBESERVE_URL}/health`, {
-      headers: vibeserveHeaders(),
+    const response = await fetch(`${AETHERDESK_API_BASE}/api/v1/integrations/vibeserve/health`, {
+      credentials: 'include',
       signal: AbortSignal.timeout(5000),
     });
-    return response.ok;
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.reachable === true;
   } catch {
     return false;
   }
 }
 
-/** Call a VibeServe MCP tool */
+/** Call a VibeServe MCP tool via Aetherdesk backend proxy */
 export async function callVibeServeTool(toolName, args = {}) {
   try {
-    const response = await fetch(`${VIBESERVE_URL}/tools/${toolName}`, {
+    const response = await fetch(`${AETHERDESK_API_BASE}/api/v1/integrations/vibeserve/tools/${encodeURIComponent(toolName)}`, {
       method: 'POST',
-      headers: vibeserveHeaders(),
-      body: JSON.stringify(args),
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(args || {}),
       signal: AbortSignal.timeout(30000),
     });
-    if (response.ok) {
-      return await response.json();
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const errMsg = data?.error || data?.detail || `Backend returned ${response.status}`;
+      return { error: errMsg };
     }
-    return { error: `VibeServe returned ${response.status}` };
+    return data;
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'VibeServe unreachable' };
+    return { error: err instanceof Error ? err.message : 'Aetherdesk backend unreachable' };
   }
 }
 
-/** List available VibeServe tools */
+/** List available VibeServe tools via Aetherdesk backend proxy */
 export async function listVibeServeTools() {
   try {
-    const response = await fetch(`${VIBESERVE_URL}/tools`, {
-      headers: vibeserveHeaders(),
+    const response = await fetch(`${AETHERDESK_API_BASE}/api/v1/integrations/vibeserve/tools`, {
+      credentials: 'include',
       signal: AbortSignal.timeout(5000),
     });
-    if (response.ok) {
-      const data = await response.json();
-      return Array.isArray(data) ? data : (data.tools || []);
-    }
-    return [];
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data?.tools) ? data.tools : [];
   } catch {
     return [];
   }
@@ -64,7 +61,6 @@ export async function getIntegrationStatus() {
   const tools = healthy ? await listVibeServeTools() : [];
   return {
     service: 'VibeServe',
-    url: VIBESERVE_URL,
     healthy,
     toolCount: Array.isArray(tools) ? tools.length : 0,
     tools: Array.isArray(tools) ? tools.slice(0, 10) : [],
