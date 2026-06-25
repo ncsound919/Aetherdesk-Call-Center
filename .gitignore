@@ -87,9 +87,15 @@ data/voice_clones/
 .opencode/
 .superpowers/
 .planning/
+.opencode/
+.downloads/
 opencode.json
 Modelfile.gemma3
 agentops.log
+
+# Dev tooling (local helper scripts that should never be committed)
+dev-tools/
+verify.py
 
 # Debug scripts (root level - dev scripts live in scripts/dev/)
 debug_*.py
