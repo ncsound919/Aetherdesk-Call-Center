@@ -35,6 +35,8 @@ logs/
 
 # Debug artifacts
 debug_screenshot.png
+debug_dashboard.txt
+debug_ui_text.txt
 bandit_results.json
 security_validation_results.json
 
@@ -64,7 +66,6 @@ playwright-report/
 
 # Scratch / temp files
 scratch/
-test_env.py
 stderr*.txt
 stdout*.txt
 
@@ -81,3 +82,43 @@ sealed-secrets.json
 
 # Generated voice clone data
 data/voice_clones/
+
+# AI tooling (sessions, configs, artifacts)
+.opencode/
+.superpowers/
+.planning/
+opencode.json
+Modelfile.gemma3
+agentops.log
+
+# Debug scripts (root level - dev scripts live in scripts/dev/)
+debug_*.py
+start_*.py
+start_*.bat
+start_*.sh
+start_*.cmd
+start_*.ps1
+run_*.py
+run_*.bat
+restart_*.py
+check_*.py
+fix_*.py
+launch*.py
+launch*.bat
+e2e_test.py
+full_e2e_test.py
+quick_*.py
+simple_*.py
+fresh_start.py
+clean_start.py
+final_run.py
+open_visible.py
+visible_test.py
+ui_explore.py
+verify*.py
+playwright_setup.py
+serve.py
+test_auth.py
+test_endpoints.py
+test_env.py
+run.py
