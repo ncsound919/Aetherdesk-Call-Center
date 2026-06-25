@@ -479,6 +479,10 @@ app.include_router(cdp.router, prefix="/api/v1")
 app.include_router(verticals.router, prefix="/api/v1")
 app.include_router(platform_ops.router, prefix="/api/v1")
 
+# Overlay 365 public signup (no prefix - already has /api/v1/signup)
+from api.routers.signup_overlay365 import router as signup_overlay365_router
+app.include_router(signup_overlay365_router)
+
 
 # =============================================================================
 # Auth Routes (must be after CORS, before middleware)
