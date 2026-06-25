@@ -236,7 +236,7 @@ class TestGetPasswordHash:
         from api.services.auth import get_password_hash
         hashed = get_password_hash("my-password")
         assert hashed != "my-password"
-        assert hashed.startswith("$2")
+        assert hashed.startswith("$argon2")
 
 
 class TestTokenStore:

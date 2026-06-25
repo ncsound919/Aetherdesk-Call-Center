@@ -75,23 +75,7 @@ class TestVerifyAccessToken:
             result = verify_access_token("expired.jwt.token")
             assert result is None
 
-    def test_invalid_token_tries_hs256_fallback(self):
-        from api.services.jwt_utils import verify_access_token
-
-        with patch("api.services.jwt_utils.jwt.decode") as mock_decode:
-            from jwt import InvalidTokenError
-
-            # First call (RS256) raises InvalidTokenError, second (HS256) succeeds
-            mock_decode.side_effect = [
-                InvalidTokenError("RS256 failed"),
-                {"sub": "user-1", "tenant_id": "T-1"},
-            ]
-
-            with patch("api.services.jwt_utils.os.getenv", return_value="hs256-secret"):
-                result = verify_access_token("mixed.jwt.token")
-                assert result == {"sub": "user-1", "tenant_id": "T-1"}
-
-    def test_invalid_token_no_hs256_fallback_returns_none(self):
+    def test_invalid_token_returns_none(self):
         from api.services.jwt_utils import verify_access_token
 
         with patch("api.services.jwt_utils.jwt.decode") as mock_decode:
@@ -99,11 +83,10 @@ class TestVerifyAccessToken:
 
             mock_decode.side_effect = InvalidTokenError("RS256 failed")
 
-            with patch("api.services.jwt_utils.os.getenv", return_value=None):
-                result = verify_access_token("invalid.jwt.token")
-                assert result is None
+            result = verify_access_token("invalid.jwt.token")
+            assert result is None
 
-    def test_both_algorithms_fail_returns_none(self):
+    def test_invalid_token_no_fallback_returns_none(self):
         from api.services.jwt_utils import verify_access_token
 
         with patch("api.services.jwt_utils.jwt.decode") as mock_decode:
@@ -111,9 +94,8 @@ class TestVerifyAccessToken:
 
             mock_decode.side_effect = InvalidTokenError("nope")
 
-            with patch("api.services.jwt_utils.os.getenv", return_value="hs256-secret"):
-                result = verify_access_token("totally.bogus.token")
-                assert result is None
+            result = verify_access_token("totally.bogus.token")
+            assert result is None
 
 
 class TestGenerateDevKeyPair:
