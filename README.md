@@ -150,3 +150,11 @@ make prod
 ## License
 
 MIT
+
+## AgentBrowser Integration
+
+Aetherdesk is planned to integrate with the AgentBrowser platform to provide AI-powered customer service enhancements.
+
+- **LLM Routing**: Utilize Big Homie's LLM gateway for intelligent agent responses.
+- **Tool Execution**: Leverage VibeServe MCP tools for actions like updating CRM records (via Shopify/Stripe integrations).
+- **Security**: Secure all agent interactions with Claw Protect's prompt injection and secrets scanning modules.
