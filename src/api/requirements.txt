@@ -19,12 +19,12 @@ aioredis>=2.0
 httpx>=0.25.0
 
 # Auth & Security
-pyjwt>=2.8
+pyjwt[crypto]>=2.10.1
 python-dotenv>=1.0
-passlib[bcrypt]>=1.7
+pwdlib[argon2]>=0.2.0
 
 # Encryption (HIPAA compliance)
-cryptography>=41.0
+cryptography>=42.0.8
 
 # Speech Services
 deepgram-sdk>=3.0
