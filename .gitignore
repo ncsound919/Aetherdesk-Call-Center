@@ -6,13 +6,47 @@ __pycache__/
 dist/
 build/
 
+# Binary files — never commit these
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.ico
+*.bmp
+*.webp
+*.mp3
+*.mp4
+*.wav
+*.flac
+*.ogg
+*.avi
+*.mov
+*.mkv
+*.pdf
+*.epub
+*.exe
+*.msi
+*.dmg
+*.deb
+*.rpm
+*.zip
+*.tar
+*.gz
+*.7z
+*.rar
+*.woff
+*.woff2
+*.ttf
+*.eot
+*.otf
+*.db
+*.sqlite
+*.sqlite3
+
 # Environment and secrets
 .env
 .env.*
 !.env.example
-*.db
-*.sqlite
-*.sqlite3
 
 # Test artifacts
 .pytest_cache/
