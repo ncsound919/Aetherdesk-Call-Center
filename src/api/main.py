@@ -18,6 +18,20 @@ if _src_dir not in sys.path:
 import asyncio
 import logging
 import os
+
+# Startup env validation
+def _assert_env():
+    required = ["JWT_SECRET", "INTERNAL_API_KEY"]
+    recommended = ["DATABASE_URL", "ENCRYPTION_KEY", "STRIPE_SECRET_KEY"]
+    missing_req = [k for k in required if not os.environ.get(k)]
+    missing_rec = [k for k in recommended if not os.environ.get(k)]
+    if missing_req:
+        print(f"[FATAL] Aetherdesk: Missing required env vars: {', '.join(missing_req)}", file=sys.stderr)
+        sys.exit(1)
+    if missing_rec:
+        print(f"[WARN] Aetherdesk: Missing recommended env vars: {', '.join(missing_rec)}", file=sys.stderr)
+
+_assert_env()
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
