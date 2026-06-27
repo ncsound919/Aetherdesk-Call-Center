@@ -97,6 +97,18 @@ CREATE TABLE IF NOT EXISTS agents (
     last_seen_at TIMESTAMPTZ
 );
 
+-- Agent Profiles (for AI agent configurations)
+CREATE TABLE IF NOT EXISTS agent_profiles (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    tenant_id UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name VARCHAR(255) NOT NULL,
+    prompt TEXT,
+    parameters JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_profiles_tenant ON agent_profiles(tenant_id);
+
 -- Call Sessions
 CREATE TABLE IF NOT EXISTS call_sessions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -1149,6 +1161,43 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_users_tenant ON users(tenant_id);
 
+-- Agents
+CREATE TABLE IF NOT EXISTS agents (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    display_name TEXT,
+    email TEXT,
+    phone TEXT,
+    agent_type TEXT NOT NULL DEFAULT 'ai',
+    status TEXT NOT NULL DEFAULT 'offline',
+    skills TEXT DEFAULT '[]',
+    config TEXT DEFAULT '{}',
+    sip_extension TEXT UNIQUE,
+    sip_password TEXT,
+    encryption_key TEXT,
+    total_calls INTEGER DEFAULT 0,
+    total_talk_time_seconds INTEGER DEFAULT 0,
+    avg_rating REAL DEFAULT 0.0,
+    is_active INTEGER DEFAULT 1,
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    last_seen_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agents_tenant ON agents(tenant_id);
+
+-- Agent Profiles (for AI agent configurations)
+CREATE TABLE IF NOT EXISTS agent_profiles (
+    id TEXT PRIMARY KEY,
+    tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    prompt TEXT,
+    parameters TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_profiles_tenant ON agent_profiles(tenant_id);
+
 CREATE TABLE IF NOT EXISTS script_templates (
     id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE,
     description TEXT, industry TEXT,
@@ -1357,9 +1406,9 @@ CREATE TABLE IF NOT EXISTS campaign_calls (
 CREATE INDEX IF NOT EXISTS idx_calls_tenant ON call_sessions(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_calls_agent ON call_sessions(agent_id);
 CREATE INDEX IF NOT EXISTS idx_calls_status ON call_sessions(call_status);
-CREATE INDEX IF NOT EXISTS idx_agents_tenant ON agents(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
-CREATE INDEX IF NOT EXISTS idx_profiles_tenant ON agent_profiles(tenant_id);
+-- idx_agents_tenant and idx_profiles_tenant are defined earlier in the SQLite section
+-- (immediately after each CREATE TABLE) to guarantee the tables exist first.
 CREATE INDEX IF NOT EXISTS idx_leads_tenant ON leads(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_campaign_calls_tenant ON campaign_calls(tenant_id);
@@ -2330,10 +2379,19 @@ def init_sqlite_schema():
         logger.warning("Alembic migration failed, falling back to raw SQL", error=str(e))
 
     from api.services.db_pool import _get_sqlite_conn
+    from api.services.db_sqlite_transform import postgres_to_sqlite
+
+    # The legacy SQLITE_SCHEMA_SQL constant in this module accumulated
+    # Postgres-only types (UUID, JSONB, TIMESTAMPTZ, etc.) over time
+    # and fails on a fresh SQLite database. We now derive the SQLite
+    # schema at runtime from SCHEMA_SQL (the canonical Postgres schema)
+    # via a deterministic type translation. This guarantees SQLite and
+    # Postgres stay structurally in sync going forward.
     conn = _get_sqlite_conn()
-    conn.executescript(SQLITE_SCHEMA_SQL)
+    sqlite_sql = postgres_to_sqlite(SCHEMA_SQL)
+    conn.executescript(sqlite_sql)
     conn.commit()
     conn.close()
-    logger.info("SQLite schema initialized via raw SQL (fallback)")
+    logger.info("SQLite schema initialized from translated SCHEMA_SQL (fallback)")
 
 

@@ -1,11 +1,11 @@
 """Blocklabor integration for Aetherdesk - hire workers from call center UI."""
 import os
 import logging
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Header
-from pydantic import BaseModel, Field, Literal
+from pydantic import BaseModel, Field
 
 from api.services.auth import verify_access_token, verify_tenant_access
 

@@ -95,6 +95,38 @@ async def handle_call_status(request: Request):
         from_number=from_number,
         to_number=to_number,
     )
+
+    # Forward every completed call status to BlockLabor so the
+    # verification-webhook edge function can match it against
+    # call_sessions (intent_detected = 'verification:...') and update
+    # the relevant verification_status column.
+    if call_status in ("completed", "failed", "no-answer", "busy", "canceled"):
+        try:
+            import httpx
+            blocklabor_url = os.getenv("BLOCKLABOR_URL", "")
+            blocklabor_key = os.getenv("BLOCKLABOR_API_KEY", "")
+            if blocklabor_url and blocklabor_key:
+                payload = {
+                    "twilio_call_sid": call_sid,
+                    "call_status": call_status,
+                    "from_number": from_number,
+                    "to_number": to_number,
+                    "duration": form.get("CallDuration", "0"),
+                    "recording_url": form.get("RecordingUrl", ""),
+                }
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await client.post(
+                        f"{blocklabor_url}/functions/v1/verification-webhook",
+                        json=payload,
+                        headers={
+                            "Content-Type": "application/json",
+                            "Authorization": f"Bearer {blocklabor_key}",
+                        },
+                    )
+        except Exception:
+            # Never let a webhook failure break the Twilio flow.
+            pass
+
     return JSONResponse({"ok": True})
 
 
