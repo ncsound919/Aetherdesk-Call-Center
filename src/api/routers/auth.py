@@ -1,10 +1,15 @@
+import hashlib
+import hmac
+import json
 import logging
 import os
+import secrets
+import time
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.services.auth import (
     create_mfa_session_token,
@@ -297,3 +302,132 @@ async def reset_password(credentials: ResetPasswordRequest):
 
     logger.info("password_reset_completed", user_id=user_id)
     return {"message": "Password reset successfully"}
+
+
+# ── Overlay 365 Unified Auth ─────────────────────────────────────
+# Shared token generation/validation used by BlockLabor, Jobclaw,
+# AgentBrowser and any other Overlay service via overlay-365-shared/auth.js.
+
+OVERLAY_MASTER_KEY = os.getenv("OVERLAY_MASTER_KEY", "")
+
+
+class OverlayTokenRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=100)
+    email: str = Field(..., min_length=3, max_length=254)
+    tier: str = Field(default="worker")
+    services: list[str] = Field(default_factory=lambda: ["aetherdesk", "jobclaw", "blocklabor", "agent-browser"])
+    expires_in: int = Field(default=86400 * 30, ge=60, le=86400 * 365)
+
+
+class OverlayValidateRequest(BaseModel):
+    pass  # Token is passed via Authorization header
+
+
+def _sign_overlay_token(payload: dict, secret: str) -> str:
+    """HMAC-SHA256 signed JWT-like token (compact, no dependency on PyJWT)."""
+    header = {"alg": "HS256", "typ": "OVERLAY"}
+    body = base64url_encode(json.dumps(header)) + "." + base64url_encode(json.dumps(payload))
+    sig = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+    return body + "." + sig
+
+
+def base64url_encode(data: str) -> str:
+    import base64
+    return base64.urlsafe_b64encode(data.encode()).rstrip(b"=").decode()
+
+
+def _verify_overlay_token(token: str, secret: str) -> dict | None:
+    """Verify HMAC-SHA256 signed overlay token. Returns payload or None."""
+    try:
+        parts = token.split(".")
+        if len(parts) != 3:
+            return None
+        body, sig = parts[0] + "." + parts[1], parts[2]
+        expected_sig = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(sig, expected_sig):
+            return None
+        # Decode payload
+        import base64
+        payload_b64 = parts[1]
+        # Add padding
+        payload_b64 += "=" * (4 - len(payload_b64) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(payload_b64))
+        # Check expiry
+        if payload.get("exp", 0) < time.time():
+            return None
+        return payload
+    except Exception:
+        return None
+
+
+@router.post("/v1/auth/token")
+async def generate_overlay_token(
+    request: Request,
+    payload: OverlayTokenRequest,
+    authorization: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+):
+    """Generate a unified Overlay 365 auth token.
+    Called by overlay-365-shared/auth.js -> generateOverlayToken().
+    Requires OVERLAY_MASTER_KEY in Authorization header.
+    """
+    if not OVERLAY_MASTER_KEY:
+        raise HTTPException(status_code=503, detail="OVERLAY_MASTER_KEY not configured on server")
+
+    # Verify master key
+    provided_key = authorization.credentials
+    if not hmac.compare_digest(provided_key, OVERLAY_MASTER_KEY):
+        raise HTTPException(status_code=401, detail="Invalid master key")
+
+    if payload.tier not in ("worker", "business", "admin"):
+        raise HTTPException(status_code=400, detail=f"Invalid tier: {payload.tier}")
+
+    now = time.time()
+    token_payload = {
+        "sub": payload.user_id,
+        "email": payload.email,
+        "tier": payload.tier,
+        "services": payload.services,
+        "iat": now,
+        "exp": now + payload.expires_in,
+        "iss": "overlay365",
+    }
+
+    token = _sign_overlay_token(token_payload, OVERLAY_MASTER_KEY)
+
+    logger.info("overlay_token_generated", user_id=payload.user_id, tier=payload.tier)
+
+    return {
+        "access_token": token,
+        "token_type": "overlay",
+        "expires_in": payload.expires_in,
+        "user_id": payload.user_id,
+        "tier": payload.tier,
+        "services": payload.services,
+    }
+
+
+@router.post("/v1/auth/validate")
+async def validate_overlay_token(
+    request: Request,
+    authorization: HTTPAuthorizationCredentials = Depends(HTTPBearer()),
+):
+    """Validate an Overlay 365 token.
+    Called by overlay-365-shared/auth.js -> validateOverlayToken().
+    """
+    if not OVERLAY_MASTER_KEY:
+        raise HTTPException(status_code=503, detail="OVERLAY_MASTER_KEY not configured")
+
+    token = authorization.credentials
+    payload = _verify_overlay_token(token, OVERLAY_MASTER_KEY)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+    return {
+        "valid": True,
+        "user_id": payload.get("sub"),
+        "email": payload.get("email"),
+        "tier": payload.get("tier"),
+        "services": payload.get("services", []),
+        "expires_at": payload.get("exp"),
+        "issued_at": payload.get("iat"),
+    }
