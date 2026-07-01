@@ -41,7 +41,7 @@ pandas==2.0.0
 # Real-Time Communication
 websockets==12.0
 python-socketio==5.10.0
-python-engineio==4.8.0
+python-engineio==4.13.2
 
 # HTTP Client
 httpx==0.25.0
