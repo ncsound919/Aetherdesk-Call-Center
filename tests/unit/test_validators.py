@@ -37,5 +37,6 @@ class TestValidators:
     def test_range_non_numeric(self):
         assert self.v.validate({"min": 1, "max": 10}, "abc") is False
 
-    def test_unknown_rule_default_true(self):
-        assert self.v.validate({}, "anything") is True
+    def test_unknown_rule_default_deny(self):
+        """An unrecognized rule shape must fail closed (deny), not allow-all."""
+        assert self.v.validate({}, "anything") is False

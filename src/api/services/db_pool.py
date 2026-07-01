@@ -32,7 +32,7 @@ except ImportError:
 
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 if not ENCRYPTION_KEY:
-    if USE_POSTGRES:
+    if os.getenv("APP_ENV", "development") == "production":
         raise RuntimeError("ENCRYPTION_KEY environment variable must be set for production.")
     else:
         logger.warning("ENCRYPTION_KEY not set for development. Encryption will be disabled.")

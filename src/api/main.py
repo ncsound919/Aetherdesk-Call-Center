@@ -172,7 +172,7 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://aetherdesk-redis:6379")
 FONOSTER_URL = os.getenv("FONOSTER_URL", "http://aetherdesk-fonoster:50062")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 if not ENCRYPTION_KEY:
-    if os.getenv("USE_POSTGRES", "false").lower() == "true":
+    if os.getenv("APP_ENV", "development") == "production":
         raise RuntimeError("ENCRYPTION_KEY environment variable must be set for production.")
 JWT_SECRET = os.getenv("JWT_SECRET")
 if not JWT_SECRET:

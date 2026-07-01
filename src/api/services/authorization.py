@@ -32,6 +32,8 @@ def _get_enforcer():
     if _enforcer is not None:
         return _enforcer
 
+    is_production = os.getenv("APP_ENV", "development") == "production"
+
     try:
         import casbin
 
@@ -40,25 +42,64 @@ def _get_enforcer():
             logger.info("casbin_initialized", model=_model_path, policy=_policy_path)
         else:
             logger.warning("casbin_files_not_found", model=_model_path, policy=_policy_path)
+            if is_production:
+                raise RuntimeError(
+                    "Casbin model/policy files not found. Set CASBIN_MODEL_PATH "
+                    "and CASBIN_POLICY_PATH or ship the config files in production."
+                )
             _enforcer = None
     except ImportError:
         logger.debug("casbin_not_installed")
+        if is_production:
+            raise RuntimeError(
+                "casbin package is not installed. RBAC cannot fail closed "
+                "safely without it in production."
+            )
         _enforcer = None
+    except RuntimeError:
+        raise
     except Exception as e:
         logger.warning("casbin_init_failed", error=str(e))
+        if is_production:
+            raise RuntimeError(f"Casbin initialization failed in production: {e}") from e
         _enforcer = None
 
     return _enforcer
 
 
+def _permissive_mode_allowed() -> bool:
+    """Whether permissive (allow-all) mode is allowed when Casbin is unavailable.
+
+    Only allowed outside production. In production, missing/broken Casbin
+    configuration must fail closed (deny by default) rather than silently
+    granting access to every request.
+    """
+    return os.getenv("APP_ENV", "development") != "production"
+
+
 def check_permission(role: str, resource: str, action: str) -> bool:
     """Check if a role has permission on a resource for a given action.
 
-    Returns True if Casbin is not configured (permissive mode).
+    Returns True if Casbin is not configured and not running in production
+    (permissive dev mode). Fails closed (denies) in production or on error.
     """
-    enforcer = _get_enforcer()
+    try:
+        enforcer = _get_enforcer()
+    except RuntimeError as e:
+        # Casbin unavailable/misconfigured in production: fail closed.
+        logger.error("casbin_unavailable_fail_closed", role=role, resource=resource, action=action, error=str(e))
+        return False
+
     if not enforcer:
-        return True  # Permissive mode: allow all
+        if _permissive_mode_allowed():
+            return True  # Permissive mode: allow all (non-production only)
+        logger.error(
+            "casbin_unavailable_fail_closed",
+            role=role,
+            resource=resource,
+            action=action,
+        )
+        return False  # Fail closed in production
 
     try:
         allowed = enforcer.enforce(role, resource, action)

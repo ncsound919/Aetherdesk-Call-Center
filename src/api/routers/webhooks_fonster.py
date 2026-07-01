@@ -21,19 +21,33 @@ async def fonster_webhook(
     """Handle Fonster call events (call.answered, call.completed, call.failed)"""
     # HMAC signature verification
     fonster_webhook_secret = os.getenv("FONOSTER_WEBHOOK_SECRET")
-    if fonster_webhook_secret and x_fonoster_signature:
-        raw_body = await request.body()
-        expected_sig = hmac.HMAC(
-            fonster_webhook_secret.encode(),
-            raw_body,
-            hashlib.sha256,
-        ).hexdigest()
-        if not hmac.compare_digest(expected_sig, x_fonoster_signature):
-            raise HTTPException(status_code=401, detail="Invalid webhook signature")
-    elif fonster_webhook_secret and not x_fonoster_signature:
-        # Secret is configured but no signature sent — reject in non-dev mode
-        if os.getenv("APP_ENV", "development") == "production":
-            raise HTTPException(status_code=401, detail="Missing webhook signature")
+    is_production = os.getenv("APP_ENV", "development") == "production"
+
+    if not fonster_webhook_secret:
+        if is_production:
+            raise HTTPException(
+                status_code=503,
+                detail="FONOSTER_WEBHOOK_SECRET not configured",
+            )
+        logger.warning(
+            "fonster_webhook_secret_not_set: webhook signature validation "
+            "is disabled. This must never happen in production."
+        )
+    else:
+        if not x_fonoster_signature:
+            # Secret is configured but no signature sent — reject in
+            # production; allow in dev/test for local convenience.
+            if is_production:
+                raise HTTPException(status_code=401, detail="Missing webhook signature")
+        else:
+            raw_body = await request.body()
+            expected_sig = hmac.HMAC(
+                fonster_webhook_secret.encode(),
+                raw_body,
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(expected_sig, x_fonoster_signature):
+                raise HTTPException(status_code=401, detail="Invalid webhook signature")
 
     payload = await request.json()
     event_type = payload.get("event_type")

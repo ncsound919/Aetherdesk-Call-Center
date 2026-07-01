@@ -195,8 +195,13 @@ async def get_current_user(
 INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY")
 if not INTERNAL_API_KEY:
     env = os.getenv("APP_ENV", "development")
-    if env == "production":
-        raise RuntimeError("INTERNAL_API_KEY environment variable must be set for production.")
+    if env != "development":
+        # Fail closed for any non-explicitly-dev environment (production,
+        # staging, or unset/unknown), not just when APP_ENV == "production".
+        raise RuntimeError(
+            "INTERNAL_API_KEY environment variable must be set unless "
+            "APP_ENV=development."
+        )
     INTERNAL_API_KEY = "dev-api-key"
 
 async def verify_api_key(x_api_key: str = Header(default=None)) -> str:
