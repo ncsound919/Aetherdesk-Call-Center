@@ -48,7 +48,7 @@ httpx==0.25.0
 requests==2.31.0
 
 # Security
-cryptography==42.0.8
+cryptography==48.0.1
 
 # Background Tasks
 celery==5.5.3
