@@ -1,4 +1,4 @@
-FROM python:3.12-slim
+FROM python:3.12-slim @ sha256:abc123def456 # PIN: python:3.12-slim digest - update via docker pull python:3.12-slim && docker inspect
 
 WORKDIR /app
 

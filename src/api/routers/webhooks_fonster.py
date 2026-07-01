@@ -9,10 +9,10 @@ from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
 
 from api.services.database import update_call_status as db_update_call_status
 
-router = APIRouter(tags=["webhooks"])
+router = APIRouter(prefix="/webhooks/fonster", tags=["webhooks"])
 logger = logging.getLogger(__name__)
 
-@router.post("/api/v1/webhooks/fonster")
+@router.post("")
 async def fonster_webhook(
     request: Request,
     background_tasks: BackgroundTasks,

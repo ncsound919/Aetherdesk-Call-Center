@@ -27,7 +27,7 @@ def client(app):
 class TestGetCallStats:
     def test_returns_mock_when_clickhouse_not_enabled(self, client):
         with patch("api.routers.metabase.is_clickhouse_enabled", return_value=False):
-            resp = client.get("/api/v1/metabase/stats")
+            resp = client.get("/metabase/stats")
             assert resp.status_code == 200
             assert resp.json()["source"] == "mock"
 
@@ -44,7 +44,7 @@ class TestGetCallStats:
         }
         with patch("api.routers.metabase.is_clickhouse_enabled", return_value=True), \
              patch("api.routers.metabase.query_call_stats", return_value=mock_stats):
-            resp = client.get("/api/v1/metabase/stats")
+            resp = client.get("/metabase/stats")
             assert resp.status_code == 200
             data = resp.json()
             assert data["source"] == "clickhouse"
@@ -55,7 +55,7 @@ class TestGetCallStats:
 class TestGetIntentDistribution:
     def test_returns_mock_when_not_enabled(self, client):
         with patch("api.routers.metabase.is_clickhouse_enabled", return_value=False):
-            resp = client.get("/api/v1/metabase/intents")
+            resp = client.get("/metabase/intents")
             assert resp.status_code == 200
             assert resp.json()["source"] == "mock"
 
@@ -63,7 +63,7 @@ class TestGetIntentDistribution:
         mock_intents = [{"intent": "billing", "count": 50}]
         with patch("api.routers.metabase.is_clickhouse_enabled", return_value=True), \
              patch("api.routers.metabase.query_intent_distribution", return_value=mock_intents):
-            resp = client.get("/api/v1/metabase/intents")
+            resp = client.get("/metabase/intents")
             assert resp.status_code == 200
             assert resp.json()["intents"] == mock_intents
 
@@ -71,7 +71,7 @@ class TestGetIntentDistribution:
 class TestGetAgentPerformance:
     def test_returns_mock_when_not_enabled(self, client):
         with patch("api.routers.metabase.is_clickhouse_enabled", return_value=False):
-            resp = client.get("/api/v1/metabase/agents")
+            resp = client.get("/metabase/agents")
             assert resp.status_code == 200
             assert resp.json()["source"] == "mock"
 
@@ -79,7 +79,7 @@ class TestGetAgentPerformance:
 class TestGetHourlyVolume:
     def test_returns_mock_when_not_enabled(self, client):
         with patch("api.routers.metabase.is_clickhouse_enabled", return_value=False):
-            resp = client.get("/api/v1/metabase/hourly")
+            resp = client.get("/metabase/hourly")
             assert resp.status_code == 200
             assert resp.json()["source"] == "mock"
 
@@ -89,7 +89,7 @@ class TestGetEmbedUrl:
         with patch.dict(os.environ, {}, clear=True):
             os.environ.pop("METABASE_SECRET_KEY", None)
             os.environ.pop("METABASE_SITE_URL", None)
-            resp = client.get("/api/v1/metabase/embed/42")
+            resp = client.get("/metabase/embed/42")
             assert resp.status_code == 200
             assert resp.json()["configured"] is False
 
@@ -98,7 +98,7 @@ class TestGetEmbedUrl:
             "METABASE_SECRET_KEY": "test-secret-key-32chars-long!!!!!",
             "METABASE_SITE_URL": "http://localhost:3002",
         }):
-            resp = client.get("/api/v1/metabase/embed/42")
+            resp = client.get("/metabase/embed/42")
             assert resp.status_code == 200
             data = resp.json()
             assert data["configured"] is True

@@ -78,7 +78,7 @@ class TestFonsterHandleWebhook:
 
 
 class TestFonsterWebhookEndpoint:
-    PATH = "/api/v1/webhooks/fonster"
+    PATH = "/webhooks/fonster"
 
     @pytest.fixture
     def app(self):
@@ -145,6 +145,10 @@ class TestFonsterWebhookEndpoint:
 # ═══════════════════════════════════════════════════════════════════
 
 class TestTwilioPing:
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+
     def test_ping_returns_200(self):
         from api.routers.webhooks_twilio import router
         app = FastAPI()
@@ -156,6 +160,11 @@ class TestTwilioPing:
 
 
 class TestTwilioVoice:
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+        monkeypatch.setenv("APP_ENV", "development")
+
     @pytest.fixture
     def app(self):
         from api.routers.webhooks_twilio import router
@@ -189,6 +198,11 @@ class TestTwilioVoice:
 
 
 class TestTwilioCallStatus:
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+        monkeypatch.setenv("APP_ENV", "development")
+
     @pytest.fixture
     def app(self):
         from api.routers.webhooks_twilio import router
@@ -212,6 +226,11 @@ class TestTwilioCallStatus:
 
 
 class TestTwilioGather:
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+        monkeypatch.setenv("APP_ENV", "development")
+
     @pytest.fixture
     def app(self):
         from api.routers.webhooks_twilio import router
@@ -236,6 +255,11 @@ class TestTwilioGather:
 
 
 class TestTwilioValidation:
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch):
+        monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+        monkeypatch.setenv("APP_ENV", "development")
+
     @pytest.fixture
     def app(self):
         from api.routers.webhooks_twilio import router

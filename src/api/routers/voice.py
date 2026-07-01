@@ -19,6 +19,7 @@ from fastapi.responses import JSONResponse
 from api.services.actions import Actions
 from api.services.asr import asr_service
 from api.services.auth import verify_api_key
+from api.services.validators import validators
 from api.services.call_session import (
     VoiceSession,
     get_or_create_session,
@@ -64,6 +65,11 @@ async def handle_incoming_call(request: Request):
     tenant_id = data.get("tenantId") or data.get("tenant_id")
     profile_id = data.get("profileId") or data.get("profile_id", "PROF-001")
 
+    if tenant_id and not validators.validate_uuid(tenant_id):
+        raise HTTPException(status_code=400, detail=f"Invalid tenant_id format: expected UUID, got '{tenant_id}'")
+    if profile_id and not (validators.validate_uuid(profile_id) or (len(profile_id) <= 64 and profile_id.startswith("PROF-"))):
+        raise HTTPException(status_code=400, detail=f"Invalid profile_id format: expected UUID or PROF- prefix, got '{profile_id}'")
+
     # Create call session in database
     call_sid = session_ref
     try:
@@ -108,6 +114,118 @@ async def classify_transcript(request: dict):
     }
 
 
+async def _handle_media_start(
+    websocket: WebSocket, data: dict
+) -> tuple[str | None, str | None, str | None, str | None, VoiceSession | None, Orchestrator | None]:
+    start = data.get("start", {})
+    stream_sid = start.get("streamSid")
+    call_sid = start.get("callSid") or str(uuid.uuid4())
+    tenant_id: str = data.get("tenantId") or "unknown"
+
+    profile_id = websocket.query_params.get("profile_id", "PROF-001")
+
+    logger.info(
+        "media_stream_start",
+        call_sid=call_sid,
+        stream_sid=stream_sid,
+        profile_id=profile_id,
+        tenant_id=tenant_id,
+    )
+
+    from api.routers.realtime import manager
+    manager.register_voice_ws(call_sid, websocket, stream_sid)
+
+    session_id = f"call_{call_sid}"
+    session = get_or_create_session(
+        websocket.app, session_id, call_sid,
+        profile_id=profile_id,
+        tenant_id=tenant_id,
+    )
+    store_session(websocket.app, session_id, session)
+
+    actions = Actions(websocket.app.state.redis)
+    orchestrator = Orchestrator(actions)
+
+    greeting = "Hello. How can I help you today?"
+    async for chunk in session.speak_stream(greeting):
+        await websocket.send_json({
+            "event": "media",
+            "media": {
+                "payload": base64.b64encode(chunk).decode("utf-8"),
+            },
+        })
+
+    return stream_sid, call_sid, tenant_id, session_id, session, orchestrator
+
+
+async def _handle_media_chunk(
+    websocket: WebSocket,
+    data: dict,
+    session: VoiceSession | None,
+    session_id: str | None,
+    call_sid: str | None,
+    orchestrator: Orchestrator | None,
+    tenant_id: str,
+) -> None:
+    if session_id is None:
+        return
+
+    media = data.get("media", {})
+    payload = media.get("payload")
+
+    if payload:
+        session = get_or_create_session(
+            websocket.app, session_id,
+            call_sid or "unknown",
+            profile_id=session.profile_id if session else "PROF-001",
+            tenant_id=session.tenant_id if session else tenant_id,
+        )
+
+        audio_chunk = base64.b64decode(payload)
+        text = await session.process_audio(audio_chunk)
+
+        if text:
+            history = session.transcript[:-1]
+            response = await orchestrator.step(
+                session.agent_state, history, text,
+                tenant_id=session.tenant_id,
+                profile_id=session.profile_id,
+            )
+
+            if response.text:
+                async for chunk in session.speak_stream(
+                    response.text,
+                    sentiment=response.sentiment,
+                    latency_ms=response.latency_ms,
+                ):
+                    await websocket.send_json({
+                        "event": "media",
+                        "media": {
+                            "payload": base64.b64encode(chunk).decode("utf-8"),
+                        },
+                    })
+
+            if response.needs_agent:
+                await websocket.send_json({
+                    "event": "mark",
+                    "mark": {"name": "handoff"},
+                })
+
+
+async def _handle_media_stop(
+    websocket: WebSocket,
+    data: dict,
+    session_id: str | None,
+    call_sid: str | None,
+) -> None:
+    if session_id:
+        remove_session(websocket.app, session_id)
+    if call_sid:
+        from api.routers.realtime import cleanup_call_transcripts, manager
+        manager.unregister_voice_ws(call_sid)
+        cleanup_call_transcripts(call_sid)
+
+
 @router.websocket("/media-stream")
 async def handle_media_stream(websocket: WebSocket):
     """
@@ -125,11 +243,11 @@ async def handle_media_stream(websocket: WebSocket):
         return
     await websocket.accept()
 
-    session_id = None
-    call_sid = None
-    stream_sid = None
-    tenant_id = "unknown"
+    session_id: str | None = None
+    call_sid: str | None = None
+    tenant_id: str = "unknown"
     session: VoiceSession | None = None
+    orchestrator: Orchestrator | None = None
 
     try:
         async for message in websocket.iter_text():
@@ -140,122 +258,27 @@ async def handle_media_stream(websocket: WebSocket):
                 logger.info("media_stream_connected", data=data)
 
             elif event == "start":
-                start = data.get("start", {})
-                stream_sid = start.get("streamSid")
-                call_sid = start.get("callSid") or str(uuid.uuid4())
-                tenant_id = data.get("tenantId") or "unknown"
-
-                # Get profile_id from query string
-                profile_id = websocket.query_params.get("profile_id", "PROF-001")
-
-                logger.info(
-                    "media_stream_start",
-                    call_sid=call_sid,
-                    stream_sid=stream_sid,
-                    profile_id=profile_id,
-                    tenant_id=tenant_id,
+                _, call_sid, tenant_id, session_id, session, orchestrator = (
+                    await _handle_media_start(websocket, data)
                 )
-
-                # Register voice stream for takeover
-                from api.routers.realtime import manager
-                manager.register_voice_ws(call_sid, websocket, stream_sid)
-
-                session_id = f"call_{call_sid}"
-                session = get_or_create_session(
-                    websocket.app, session_id, call_sid,
-                    profile_id=profile_id,
-                    tenant_id=tenant_id,
-                )
-                store_session(websocket.app, session_id, session)
-
-                # Cache the orchestrator for this session
-                actions = Actions(websocket.app.state.redis)
-                orchestrator = Orchestrator(actions)
-
-                greeting = "Hello. How can I help you today?"
-                async for chunk in session.speak_stream(greeting):
-                    await websocket.send_json({
-                        "event": "media",
-                        "media": {
-                            "payload": base64.b64encode(chunk).decode("utf-8"),
-                        },
-                    })
 
             elif event == "media":
-                if session_id is None:
-                    continue
-
-                media = data.get("media", {})
-                payload = media.get("payload")
-
-                if payload:
-                    # Re-fetch session to prevent profile loss on Redis expiry
-                    session = get_or_create_session(
-                        websocket.app, session_id,
-                        call_sid or "unknown",
-                        profile_id=session.profile_id if session else "PROF-001",
-                        tenant_id=session.tenant_id if session else tenant_id,
-                    )
-
-                    audio_chunk = base64.b64decode(payload)
-                    text = await session.process_audio(audio_chunk)
-
-                    if text:
-                        history = session.transcript[:-1]
-                        response = await orchestrator.step(
-                            session.agent_state, history, text,
-                            tenant_id=session.tenant_id,
-                            profile_id=session.profile_id,
-                        )
-
-                        if response.text:
-                            async for chunk in session.speak_stream(
-                                response.text,
-                                sentiment=response.sentiment,
-                                latency_ms=response.latency_ms,
-                            ):
-                                await websocket.send_json({
-                                    "event": "media",
-                                    "media": {
-                                        "payload": base64.b64encode(chunk).decode("utf-8"),
-                                    },
-                                })
-
-                        if response.needs_agent:
-                            await websocket.send_json({
-                                "event": "mark",
-                                "mark": {"name": "handoff"},
-                            })
+                await _handle_media_chunk(
+                    websocket, data, session, session_id,
+                    call_sid, orchestrator, tenant_id,
+                )
 
             elif event == "stop":
                 logger.info("media_stream_stopped", data=data)
-                if session_id:
-                    remove_session(websocket.app, session_id)
-                if call_sid:
-                    from api.routers.realtime import (
-                        cleanup_call_transcripts,
-                        manager,
-                    )
-                    manager.unregister_voice_ws(call_sid)
-                    cleanup_call_transcripts(call_sid)
+                await _handle_media_stop(websocket, data, session_id, call_sid)
 
     except WebSocketDisconnect:
         logger.info("websocket_disconnected", session_id=session_id)
-        if session_id:
-            remove_session(websocket.app, session_id)
-        if call_sid:
-            from api.routers.realtime import cleanup_call_transcripts, manager
-            manager.unregister_voice_ws(call_sid)
-            cleanup_call_transcripts(call_sid)
+        await _handle_media_stop(websocket, {}, session_id, call_sid)
 
     except Exception as e:
         logger.error("media_stream_error", session_id=session_id, error=str(e))
-        if session_id:
-            remove_session(websocket.app, session_id)
-        if call_sid:
-            from api.routers.realtime import cleanup_call_transcripts, manager
-            manager.unregister_voice_ws(call_sid)
-            cleanup_call_transcripts(call_sid)
+        await _handle_media_stop(websocket, {}, session_id, call_sid)
 
 
 # =============================================================================

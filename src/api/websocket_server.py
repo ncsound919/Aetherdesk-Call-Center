@@ -21,18 +21,30 @@ redis_client = None
 # Connected clients
 connected_clients = {}
 
+# Max connections from env var (default 1000)
+MAX_CONNECTIONS = int(os.getenv("WS_MAX_CONNECTIONS", "1000"))
+
+# Idle timeout in seconds (30 minutes)
+IDLE_TIMEOUT = int(os.getenv("WS_IDLE_TIMEOUT", "1800"))
+
 # Track fire-and-forget tasks
 _background_tasks: set = set()
 
 
 async def register_client(websocket, path):
     """Register a new client connection"""
+    if len(connected_clients) >= MAX_CONNECTIONS:
+        await websocket.close(1013, "Server at capacity")
+        logger.warning("Connection rejected: server at capacity")
+        return None
     client_id = f"client_{datetime.now(UTC).timestamp()}"
+    now = datetime.now(UTC)
     connected_clients[client_id] = {
         "websocket": websocket,
         "tenant_id": None,
         "agent_id": None,
-        "connected_at": datetime.now(UTC).isoformat(),
+        "connected_at": now.isoformat(),
+        "last_activity": now,
     }
     logger.info(f"Client registered: {client_id}")
     return client_id
@@ -47,6 +59,7 @@ async def unregister_client(client_id):
 
 async def handle_message(websocket, message, client_id):
     """Handle incoming messages from clients"""
+    connected_clients[client_id]["last_activity"] = datetime.now(UTC)
     try:
         data = json.loads(message)
         message_type = data.get("type")
@@ -172,10 +185,20 @@ async def health_monitor():
     """Periodic health check and cleanup"""
     while True:
         await asyncio.sleep(60)
+        now = datetime.now(UTC)
         disconnected = []
+        idle_clients = []
         for client_id, client in connected_clients.items():
             if client["websocket"].closed:
                 disconnected.append(client_id)
+            else:
+                last_activity = client.get("last_activity")
+                if last_activity and (now - last_activity).total_seconds() > IDLE_TIMEOUT:
+                    idle_clients.append(client_id)
+
+        for client_id in idle_clients:
+            logger.info(f"Evicting idle client: {client_id}")
+            await unregister_client(client_id)
 
         for client_id in disconnected:
             await unregister_client(client_id)

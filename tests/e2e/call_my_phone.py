@@ -1,5 +1,5 @@
 """
-Call 984-365-6059 — test the full voice pipeline.
+Call 555-123-4567 — test the full voice pipeline.
 
 Without Twilio credentials, the call won't actually dial, but we'll
 exercise every component of the pipeline end-to-end.
@@ -8,7 +8,7 @@ import json
 import httpx
 
 API = "http://localhost:8000"
-PHONE = "+19843656059"
+PHONE = "+15551234567"
 H = {"x-api-key": "dev-api-key"}
 
 print(f"Calling {PHONE} via AetherDesk voice pipeline...")

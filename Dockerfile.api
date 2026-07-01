@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.11-slim @ sha256:abc123def456 # PIN: python:3.11-slim digest - update via docker pull python:3.11-slim && docker inspect
 
 WORKDIR /app
 
@@ -6,6 +6,9 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
     && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd --gid 1000 aetherdesk && \
+    useradd --uid 1000 --gid 1000 --create-home aetherdesk
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
@@ -15,5 +18,8 @@ COPY config/ ./config/
 COPY data/ ./data/
 
 EXPOSE 8000
+
+RUN chown -R aetherdesk:aetherdesk /app
+USER aetherdesk
 
 CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

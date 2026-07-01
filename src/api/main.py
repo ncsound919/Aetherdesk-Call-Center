@@ -302,11 +302,20 @@ async def lifespan(app: FastAPI):
                     pool = await get_pg_pool()
                     if pool:
                         cutoff = datetime.now(UTC) - timedelta(days=retention_days)
+                        # Phase 1: flag records for deletion
                         await pool.execute(
                             "UPDATE recordings SET pii_redacted = TRUE, retention_until = NOW() WHERE created_at < $1 AND pii_redacted = FALSE",
                             cutoff
                         )
-                        logger.info("retention_cleanup_completed", purged_before=cutoff.isoformat())
+                        logger.info("retention_flag_completed", purged_before=cutoff.isoformat())
+                        # Phase 2: hard-delete records past retention_until
+                        del_trans = await pool.execute(
+                            "DELETE FROM transcriptions WHERE retention_until IS NOT NULL AND retention_until < NOW()"
+                        )
+                        del_recs = await pool.execute(
+                            "DELETE FROM recordings WHERE retention_until IS NOT NULL AND retention_until < NOW()"
+                        )
+                        logger.info("retention_hard_delete_completed", transcriptions=del_trans, recordings=del_recs)
                 else:
                     import datetime as dt
 
@@ -314,12 +323,25 @@ async def lifespan(app: FastAPI):
                     conn = _get_sqlite_conn()
                     try:
                         cutoff = (dt.datetime.now(dt.UTC) - dt.timedelta(days=retention_days)).isoformat()
+                        # Phase 1: flag records for deletion
                         conn.execute(
                             "UPDATE recordings SET pii_redacted = 1, retention_until = ? WHERE created_at < ? AND pii_redacted = 0",
                             (dt.datetime.now(dt.UTC).isoformat(), cutoff)
                         )
                         conn.commit()
-                        logger.info("retention_cleanup_completed")
+                        logger.info("retention_flag_completed")
+                        # Phase 2: hard-delete records past retention_until
+                        now_iso = dt.datetime.now(dt.UTC).isoformat()
+                        del_trans = conn.execute(
+                            "DELETE FROM transcriptions WHERE retention_until IS NOT NULL AND retention_until < ?",
+                            (now_iso,)
+                        ).rowcount
+                        del_recs = conn.execute(
+                            "DELETE FROM recordings WHERE retention_until IS NOT NULL AND retention_until < ?",
+                            (now_iso,)
+                        ).rowcount
+                        conn.commit()
+                        logger.info("retention_hard_delete_completed", transcriptions=del_trans, recordings=del_recs)
                     finally:
                         conn.close()
             except Exception as e:
@@ -457,22 +479,22 @@ app.include_router(voice_cloning.router, prefix="/api/v1")
 app.include_router(agent.router, prefix="/api/v1")
 app.include_router(agents.router, prefix="/api/v1")
 app.include_router(tenants.router, prefix="/api/v1")
-app.include_router(realtime.router)
-app.include_router(engine.router)
+app.include_router(realtime.router, prefix="/api/v1")
+app.include_router(engine.router, prefix="/api/v1")
 app.include_router(saas.router, prefix="/api/v1")
-app.include_router(protocols.router)
+app.include_router(protocols.router, prefix="/api/v1")
 app.include_router(campaign.router, prefix="/api/v1")
 app.include_router(auth.router, prefix="/api/v1")
 app.include_router(billing.router, prefix="/api/v1")
 app.include_router(onboarding.router, prefix="/api/v1")
 app.include_router(leads.router, prefix="/api/v1")
 app.include_router(scripts.router, prefix="/api/v1")
-app.include_router(webhooks_twilio.router)
-app.include_router(webhooks_fonster.router)
+app.include_router(webhooks_twilio.router, prefix="/api/v1")
+app.include_router(webhooks_fonster.router, prefix="/api/v1")
 app.include_router(calls.router, prefix="/api/v1")
-app.include_router(health.router)
+app.include_router(health.router, prefix="/api/v1")
 app.include_router(usage.router, prefix="/api/v1")
-app.include_router(metabase.router)
+app.include_router(metabase.router, prefix="/api/v1")
 app.include_router(wfm.router, prefix="/api/v1")
 app.include_router(security.router, prefix="/api/v1")
 app.include_router(voice_quality.router, prefix="/api/v1")

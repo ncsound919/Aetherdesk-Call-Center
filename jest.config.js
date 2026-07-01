@@ -21,5 +21,13 @@ module.exports = {
     'agent-ui/src/**/*.{js,jsx,tsx,ts}',
     '!scripts/**/*.test.{js,jsx}',
     '!agent-ui/src/**/*.test.{js,jsx,tsx,ts}'
-  ]
+  ],
+  coverageThreshold: {
+    global: {
+      statements: 70,
+      branches: 70,
+      functions: 70,
+      lines: 70,
+    }
+  }
 };

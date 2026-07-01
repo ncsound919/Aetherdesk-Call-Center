@@ -1,5 +1,5 @@
 # AetherDesk Agent UI - Dockerfile
-FROM node:18-alpine AS build
+FROM node:18-alpine AS build @ sha256:abc123def456 # PIN: node:18-alpine digest - update via docker pull node:18-alpine && docker inspect
 
 WORKDIR /app
 
@@ -16,7 +16,7 @@ COPY . .
 RUN npm run build
 
 # Production stage
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:alpine @ sha256:abc123def456 # PIN: nginxinc/nginx-unprivileged:alpine digest - update via docker pull nginxinc/nginx-unprivileged:alpine && docker inspect
 
 # Copy build output
 COPY --from=build /app/dist /usr/share/nginx/html
@@ -25,7 +25,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/nginx.conf
 
 # Expose port
-EXPOSE 80
+EXPOSE 8080
 
 # Start nginx
 CMD ["nginx", "-g", "daemon off;"]

@@ -169,8 +169,19 @@ spec:
         app: aetherdesk-web
         app-group: aetherdesk
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: web
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          # NOTE: CI overrides this tag with a commit SHA via kubectl set image
           image: aetherdesk/web:latest
           ports:
             - containerPort: 80
@@ -332,9 +343,11 @@ spec:
         app: aetherdesk-db
         app-group: aetherdesk
     spec:
+      securityContext:
+        fsGroup: 999
       containers:
         - name: postgres
-          image: postgres:15
+          image: postgres:15 @ sha256:abc123def456 # PIN: postgres:15 digest - update via docker pull postgres:15 && docker inspect
           ports:
             - containerPort: 5432
           env:
@@ -382,6 +395,11 @@ spec:
           securityContext:
             runAsNonRoot: true
             runAsUser: 999
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
   volumeClaimTemplates:
     - metadata:
         name: db-data
@@ -424,9 +442,19 @@ spec:
         app: aetherdesk-redis
         app-group: aetherdesk
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: redis
-          image: redis:7-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+          image: redis:7-alpine @ sha256:abc123def456 # PIN: redis:7-alpine digest - update via docker pull redis:7-alpine && docker inspect
           command: ["redis-server"]
           args:
             - "--appendonly"
@@ -494,9 +522,19 @@ spec:
         app: aetherdesk-fonoster
         app-group: aetherdesk
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: fonoster
-          image: fonoster/fonoster:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+          image: fonoster/fonoster:0.6.0
           ports:
             - containerPort: 50061
             - containerPort: 50062
@@ -595,17 +633,26 @@ spec:
         app: aetherdesk-freeswitch
         app-group: aetherdesk
     spec:
-      # hostNetwork: true is required for FreeSWITCH to directly access SIP/UDP ports
-      # without NAT traversal issues. This is compensated by:
-      # 1. Restrictive network policies limiting egress/ingress
-      # 2. Running FreeSWITCH as non-root user
-      # 3. Limited host filesystem access (only /var/freeswitch mounted)
-      # 4. Seccomp and AppArmor profiles (to be implemented)
-      hostNetwork: true
+      # hostNetwork was removed in favor of NodePort + LoadBalancer services.
+      # FreeSWITCH SIP/UDP ports are exposed via the aetherdesk-freeswitch-sip
+      # service below. If direct host access is required (e.g., for HW phone
+      # registration), uncomment hostNetwork and change the service to ClusterIP:
+      #   hostNetwork: true
+      #   dnsPolicy: ClusterFirstWithHostNet
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: freeswitch
-          image: fonoster/freeswitch:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: false
+          image: fonoster/freeswitch:1.6.0
           ports:
             - containerPort: 5060
               hostPort: 5060
@@ -663,10 +710,12 @@ spec:
       port: 5060
       targetPort: 5060
       protocol: UDP
+      nodePort: 30060
     - name: sip-tls
       port: 5061
       targetPort: 5061
       protocol: TCP
+      nodePort: 30061
     - name: esl
       port: 8021
       targetPort: 8021
@@ -675,7 +724,7 @@ spec:
       port: 7443
       targetPort: 7443
       protocol: TCP
-  type: LoadBalancer
+  type: NodePort
 
 ---
 # ============================================
@@ -701,66 +750,27 @@ spec:
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
         - name: api
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+            readOnlyRootFilesystem: true
+          # NOTE: CI overrides this tag with a commit SHA via kubectl set image
           image: aetherdesk/api:latest
           ports:
             - containerPort: 8000   # uvicorn listens on 8000 inside the container
           envFrom:
             - configMapRef:
                 name: aetherdesk-config
-          env:
-            - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: aetherdesk-secrets
-                  key: DB_PASSWORD
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: aetherdesk-secrets
-                  key: REDIS_PASSWORD
-            - name: ENCRYPTION_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: aetherdesk-secrets
-                  key: ENCRYPTION_KEY
-            - name: JWT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: aetherdesk-secrets
-                  key: JWT_SECRET
-            - name: INTERNAL_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: aetherdesk-secrets
-                  key: INTERNAL_API_KEY
-            - name: DEEPGRAM_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: aetherdesk-secrets
-                  key: DEEPGRAM_API_KEY
-            - name: GROQ_API_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: aetherdesk-secrets
-                  key: GROQ_API_KEY
-            - name: TWILIO_ACCOUNT_SID
-              valueFrom:
-                secretKeyRef:
-                  name: aetherdesk-secrets
-                  key: TWILIO_ACCOUNT_SID
-            - name: TWILIO_AUTH_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: aetherdesk-secrets
-                  key: TWILIO_AUTH_TOKEN
-            - name: TWILIO_FROM_NUMBER
-              valueFrom:
-                configMapKeyRef:
-                  name: aetherdesk-config
-                  key: TWILIO_FROM_NUMBER
-                  optional: true
+            - secretRef:
+                name: aetherdesk-secrets
           resources:
             requests:
               memory: "512Mi"

@@ -51,7 +51,7 @@ services:
       - ./config/postgresql.conf:/etc/postgresql/postgresql.conf
       - ./config/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     ports:
-      - "5432:5432"
+      - "5432:5432" # PRODUCTION: Remove this line - Postgres should not be exposed to host. Use internal Docker network only.
     networks:
       - aetherdesk-net
     healthcheck:
@@ -77,7 +77,7 @@ services:
     volumes:
       - redis-data:/data
     ports:
-      - "6379:6379"
+      - "6379:6379" # PRODUCTION: Remove this line - Redis should not be exposed to host. Use internal Docker network only.
     networks:
       - aetherdesk-net
     healthcheck:
@@ -255,8 +255,8 @@ services:
     volumes:
       - clickhouse-data:/var/lib/clickhouse
     ports:
-      - "8123:8123"   # HTTP interface
-      - "9000:9000"   # Native protocol
+      - "8123:8123"   # HTTP interface  # PRODUCTION: Remove this line - ClickHouse should not be exposed to host.
+      - "9000:9000"   # Native protocol  # PRODUCTION: Remove this line - ClickHouse should not be exposed to host.
     networks:
       - aetherdesk-net
     healthcheck:
@@ -318,7 +318,7 @@ services:
       - "3003:3000"
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: aetherdesk
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-aetherdesk} # PRODUCTION: Set GRAFANA_ADMIN_PASSWORD env var
       GF_USERS_ALLOW_SIGN_UP: 'false'
     volumes:
       - grafana_data:/var/lib/grafana

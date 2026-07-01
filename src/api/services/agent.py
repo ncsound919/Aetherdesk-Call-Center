@@ -5,6 +5,7 @@ from typing import Any
 
 import httpx
 import structlog
+from pydantic import BaseModel, Field, ValidationError
 
 logger = structlog.get_logger()
 
@@ -31,6 +32,28 @@ class AgentResponse:
     sources: list[str]
     needs_agent: bool
     action_taken: str | None = None
+
+
+class LookupInvoiceInput(BaseModel):
+    invoice_id: str = Field(..., min_length=1, description="The invoice ID to look up")
+
+class GetOrderStatusInput(BaseModel):
+    order_id: str = Field(..., min_length=1, description="The order ID to check")
+
+class SearchKnowledgeBaseInput(BaseModel):
+    query: str = Field(..., min_length=1, description="The search query for the knowledge base")
+
+class HandoffToHumanInput(BaseModel):
+    reason: str = Field(..., min_length=1, description="The reason for handing off to a human agent")
+
+class ToolCallResponse(BaseModel):
+    thought: str = Field(default="")
+    response: str = Field(..., min_length=1)
+
+class ToolCallAction(BaseModel):
+    thought: str = Field(default="")
+    tool: str = Field(..., min_length=1)
+    tool_input: str = Field(default="")
 
 
 class AgentService:
@@ -150,6 +173,8 @@ class DynamicAgent:
         self._client: httpx.AsyncClient | None = None
         self.actions = actions
 
+        self._pending_handoff: str | None = None
+
         self.system_prompt = """You are Aether, an autonomous AI call center agent.
 You have access to the following tools:
 - lookup_invoice(invoice_id): Returns the status and amount of an invoice.
@@ -175,19 +200,23 @@ Keep your responses natural, conversational, and concise for voice interaction.
         from api.services.rag import rag_service
 
         if tool_name == "lookup_invoice":
-            res = self.actions.run("lookup_invoice", {"invoice_id": tool_input})
+            validated = LookupInvoiceInput(invoice_id=tool_input)
+            res = self.actions.run("lookup_invoice", {"invoice_id": validated.invoice_id})
             if res.get("success"):
-                return f"Invoice {tool_input} found. Status: Paid, Amount: $42.00"
-            return f"Could not find invoice {tool_input}"
+                return f"Invoice {validated.invoice_id} found. Status: Paid, Amount: $42.00"
+            return f"Could not find invoice {validated.invoice_id}"
         elif tool_name == "get_order_status":
-            return f"Order {tool_input} is currently processing and will ship tomorrow."
+            validated = GetOrderStatusInput(order_id=tool_input)
+            return f"Order {validated.order_id} is currently processing and will ship tomorrow."
         elif tool_name == "search_knowledge_base":
-            results = await rag_service.query(tool_input, k=2)
+            validated = SearchKnowledgeBaseInput(query=tool_input)
+            results = await rag_service.query(validated.query, k=2)
             if not results:
                 return "No information found."
             return "\n".join([f"- {r['content']}" for r in results])
         elif tool_name == "handoff_to_human":
-            self.actions.run("handoff", {"queue": "general", "reason": tool_input})
+            validated = HandoffToHumanInput(reason=tool_input)
+            self.actions.run("handoff", {"queue": "general", "reason": validated.reason})
             return "Handoff initiated."
         else:
             return f"Unknown tool: {tool_name}"
@@ -228,9 +257,15 @@ Keep your responses natural, conversational, and concise for voice interaction.
 
                     try:
                         parsed = json.loads(ai_msg)
-                        break # Success, exit retry loop
-                    except json.JSONDecodeError:
-                        logger.warning("agent_json_parse_error", raw=ai_msg)
+                        if "response" in parsed:
+                            ToolCallResponse(**parsed)
+                        elif "tool" in parsed:
+                            ToolCallAction(**parsed)
+                        else:
+                            raise ValueError("Agent output must contain 'response' or 'tool'")
+                        break
+                    except (json.JSONDecodeError, ValidationError, ValueError) as e:
+                        logger.warning("agent_json_parse_error", raw=ai_msg, error=str(e))
                         if attempt == 0:
                             messages.append({"role": "assistant", "content": ai_msg})
                             messages.append({"role": "user", "content": "Your response was not valid JSON. Please repeat but ensure valid JSON format."})
@@ -258,6 +293,14 @@ Keep your responses natural, conversational, and concise for voice interaction.
                 # SUPERVISION CHECK
                 if tool_name == "handoff_to_human":
                     needs_agent = True
+                    if self._pending_handoff != tool_input:
+                        self._pending_handoff = tool_input
+                        tool_result = f"Confirmation required: Are you sure you want to transfer to a human agent? Reason: {tool_input}. Reply with the same handoff tool call to confirm."
+                        messages.append({"role": "assistant", "content": ai_msg})
+                        messages.append({"role": "user", "content": f"Tool '{tool_name}' needs confirmation: {tool_result}"})
+                        action_taken = "confirmation_pending"
+                        continue
+                    self._pending_handoff = None
 
                 tool_result = await self._execute_tool(tool_name, tool_input)
                 logger.info("agent_tool_result", result=tool_result)

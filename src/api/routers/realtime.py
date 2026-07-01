@@ -112,8 +112,8 @@ async def websocket_agent(websocket: WebSocket, agent_id: str):
             try:
                 await pubsub.unsubscribe(f"agent:{agent_id}:assignments")
                 await pubsub.close()
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning("pubsub_cleanup_error", error=str(e), agent_id=agent_id)
 
 _default_store = TranscriptStore()
 
@@ -280,8 +280,7 @@ def broadcast_transcript(call_sid: str, transcript_entry: dict, store: Transcrip
             "data": transcript_entry
         }))
     except RuntimeError:
-        # No running event loop (e.g., called from sync context in tests)
-        pass
+        logger.warning("broadcast_no_event_loop", call_sid=call_sid)
 
 
 @router.websocket("/call/{call_sid}")

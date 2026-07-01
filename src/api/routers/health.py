@@ -12,7 +12,6 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="", tags=["health"])
 
 
-@router.get("/api/v1/health", response_model=HealthCheck)
 @router.get("/health", response_model=HealthCheck)
 async def health_check(request: Request):
     """Health check endpoint with service status"""

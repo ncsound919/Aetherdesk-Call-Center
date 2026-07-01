@@ -13,7 +13,7 @@ print(f"fonster_connected: {data.get('fonster_connected')}")
 
 # Make a call and check if Twilio receives it
 r = httpx.post(f"{BASE}/api/v1/auth/login",
-    json={"email": "admin@aetherdesk.com", "password": "admin123"}, timeout=10)
+    json={"email": "admin@aetherdesk.com", "password": "test-admin-password"}, timeout=10)
 t = r.json()["token"]
 tid = r.json()["tenantId"]
 
@@ -22,7 +22,7 @@ r = httpx.get(f"{BASE}/api/v1/tenants/{tid}/agents",
 aid = r.json()[0]["id"]
 
 r = httpx.post(f"{BASE}/api/v1/calls?tenant_id={tid}",
-    json={"agent_id": aid, "caller_number": "+19843656059", "call_direction": "outbound"},
+    json={"agent_id": aid, "caller_number": "+15551234567", "call_direction": "outbound"},
     headers={"x-api-key": "dev-api-key"}, timeout=30)
 print(f"Call: {r.status_code}")
 if r.status_code == 201:

@@ -201,7 +201,7 @@ class TestHandleFonsterWebhook:
 class TestFonsterWebhookEndpoint:
     """Tests for POST /api/v1/webhooks/fonster."""
 
-    WEBHOOK_PATH = "/api/v1/webhooks/fonster"
+    WEBHOOK_PATH = "/webhooks/fonster"
 
     # -- call.answered ---------------------------------------------------------
 

@@ -28,7 +28,7 @@ from api.services.auth import verify_tenant_access
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/metabase", tags=["metabase"])
+router = APIRouter(prefix="/metabase", tags=["metabase"])
 
 
 # ---------------------------------------------------------------------------

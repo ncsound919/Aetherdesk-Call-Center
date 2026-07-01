@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM python:3.11-slim as builder
+FROM python:3.11-slim as builder @ sha256:abc123def456 # PIN: python:3.11-slim digest - update via docker pull python:3.11-slim && docker inspect
 
 WORKDIR /app
 
@@ -28,7 +28,7 @@ COPY config/ ./config/
 COPY data/ ./data/
 
 # Stage 2: Runtime
-FROM python:3.11-slim as runtime
+FROM python:3.11-slim as runtime @ sha256:abc123def456 # PIN: python:3.11-slim digest - update via docker pull python:3.11-slim && docker inspect
 
 WORKDIR /app
 

@@ -314,26 +314,26 @@ class TestMetabaseE2E:
         with TestClient(app) as client:
             with patch("api.routers.metabase.is_clickhouse_enabled", return_value=False):
                 # Stats
-                resp = client.get("/api/v1/metabase/stats")
+                resp = client.get("/metabase/stats")
                 assert resp.status_code == 200
                 assert resp.json()["source"] == "mock"
 
                 # Intents
-                resp = client.get("/api/v1/metabase/intents")
+                resp = client.get("/metabase/intents")
                 assert resp.status_code == 200
                 assert resp.json()["source"] == "mock"
 
                 # Agents
-                resp = client.get("/api/v1/metabase/agents")
+                resp = client.get("/metabase/agents")
                 assert resp.status_code == 200
                 assert resp.json()["source"] == "mock"
 
                 # Hourly
-                resp = client.get("/api/v1/metabase/hourly")
+                resp = client.get("/metabase/hourly")
                 assert resp.status_code == 200
                 assert resp.json()["source"] == "mock"
 
                 # Embed
-                resp = client.get("/api/v1/metabase/embed/42")
+                resp = client.get("/metabase/embed/42")
                 assert resp.status_code == 200
                 assert resp.json()["configured"] is False

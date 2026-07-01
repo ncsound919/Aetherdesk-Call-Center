@@ -12,6 +12,12 @@ from fastapi.testclient import TestClient
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _clean_env(monkeypatch):
+    monkeypatch.delenv("TWILIO_AUTH_TOKEN", raising=False)
+    monkeypatch.setenv("APP_ENV", "development")
+
+
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with just the webhooks_twilio router."""

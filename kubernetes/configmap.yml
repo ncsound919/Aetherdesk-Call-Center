@@ -1,6 +1,17 @@
 # ============================================
 # AetherDesk Call Center - ConfigMap
 # Centralized configuration for all services
+#
+# ⚠️  WARNING — Sensitive values below
+#  (DEEPGRAM_API_KEY, GROQ_API_KEY, SIP_TRUNK_*)
+#  are stored as plaintext ConfigMap data with
+#  placeholder values ("REPLACE_WITH_*").
+#  These MUST be moved to a Kubernetes Secret and
+#  referenced via secretKeyRef or envFrom.secretRef.
+#
+#  See the SealedSecret in this directory for the
+#  encrypted manifest template:
+#    kubernetes/deployment.yml  (aetherdesk-secrets)
 # ============================================
 apiVersion: v1
 kind: ConfigMap

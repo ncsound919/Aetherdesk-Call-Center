@@ -281,6 +281,7 @@ async def import_leads(
 
         if not lead_data.get("phone"):
             errors.append({"row": i + 1, "error": "Missing phone number"})
+            logger.warning("lead_import_validation_error", row=i + 1, error="Missing phone number")
             continue
 
         try:
@@ -299,7 +300,8 @@ async def import_leads(
             )
             imported += 1
         except Exception as e:
-            errors.append({"row": i + 1, "error": str(e)})
+            logger.error("lead_import_db_error", row=i + 1, error=str(e))
+            errors.append({"row": i + 1, "error": f"DB error: {str(e)}"})
 
     logger.info("leads_imported", imported=imported, errors=len(errors), tenant_id=tenant_id)
     return {

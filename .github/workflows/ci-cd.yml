@@ -76,7 +76,7 @@ jobs:
         run: npm ci
       - name: Run frontend tests
         working-directory: agent-ui
-        run: npx jest --coverage
+        run: npx jest --ci --coverage
 
   # ============================================
   # Dependency and Secret Scanning
@@ -93,6 +93,11 @@ jobs:
         run: pip install safety
       - name: Scan dependencies for vulnerabilities
         run: safety check -r requirements.txt --continue-on-error
+        continue-on-error: true
+      - name: pip-audit
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --desc on --ignore-vuln PGHOST=0
         continue-on-error: true
       - name: Check for .env committed
         run: |
@@ -201,6 +206,16 @@ jobs:
     needs: [test, loadtest]
     steps:
       - uses: actions/checkout@v4
+
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: 1
+          severity: HIGH,CRITICAL
+        continue-on-error: true
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

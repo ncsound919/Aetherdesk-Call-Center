@@ -98,7 +98,7 @@ class TestIncomingCall:
                 json={
                     "sessionRef": "sess-abc-123",
                     "ingressNumber": "+15551234567",
-                    "tenantId": "tenant-1",
+                    "tenantId": "550e8400-e29b-41d4-a716-446655440010",
                     "profileId": "PROF-001",
                 },
             )
@@ -108,7 +108,7 @@ class TestIncomingCall:
             assert body["endpoint"] == "tcp://aetherdesk-voice:50061"
             assert body["metadata"]["session_ref"] == "sess-abc-123"
             assert body["metadata"]["call_sid"] == "sess-abc-123"
-            assert body["metadata"]["tenant_id"] == "tenant-1"
+            assert body["metadata"]["tenant_id"] == "550e8400-e29b-41d4-a716-446655440010"
             assert body["metadata"]["profile_id"] == "PROF-001"
             mock_create.assert_called_once()
 
@@ -135,14 +135,14 @@ class TestIncomingCall:
                 data={
                     "session_ref": "sess-form-456",
                     "from": "+15559876543",
-                    "tenant_id": "tenant-2",
+                    "tenant_id": "550e8400-e29b-41d4-a716-446655440011",
                 },
             )
             assert resp.status_code == 200
             body = resp.json()
             assert body["verb"] == "connect"
             assert body["metadata"]["session_ref"] == "sess-form-456"
-            assert body["metadata"]["tenant_id"] == "tenant-2"
+            assert body["metadata"]["tenant_id"] == "550e8400-e29b-41d4-a716-446655440011"
 
     def test_incoming_empty_body_uses_defaults(self, client):
         """Sending empty/malformed body uses defaults (uuid session, no tenant)."""
@@ -338,7 +338,7 @@ class TestIncomingCallEdgeCases:
                 json={
                     "sessionRef": "sess-abc-123",
                     "ingressNumber": "+15551234567",
-                    "tenantId": "tenant-1",
+                    "tenantId": "550e8400-e29b-41d4-a716-446655440012",
                 },
             )
             assert resp.status_code == 200

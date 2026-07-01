@@ -87,7 +87,7 @@ class TestHandleIncomingCall:
                 json={
                     "sessionRef": "sess-001",
                     "ingressNumber": "+15550001111",
-                    "tenantId": "TENANT-A",
+                    "tenantId": "550e8400-e29b-41d4-a716-446655440000",
                     "profileId": "PROF-X",
                 },
             )
@@ -98,7 +98,7 @@ class TestHandleIncomingCall:
             meta = body["metadata"]
             assert meta["session_ref"] == "sess-001"
             assert meta["call_sid"] == "sess-001"
-            assert meta["tenant_id"] == "TENANT-A"
+            assert meta["tenant_id"] == "550e8400-e29b-41d4-a716-446655440000"
             assert meta["profile_id"] == "PROF-X"
 
     def test_creates_call_session_in_db(self):
@@ -109,12 +109,12 @@ class TestHandleIncomingCall:
                 json={
                     "sessionRef": "sess-db-001",
                     "ingressNumber": "+15550002222",
-                    "tenantId": "TENANT-B",
+                    "tenantId": "550e8400-e29b-41d4-a716-446655440001",
                     "to": "+15550003333",
                 },
             )
             mock_create.assert_awaited_once_with(
-                tenant_id="TENANT-B",
+                tenant_id="550e8400-e29b-41d4-a716-446655440001",
                 agent_id=None,
                 caller_number="+15550002222",
                 called_number="+15550003333",
@@ -140,12 +140,12 @@ class TestHandleIncomingCall:
                 data={
                     "session_ref": "sess-form-789",
                     "from": "+15550004444",
-                    "tenant_id": "TENANT-C",
+                    "tenant_id": "550e8400-e29b-41d4-a716-446655440002",
                 },
             )
             body = resp.json()
             assert body["metadata"]["session_ref"] == "sess-form-789"
-            assert body["metadata"]["tenant_id"] == "TENANT-C"
+            assert body["metadata"]["tenant_id"] == "550e8400-e29b-41d4-a716-446655440002"
 
     def test_db_failure_still_returns_connect(self):
         """DB error in create_call_session does not block the response."""
@@ -153,7 +153,7 @@ class TestHandleIncomingCall:
             mock_create.side_effect = RuntimeError("DB unavailable")
             resp = client.post(
                 "/voice/incoming",
-                json={"sessionRef": "sess-fail-001", "tenantId": "TENANT-D"},
+                json={"sessionRef": "sess-fail-001", "tenantId": "550e8400-e29b-41d4-a716-446655440003"},
             )
             assert resp.status_code == 200
             assert resp.json()["verb"] == "connect"
