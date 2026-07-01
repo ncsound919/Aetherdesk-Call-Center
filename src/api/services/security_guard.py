@@ -105,6 +105,28 @@ def redact_pii(text: str, return_detailed: bool = False) -> str:
 
     return text
 
+
+def mask_phone(phone: str | None) -> str:
+    """Mask a phone number for logging, keeping only the last 4 digits."""
+    if not phone:
+        return ""
+    digits = re.sub(r"\D", "", phone)
+    if len(digits) <= 4:
+        return "*" * len(digits)
+    return "*" * (len(digits) - 4) + digits[-4:]
+
+
+def mask_email(email: str | None) -> str:
+    """Mask an email address for logging (e.g. jo**@example.com)."""
+    if not email or "@" not in email:
+        return "***" if email else ""
+    local, _, domain = email.partition("@")
+    if len(local) <= 2:
+        masked_local = local[:1] + "*"
+    else:
+        masked_local = local[:2] + "*" * (len(local) - 2)
+    return f"{masked_local}@{domain}"
+
 # Lazy initialization happens on first use; do NOT init at import time
 
 

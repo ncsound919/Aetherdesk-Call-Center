@@ -71,7 +71,8 @@ async def _create_checkout(request: SignupRequest):
 
     # Mock mode for development without Stripe keys
     if not stripe_secret or stripe_secret == "":
-        logger.info(f"[MOCK] Stripe checkout for {request.email}, tier={request.tier}")
+        from api.services.security_guard import mask_email
+        logger.info(f"[MOCK] Stripe checkout for {mask_email(request.email)}, tier={request.tier}")
         return SignupResponse(
             status="mock_checkout",
             checkout_url=f"https://overlay365.com/aetherdesk/mock-checkout?email={request.email}&tier={request.tier}",
@@ -98,7 +99,8 @@ async def _create_checkout(request: SignupRequest):
             success_url=os.getenv("STRIPE_SUCCESS_URL", "http://localhost:5173/billing?success=true"),
             cancel_url=os.getenv("STRIPE_CANCEL_URL", "http://localhost:5173/billing?canceled=true"),
         )
-        logger.info(f"Stripe checkout created: email={request.email}, tier={request.tier}")
+        from api.services.security_guard import mask_email
+        logger.info(f"Stripe checkout created: email={mask_email(request.email)}, tier={request.tier}")
         return SignupResponse(
             status="success",
             checkout_url=checkout_session.url,

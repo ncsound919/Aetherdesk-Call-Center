@@ -279,7 +279,8 @@ async def register(credentials: RegisterRequest):
         role="owner"
     )
 
-    logger.info("user_registered", user_id=result["id"], email=credentials.email)
+    from api.services.security_guard import mask_email
+    logger.info("user_registered", user_id=result["id"], email=mask_email(credentials.email))
 
     return RegisterResponse(
         message="Account created. Please check your email to verify your account.",
@@ -336,6 +337,12 @@ async def reset_password(credentials: ResetPasswordRequest):
 # AgentBrowser and any other Overlay service via overlay-365-shared/auth.js.
 
 OVERLAY_MASTER_KEY = os.getenv("OVERLAY_MASTER_KEY", "")
+if not OVERLAY_MASTER_KEY:
+    _auth_logger.warning(
+        "OVERLAY_MASTER_KEY is not set; Overlay 365 token endpoints "
+        "(/v1/auth/token, /v1/auth/validate) will reject all requests "
+        "with 503 until it is configured."
+    )
 
 
 class OverlayTokenRequest(BaseModel):
@@ -365,6 +372,9 @@ def base64url_encode(data: str) -> str:
 
 def _verify_overlay_token(token: str, secret: str) -> dict | None:
     """Verify HMAC-SHA256 signed overlay token. Returns payload or None."""
+    import base64
+    import binascii
+
     try:
         parts = token.split(".")
         if len(parts) != 3:
@@ -374,7 +384,6 @@ def _verify_overlay_token(token: str, secret: str) -> dict | None:
         if not hmac.compare_digest(sig, expected_sig):
             return None
         # Decode payload
-        import base64
         payload_b64 = parts[1]
         # Add padding
         payload_b64 += "=" * (4 - len(payload_b64) % 4)
@@ -383,7 +392,13 @@ def _verify_overlay_token(token: str, secret: str) -> dict | None:
         if payload.get("exp", 0) < time.time():
             return None
         return payload
-    except Exception:
+    except (ValueError, KeyError, TypeError, binascii.Error, json.JSONDecodeError) as e:
+        # Malformed token content after signature check passed — treat as invalid.
+        logger.debug("overlay_token_malformed", error=str(e))
+        return None
+    except Exception as e:
+        # Unexpected error — log for visibility but still deny the token.
+        logger.error("overlay_token_verify_unexpected_error", error=str(e))
         return None
 
 

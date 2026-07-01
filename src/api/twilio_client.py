@@ -3,6 +3,8 @@ import os
 
 from twilio.rest import Client as TwilioRestClient
 
+from api.services.security_guard import mask_phone
+
 logger = logging.getLogger(__name__)
 
 
@@ -68,7 +70,7 @@ class TwilioVoiceClient:
         voice_url = f"{self.webhook_base}/webhooks/twilio/voice"
 
         if self.client is None:
-            logger.info(f"MOCK call to {to_phone} from {caller_id} — Twilio not configured")
+            logger.info(f"MOCK call to {mask_phone(to_phone)} from {mask_phone(caller_id)} — Twilio not configured")
             import time as _time
             self._call_created_at[call_sid] = _time.time()
             self.active_calls[call_sid] = {
@@ -107,7 +109,7 @@ class TwilioVoiceClient:
                 "status": "initiated",
                 "ref": sid,
             }
-            logger.info(f"Twilio call placed: {sid} -> {to_phone}")
+            logger.info(f"Twilio call placed: {sid} -> {mask_phone(to_phone)}")
             return {"ref": sid, "status": "queued", "sid": sid}
 
         except Exception as e:

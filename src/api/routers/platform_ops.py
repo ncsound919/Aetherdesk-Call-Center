@@ -96,7 +96,8 @@ async def verify_domain(
 @router.post("/signup")
 async def signup(data: SignupRequest):
     result = await self_serve_service.create_trial_tenant(data.email, data.company_name, data.password)
-    logger.info("self_serve_signup", email=data.email, company=data.company_name)
+    from api.services.security_guard import mask_email
+    logger.info("self_serve_signup", email=mask_email(data.email), company=data.company_name)
     return result
 
 

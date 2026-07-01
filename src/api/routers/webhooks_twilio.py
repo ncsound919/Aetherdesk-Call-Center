@@ -1,5 +1,6 @@
 """Twilio webhook handlers for voice calls and SMS."""
 
+import html
 import os
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
@@ -9,13 +10,27 @@ from twilio.request_validator import RequestValidator
 router = APIRouter(prefix="/webhooks/twilio", tags=["twilio"])
 
 async def validate_twilio_request(request: Request, x_twilio_signature: str = Header(default=None)):
-    if os.getenv("APP_ENV", "development") == "development":
+    auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
+    is_dev = os.getenv("APP_ENV", "development") == "development"
+
+    if is_dev and not auth_token:
+        # Pure local-dev convenience: no token configured at all and we're
+        # explicitly in dev mode. If a token IS configured, we still
+        # validate below even in dev — this closes the gap where
+        # APP_ENV=development silently skipped validation despite having
+        # a real TWILIO_AUTH_TOKEN set.
         return True
 
     if not x_twilio_signature:
         raise HTTPException(status_code=403, detail="Missing Twilio Signature")
 
-    validator = RequestValidator(os.getenv("TWILIO_AUTH_TOKEN", ""))
+    if not auth_token:
+        # Non-dev environment without a configured token: we cannot
+        # validate the signature, so fail closed rather than silently
+        # accepting the request.
+        raise HTTPException(status_code=503, detail="TWILIO_AUTH_TOKEN not configured")
+
+    validator = RequestValidator(auth_token)
 
     # Reconstruct the URL using TWILIO_WEBHOOK_BASE if set, to handle reverse proxy setups correctly
     webhook_base = os.getenv("TWILIO_WEBHOOK_BASE")
@@ -50,7 +65,11 @@ async def handle_incoming_voice(request: Request):
     We return TwiML that connects the call to our AI agent via Media Streams.
     """
     form = await request.form()
-    call_sid = form.get("CallSid", "unknown")
+    raw_call_sid = form.get("CallSid", "unknown")
+    # Escape for safe use as a URL path segment and then again for the XML
+    # attribute context, since CallSid originates from an external request.
+    from urllib.parse import quote
+    call_sid = quote(str(raw_call_sid), safe="")
 
     # Avoid hardcoded port 8000, construct stream URL robustly from TWILIO_WEBHOOK_BASE
     webhook_base = os.getenv("TWILIO_WEBHOOK_BASE")
@@ -61,7 +80,6 @@ async def handle_incoming_voice(request: Request):
         ws_url = f"{ws_scheme}://{parsed.netloc}/realtime/call/{call_sid}"
     else:
         ws_scheme = "wss" if request.url.scheme == "https" else "ws"
-        import html
         safe_netloc = html.escape(request.url.netloc)
         ws_url = f"{ws_scheme}://{safe_netloc}/realtime/call/{call_sid}"
 
@@ -71,7 +89,7 @@ async def handle_incoming_voice(request: Request):
         Hello. You have reached AetherDesk AI. Please hold while I connect you.
     </Say>
     <Connect>
-        <Stream url="{ws_url}"/>
+        <Stream url="{html.escape(ws_url, quote=True)}"/>
     </Connect>
 </Response>"""
     return HTMLResponse(content=response, media_type="application/xml")
@@ -87,13 +105,15 @@ async def handle_call_status(request: Request):
     to_number = form.get("To", "unknown")
 
     from structlog import get_logger
+
+    from api.services.security_guard import mask_phone
     logger = get_logger()
     logger.info(
         "twilio_call_status",
         call_sid=call_sid,
         status=call_status,
-        from_number=from_number,
-        to_number=to_number,
+        from_number=mask_phone(from_number),
+        to_number=mask_phone(to_number),
     )
 
     # Forward every completed call status to BlockLabor so the
@@ -140,7 +160,17 @@ async def handle_gather(request: Request):
 
     from structlog import get_logger
     logger = get_logger()
-    logger.info("twilio_gather", call_sid=call_sid, digits=digits, speech=speech)
+    # Redact potentially sensitive DTMF/speech content: log only length and
+    # a short, truncated preview rather than the raw value.
+    digits_redacted = f"***len={len(digits)}" if digits else ""
+    speech_redacted = (speech[:20] + "…") if len(speech) > 20 else speech
+    logger.info(
+        "twilio_gather",
+        call_sid=call_sid,
+        digits_len=len(digits),
+        digits_redacted=digits_redacted,
+        speech_preview=speech_redacted,
+    )
 
     response = """<?xml version="1.0" encoding="UTF-8"?>
 <Response>

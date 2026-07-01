@@ -1,3 +1,7 @@
+import ipaddress
+import socket
+from urllib.parse import urlparse
+
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -15,12 +19,53 @@ router = APIRouter(prefix="/security-hardening", tags=["security-hardening"])
 
 SENSITIVITY_LEVELS = ("public", "internal", "confidential", "restricted")
 
+_BLOCKED_HOSTNAMES = {"localhost", "metadata.google.internal"}
+
+
+def _validate_pen_test_target(target_url: str) -> str:
+    """Guard against SSRF: only allow http(s) URLs pointing at public,
+    non-internal hosts. Rejects loopback, link-local, private, and
+    cloud metadata addresses.
+    """
+    parsed = urlparse(target_url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="target_url must use http or https")
+
+    hostname = parsed.hostname
+    if not hostname:
+        raise HTTPException(status_code=400, detail="target_url must include a valid host")
+
+    if hostname.lower() in _BLOCKED_HOSTNAMES:
+        raise HTTPException(status_code=400, detail="target_url host is not allowed")
+
+    try:
+        resolved_ips = {info[4][0] for info in socket.getaddrinfo(hostname, None)}
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail="target_url host could not be resolved") from None
+
+    for ip_str in resolved_ips:
+        ip = ipaddress.ip_address(ip_str)
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="target_url resolves to a private/internal address, which is not allowed",
+            )
+
+    return target_url
+
 
 @router.post("/pen-test/scan")
 async def run_pen_test_scan(
     target_url: str = Query(..., description="Target URL to scan"),
     tenant_id: str = Depends(verify_tenant_access),
 ):
+    target_url = _validate_pen_test_target(target_url)
     result = await pen_test_service.run_scan(target_url, tenant_id)
     if not result:
         raise HTTPException(status_code=400, detail="Failed to start pen test scan")
