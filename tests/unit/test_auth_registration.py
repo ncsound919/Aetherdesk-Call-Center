@@ -124,7 +124,17 @@ class TestLogin:
     async def test_login_dev_user_success(self):
         from api.routers.auth import login, LoginRequest
 
-        with patch("api.routers.auth.os.getenv", return_value="true"), \
+        dev_users = {
+            "admin@aetherdesk.com": {
+                "password": "admin123",
+                "tenant_id": "TENANT-001",
+                "user_id": "USER-ADMIN-001",
+                "role": "admin",
+                "name": "Admin User",
+            }
+        }
+        with patch("api.routers.auth._dev_users_enabled", return_value=True), \
+             patch("api.routers.auth.DEV_USERS", dev_users), \
              patch("api.routers.auth.generate_access_token", return_value="dev_token"):
             req = LoginRequest(email="admin@aetherdesk.com", password="admin123")
             result = await login(req)
@@ -138,7 +148,17 @@ class TestLogin:
     async def test_login_dev_agent_success(self):
         from api.routers.auth import login, LoginRequest
 
-        with patch("api.routers.auth.os.getenv", return_value="true"), \
+        dev_users = {
+            "agent@aetherdesk.com": {
+                "password": "agent123",
+                "tenant_id": "TENANT-001",
+                "user_id": "USER-AGENT-001",
+                "role": "agent",
+                "name": "Test Agent",
+            }
+        }
+        with patch("api.routers.auth._dev_users_enabled", return_value=True), \
+             patch("api.routers.auth.DEV_USERS", dev_users), \
              patch("api.routers.auth.generate_access_token", return_value="agent_token"):
             req = LoginRequest(email="agent@aetherdesk.com", password="agent123")
             result = await login(req)
@@ -150,7 +170,17 @@ class TestLogin:
         from api.routers.auth import login, LoginRequest
         from fastapi import HTTPException
 
-        with patch("api.routers.auth.os.getenv", return_value="true"):
+        dev_users = {
+            "admin@aetherdesk.com": {
+                "password": "admin123",
+                "tenant_id": "TENANT-001",
+                "user_id": "USER-ADMIN-001",
+                "role": "admin",
+                "name": "Admin User",
+            }
+        }
+        with patch("api.routers.auth._dev_users_enabled", return_value=True), \
+             patch("api.routers.auth.DEV_USERS", dev_users):
             req = LoginRequest(email="admin@aetherdesk.com", password="wrongpass")
             with pytest.raises(HTTPException) as exc:
                 await login(req)
@@ -161,11 +191,24 @@ class TestLogin:
         from api.routers.auth import login, LoginRequest
         from fastapi import HTTPException
 
-        with patch("api.routers.auth.os.getenv", return_value="true"):
+        with patch("api.routers.auth._dev_users_enabled", return_value=True), \
+             patch("api.routers.auth.DEV_USERS", {}):
             req = LoginRequest(email="unknown@test.com", password="anypass")
             with pytest.raises(HTTPException) as exc:
                 await login(req)
             assert exc.value.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_dev_users_disabled_in_production_even_if_flag_set(self):
+        """Dev users must be forcibly disabled when APP_ENV=production,
+        regardless of ENABLE_DEV_USERS."""
+        from api.routers.auth import _dev_users_enabled
+
+        with patch.dict(
+            "os.environ",
+            {"APP_ENV": "production", "ENABLE_DEV_USERS": "true"},
+        ):
+            assert _dev_users_enabled() is False
 
     @pytest.mark.asyncio
     async def test_login_production_success(self):

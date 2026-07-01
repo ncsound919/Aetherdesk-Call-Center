@@ -23,32 +23,59 @@ _auth_logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Dev mode credentials — only active when APP_ENV=development
-# Override via DEV_ADMIN_PASSWORD / DEV_AGENT_PASSWORD env vars
-DEV_USERS = {
-    "admin@aetherdesk.com": {
-        "password": os.getenv("DEV_ADMIN_PASSWORD", "admin123"),
+# Dev mode credentials — only active when ENABLE_DEV_USERS=true AND APP_ENV != production.
+# Passwords MUST be supplied explicitly via DEV_ADMIN_PASSWORD / DEV_AGENT_PASSWORD;
+# there are no hardcoded fallback passwords. If a password isn't configured, that
+# dev account is disabled.
+_dev_admin_password = os.getenv("DEV_ADMIN_PASSWORD")
+_dev_agent_password = os.getenv("DEV_AGENT_PASSWORD")
+
+DEV_USERS = {}
+if _dev_admin_password:
+    DEV_USERS["admin@aetherdesk.com"] = {
+        "password": _dev_admin_password,
         "tenant_id": "TENANT-001",
         "user_id": "USER-ADMIN-001",
         "role": "admin",
         "name": "Admin User",
-    },
-    "agent@aetherdesk.com": {
-        "password": os.getenv("DEV_AGENT_PASSWORD", "agent123"),
+    }
+if _dev_agent_password:
+    DEV_USERS["agent@aetherdesk.com"] = {
+        "password": _dev_agent_password,
         "tenant_id": "TENANT-001",
         "user_id": "USER-AGENT-001",
         "role": "agent",
         "name": "Test Agent",
-    },
     }
 
+
+def _dev_users_enabled() -> bool:
+    """Dev users are only ever enabled outside production, and only when
+    explicitly requested via ENABLE_DEV_USERS with a configured password."""
+    if os.getenv("APP_ENV", "development") == "production":
+        return False
+    return os.getenv("ENABLE_DEV_USERS", "false").lower() == "true"
+
+
 # Startup warning — log once at import time
-if os.getenv("ENABLE_DEV_USERS", "false").lower() == "true":
-    _auth_logger.warning(
-        "DEV_USERS are active (ENABLE_DEV_USERS=true). "
-        "These accounts (admin@aetherdesk.com, agent@aetherdesk.com) "
-        "must NEVER be reachable in production."
+if _dev_users_enabled():
+    if not DEV_USERS:
+        _auth_logger.warning(
+            "ENABLE_DEV_USERS=true but no DEV_ADMIN_PASSWORD/DEV_AGENT_PASSWORD "
+            "configured; no dev accounts will be available."
+        )
+    else:
+        _auth_logger.warning(
+            "DEV_USERS are active (ENABLE_DEV_USERS=true). "
+            "These accounts (admin@aetherdesk.com, agent@aetherdesk.com) "
+            "must NEVER be reachable in production."
+        )
+elif os.getenv("ENABLE_DEV_USERS", "false").lower() == "true":
+    _auth_logger.error(
+        "ENABLE_DEV_USERS=true was set but APP_ENV=production; dev users "
+        "are forcibly disabled in production."
     )
+
 
 
 class LoginRequest(BaseModel):
@@ -100,7 +127,7 @@ async def login(credentials: LoginRequest):
     email = credentials.email.strip().lower()
     password = credentials.password
 
-    enable_dev_users = os.getenv("ENABLE_DEV_USERS", "false").lower() == "true"
+    enable_dev_users = _dev_users_enabled()
 
     # Dev mode: check hardcoded users
     if enable_dev_users:

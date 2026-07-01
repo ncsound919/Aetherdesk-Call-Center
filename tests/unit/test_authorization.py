@@ -16,11 +16,25 @@ def reset_casbin():
 
 
 class TestCheckPermission:
-    def test_permissive_mode_when_no_enforcer(self):
+    def test_permissive_mode_when_no_enforcer_non_production(self):
         from api.services.authorization import check_permission
-        with patch("api.services.authorization._get_enforcer", return_value=None):
+        with patch.dict(os.environ, {"APP_ENV": "development"}), \
+             patch("api.services.authorization._get_enforcer", return_value=None):
             assert check_permission("agent", "calls", "read") is True
             assert check_permission("admin", "billing", "delete") is True
+
+    def test_fails_closed_when_no_enforcer_in_production(self):
+        from api.services.authorization import check_permission
+        with patch.dict(os.environ, {"APP_ENV": "production"}), \
+             patch("api.services.authorization._get_enforcer", return_value=None):
+            assert check_permission("agent", "calls", "read") is False
+            assert check_permission("admin", "billing", "delete") is False
+
+    def test_fails_closed_when_enforcer_init_raises_in_production(self):
+        from api.services.authorization import check_permission
+        with patch.dict(os.environ, {"APP_ENV": "production"}), \
+             patch("api.services.authorization._get_enforcer", side_effect=RuntimeError("boom")):
+            assert check_permission("admin", "billing", "delete") is False
 
     def test_allows_admin_everything(self):
         from api.services.authorization import check_permission
