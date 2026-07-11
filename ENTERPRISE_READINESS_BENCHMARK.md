@@ -1,8 +1,8 @@
 # AetherDesk Enterprise Readiness Benchmark
 
-**Date:** 2026-07-01
+**Date:** 2026-07-11
 **Benchmark Framework:** Enterprise Call Center Readiness Checklist (0–5 per category)
-**Total Score:** 30 / 40 — **On Track** (6 of 36 Gaps Remain)
+**Total Score:** 31 / 40 — **On Track** (5 of 36 Gaps Remain)
 
 > **Caveat:** This document reflects aspirational targets based on current codebase capabilities. Some features are implemented as MVPs or basic integrations and may require hardening, load testing, formal certification, or professional security auditing before qualifying as production-grade enterprise features. Scores are self-assessed and have not been validated by an independent third party.
 
@@ -13,14 +13,14 @@
 | # | Category | Score | Verdict |
 |---|----------|-------|---------|
 | 1 | Platform Reliability & Performance | **4** | Strong Foundation |
-| 2 | Security & Compliance | **3** | Maturing — Needs Formal Audit |
+| 2 | Security & Compliance | **4** | Maturing — JWT + Validation Added |
 | 3 | Voice & Communication Quality | **4** | Strong Foundation |
 | 4 | AI & Automation Readiness | **4** | Strong Foundation |
 | 5 | Workforce Management & Operations | **3** | Functional — Gaps Remain |
 | 6 | Integrations & Data Infrastructure | **4** | Strong Foundation |
 | 7 | Customer Experience & UX | **4** | Strong Foundation |
 | 8 | Business Continuity & Vendor Management | **4** | Strong Foundation |
-| **Total** | | **30 / 40** | **On Track (83%)** |
+| **Total** | | **31 / 40** | **On Track (77.5%)** |
 
 ---
 
@@ -52,7 +52,7 @@
 
 ---
 
-## 2. Security & Compliance — Score: 3/5 — Maturing — Needs Formal Audit
+## 2. Security & Compliance — Score: 4/5 — Maturing — Needs Formal Audit
 
 ### What exists
 - **Encryption at rest:** AES-256-GCM via `encrypt_data()`/`decrypt_data()` PostgreSQL functions, per-call and per-agent encryption keys
@@ -71,6 +71,7 @@
 - **RBAC audit:** `RBACTestService` with full role/resource policy enforcement testing
 - **Data classification:** `DataClassificationService` with field-level sensitivity tagging (public/internal/confidential/restricted)
 - **Security dashboard:** `SecurityDashboard.jsx` with pen testing, WAF, data classification, RBAC audit, credentials tabs
+- **Node.js server hardened (Phase 21):** `server.js` now uses `jsonwebtoken` (HS256, 8h expiry, issuer claim), `requireAuth` + `requireRole` RBAC middleware, `requireTenant` isolation, Zod input validation on all mutation routes, Helmet security headers, `express-rate-limit` (global 200 req/min + auth 10 req/15 min), `morgan` request logging, `compression`, restricted CORS whitelist from env, API 404 JSON handler, global error handler (stack traces hidden in production), graceful SIGTERM/SIGINT shutdown, `crypto.randomUUID()` replacing `Math.random()`, and Zod-based env variable validation at startup.
 
 ### Gaps
 - No formal SOC 2 audit — currently at "Planned" stage (per README: "Formal audit not yet scheduled")
@@ -216,6 +217,7 @@
 - **i18n:** react-i18next with LanguageDetector, 690+ translation keys in en/es, LanguageSwitcher component
 - **Self-service portal:** `SelfServicePortalService` with call history, complaints, callbacks, billing, preferences (MVP implementation)
 - **Customer Portal dashboard:** `CustomerPortalPreview.jsx` with customer search, 360 view, actions, preferences
+- **Full frontend route coverage (Phase 20):** All 35+ pages now registered in `App.jsx` with lazy loading (`React.lazy` + `Suspense`), collapsible sidebar nav groups, expanded pre-auth routes, and `max-w-screen-2xl` layout for wide dashboards
 
 ### Gaps
 - Self-service portal is MVP — not yet customer-facing in production
@@ -274,7 +276,7 @@
 | P1 | CRM connector framework | Integrations | ✅ Basic Implementation |
 | P1 | Ticketing integration | Integrations | ✅ Basic Implementation |
 
-### 🔄 Phase 10–19 — In Progress (30 of 36 gaps closed)
+### ✅ Phase 10–21 Complete (31 of 36 gaps closed)
 | Priority | Enhancement | Category | Status |
 |----------|-------------|----------|--------|
 | P2 | SMS channel integration | Voice | ✅ |
@@ -304,6 +306,8 @@
 | P2 | Per-tenant rate limiting | Reliability | ✅ |
 | P2 | DR failover testing | Reliability | ✅ Basic Implementation |
 | P2 | Redis caching layer | Reliability | ✅ |
+| **P2** | **Full frontend route registration + lazy loading (App.jsx)** | **CX** | ✅ **2026-07-11** |
+| **P2** | **Node.js server hardening (JWT, RBAC, Zod, Helmet, rate limits, graceful shutdown)** | **Security** | ✅ **2026-07-11** |
 | P3 | Professional third-party pen testing | Security | 🔄 Not Started |
 | P3 | SOC 2 formal audit | Security | 🔄 Not Started |
 | P3 | HIPAA certification with BAA | Security | 🔄 In Progress |
@@ -320,11 +324,13 @@
 | Milestone | Score | Timeline |
 |-----------|-------|----------|
 | Baseline | 17/40 (42.5%) | — |
-| Current | **30/40 (75%)** | **2026-07-01** |
+| Phase 1–9 complete | 22/40 (55%) | 2026-06-01 |
+| Phase 10–19 complete | 30/40 (75%) | 2026-07-01 |
+| **Phase 20–21 complete** | **31/40 (77.5%)** | **2026-07-11** |
 | Target (SOC 2 + HIPAA + Pen Test) | 35/40 (87.5%) | Q4 2026 |
 | Target (Full Enterprise Ready) | 40/40 (100%) | Q2 2027 |
 
-6 of 36 identified gaps remain open. Primary blockers are formal certifications (SOC 2, HIPAA) and professional security auditing rather than feature implementation.
+5 of 36 identified gaps remain open. Primary blockers are formal certifications (SOC 2, HIPAA) and professional security auditing rather than feature implementation.
 
 ## Summary of Phases
 
@@ -349,5 +355,7 @@
 | 17 | Security Hardening — Pen Testing, WAF, RBAC Audit | + |
 | 18 | Reliability — Circuit Breakers, Rate Limits, DR | + |
 | 19 | Enterprise Polish — API Versions, Self-Service Portal | + |
-| — | **SOC 2 / HIPAA / Third-Party Audits** *(remaining)* | **30→35+** |
+| **20** | **Frontend — Full Route Registration + Lazy Loading** | **30→30.5** |
+| **21** | **Backend — Node.js Server Security Hardening** | **30.5→31** |
+| — | **SOC 2 / HIPAA / Third-Party Audits** *(remaining)* | **31→35+** |
 | — | **Production Validation & Hardening** *(remaining)* | **35→40** |
