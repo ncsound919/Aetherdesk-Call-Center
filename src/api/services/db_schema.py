@@ -1113,6 +1113,77 @@ CREATE TABLE IF NOT EXISTS vertical_deployments (
     config_json JSONB DEFAULT '{}',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Overlay365 Admin Suite
+CREATE TABLE IF NOT EXISTS seo_content (
+    id TEXT PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE,
+    meta_title TEXT,
+    meta_description TEXT,
+    og_title TEXT,
+    og_description TEXT,
+    og_image TEXT,
+    keywords TEXT,
+    body TEXT,
+    status TEXT DEFAULT 'draft',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS donors (
+    id TEXT PRIMARY KEY,
+    name TEXT,
+    email TEXT,
+    phone TEXT,
+    amount REAL DEFAULT 0.0,
+    currency TEXT DEFAULT 'USD',
+    tier TEXT,
+    notes TEXT,
+    donation_date TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS coupons (
+    id TEXT PRIMARY KEY,
+    code TEXT NOT NULL UNIQUE,
+    type TEXT DEFAULT 'percent',
+    value REAL DEFAULT 0.0,
+    min_amount REAL,
+    max_uses INTEGER,
+    starts_at TIMESTAMP,
+    ends_at TIMESTAMP,
+    stripe_coupon_id TEXT,
+    status TEXT DEFAULT 'local_only',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS contact_notes (
+    id TEXT PRIMARY KEY,
+    source TEXT,
+    contact_id TEXT,
+    note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS flyer_saves (
+    id TEXT PRIMARY KEY,
+    template_id TEXT,
+    title TEXT,
+    subtitle TEXT,
+    cta_text TEXT,
+    cta_url TEXT,
+    theme TEXT,
+    logo_url TEXT,
+    config_json TEXT DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS flyer_templates (
+    id TEXT PRIMARY KEY,
+    category TEXT,
+    name TEXT,
+    preset_json TEXT DEFAULT '{}'
+);
 """
 
 
