@@ -2,6 +2,7 @@
 
 import html
 import os
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -146,6 +147,61 @@ async def handle_call_status(request: Request):
         except Exception:
             # Never let a webhook failure break the Twilio flow.
             pass
+
+    # Close the campaign outcome loop: map Twilio call status to a campaign
+    # call outcome and advance the lead status, so outreach analytics update
+    # in real time without manual entry.
+    try:
+        from api.services.database import USE_POSTGRES, db_context
+
+        outcome_map = {
+            "completed": "answered",
+            "no-answer": "no_answer",
+            "failed": "failed",
+            "busy": "no_answer",
+            "canceled": "no_answer",
+        }
+        if call_status in outcome_map:
+            outcome = outcome_map[call_status]
+            async with db_context() as conn:
+                row = None
+                if USE_POSTGRES:
+                    row = await conn.fetchrow(
+                        "SELECT id, lead_id FROM campaign_calls WHERE call_sid = $1 AND status = 'ringing'",
+                        call_sid,
+                    )
+                else:
+                    cur = conn.cursor()
+                    cur.execute(
+                        "SELECT id, lead_id FROM campaign_calls WHERE call_sid = ? AND status = 'ringing'",
+                        (call_sid,),
+                    )
+                    r = cur.fetchone()
+                    row = dict(r) if r else None
+
+                if row:
+                    if USE_POSTGRES:
+                        await conn.execute(
+                            "UPDATE campaign_calls SET outcome = $1, ended_at = $2 WHERE id = $3",
+                            outcome, datetime.now(UTC).isoformat(), row["id"],
+                        )
+                        lead_status = {"answered": "answered", "no_answer": "new", "failed": "new"}[outcome]
+                        await conn.execute(
+                            "UPDATE leads SET status = $1 WHERE id = $2",
+                            lead_status, row["lead_id"],
+                        )
+                    else:
+                        cur = conn.cursor()
+                        cur.execute(
+                            "UPDATE campaign_calls SET outcome = ?, ended_at = ? WHERE id = ?",
+                            (outcome, datetime.now(UTC).isoformat(), row["id"]),
+                        )
+                        lead_status = {"answered": "answered", "no_answer": "new", "failed": "new"}[outcome]
+                        cur.execute("UPDATE leads SET status = ? WHERE id = ?", (lead_status, row["lead_id"]))
+                        conn.commit()
+    except Exception:
+        # Never let campaign bookkeeping break the Twilio flow.
+        pass
 
     return JSONResponse({"ok": True})
 

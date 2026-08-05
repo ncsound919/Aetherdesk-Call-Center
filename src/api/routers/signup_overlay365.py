@@ -72,11 +72,12 @@ async def _create_checkout(request: SignupRequest):
     # Mock mode for development without Stripe keys
     if not stripe_secret or stripe_secret == "":
         from api.services.security_guard import mask_email
+        from urllib.parse import quote
         logger.info(f"[MOCK] Stripe checkout for {mask_email(request.email)}, tier={request.tier}")
         return SignupResponse(
             status="mock_checkout",
-            checkout_url=f"https://overlay365.com/aetherdesk/mock-checkout?email={request.email}&tier={request.tier}",
-            customer_id=f"mock_cus_{request.email}",
+            checkout_url=f"https://overlay365.com/aetherdesk/mock-checkout?email={quote(request.email)}&tier={request.tier}",
+            customer_id=f"mock_cus_{mask_email(request.email)}",
             tier=request.tier,
         )
 

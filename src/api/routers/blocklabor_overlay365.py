@@ -4,7 +4,8 @@ import logging
 from typing import List, Literal, Optional
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Header, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from api.services.auth import verify_access_token, verify_tenant_access
@@ -12,8 +13,27 @@ from api.services.auth import verify_access_token, verify_tenant_access
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/blocklabor", tags=["blocklabor"])
 
+bearer_scheme = HTTPBearer(auto_error=False)
+
 BLOCKLABOR_URL = os.getenv("BLOCKLABOR_URL", "http://localhost:5173")
 BLOCKLABOR_API_KEY = os.getenv("BLOCKLABOR_API_KEY", "")
+
+
+async def get_verified_tenant(
+    credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    x_api_key: str = Header(default=""),
+) -> str:
+    """Verify the Bearer token, extract tenant_id, and confirm the API key
+    belongs to that tenant (IDOR protection)."""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    payload = await verify_access_token(credentials.credentials)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    tenant_id = payload.get("tenant_id")
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="Token missing tenant_id")
+    return await verify_tenant_access(tenant_id, x_api_key)
 
 
 class PostJobRequest(BaseModel):
@@ -28,10 +48,9 @@ class PostJobRequest(BaseModel):
 @router.post("/post-job")
 async def post_job_to_blocklabor(
     request: PostJobRequest,
-    token: str = Depends(verify_access_token),
+    tenant_id: str = Depends(get_verified_tenant),
 ):
     """Post a job to Blocklabor when Aetherdesk needs workers."""
-    verify_tenant_access(token, request.tenant_id)
     headers = {"Content-Type": "application/json"}
     if BLOCKLABOR_API_KEY:
         headers["Authorization"] = f"Bearer {BLOCKLABOR_API_KEY}"
@@ -64,7 +83,7 @@ async def post_job_to_blocklabor(
 async def match_workers(
     skills: str,
     pay_rate: float,
-    token: str = Depends(verify_access_token),
+    tenant_id: str = Depends(get_verified_tenant),
 ):
     """Find matching workers in Blocklabor for Aetherdesk needs."""
     headers = {"Content-Type": "application/json"}

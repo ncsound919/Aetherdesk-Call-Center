@@ -1,12 +1,17 @@
 import os
+import re
 from datetime import UTC, datetime, timedelta
 
+import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from pydantic import BaseModel
+
+logger = structlog.get_logger()
 
 from api.services.auth import verify_access_token, verify_tenant_access
 from api.services.database import get_billing_summary
 from api.services.db_tenants import (
+    create_tenant,
     get_tenant_by_stripe_customer_db,
     get_tenant_db,
     get_tenant_plan_db,
@@ -188,15 +193,46 @@ async def stripe_webhook(
         session = event["data"]["object"]
         customer_id = session.get("customer")
         subscription_id = session.get("subscription")
+        metadata = session.get("metadata", {}) or {}
 
-        if customer_id and subscription_id:
+        if customer_id:
             tenant = await get_tenant_by_stripe_customer_db(customer_id)
-            if tenant:
+            if not tenant and subscription_id:
+                # New signup (from signup_overlay365 or the general checkout):
+                # provision a tenant + API key from the checkout metadata so the
+                # account actually exists after payment.
+                tenant_email = metadata.get("email") or session.get("customer_details", {}).get("email") or f"user+{customer_id}@overlay365.com"
+                company_name = metadata.get("company_name") or "New Overlay365 Customer"
+                tenant_name = company_name
+                slug = re.sub(r"[^a-z0-9]+", "-", company_name.lower()).strip("-")[:60] or f"tenant-{customer_id[-8:]}"
+                try:
+                    new_tenant = await create_tenant(
+                        name=tenant_name,
+                        email=tenant_email,
+                        slug=slug,
+                        phone=metadata.get("phone") or None,
+                        plan_id=metadata.get("plan") or "PLAN-STARTER",
+                        settings={"source": "overlay365_signup", "tier": metadata.get("tier") or "starter"},
+                        gdpr_consent=True,
+                    )
+                    if new_tenant:
+                        await update_tenant_subscription_db(
+                            tenant_id=new_tenant["id"],
+                            stripe_customer_id=customer_id,
+                            stripe_subscription_id=subscription_id,
+                            plan_id=metadata.get("plan"),
+                        )
+                        logger.info("tenant_provisioned_from_checkout", tenant_id=new_tenant["id"], source="overlay365")
+                        tenant = new_tenant
+                except Exception as e:
+                    logger.error("tenant_provision_failed", error=str(e))
+
+            if tenant and subscription_id:
                 await update_tenant_subscription_db(
                     tenant_id=tenant["id"],
                     stripe_customer_id=customer_id,
                     stripe_subscription_id=subscription_id,
-                    plan_id=session.get("metadata", {}).get("plan"),
+                    plan_id=metadata.get("plan"),
                 )
 
     elif event["type"] == "customer.subscription.deleted":

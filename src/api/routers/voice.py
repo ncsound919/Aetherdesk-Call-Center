@@ -185,6 +185,39 @@ async def _handle_media_chunk(
         text = await session.process_audio(audio_chunk)
 
         if text:
+            # ── Emergency takeover check ─────────────────────────────
+            # When a human supervisor has activated takeover (realtime.py
+            # writes `session:takeover_{call_sid}`), suppress the AI so the
+            # human can speak directly. Also speak any queued human text
+            # message (`agent_message`) via TTS.
+            if call_sid:
+                try:
+                    from api.services.queue import QueueManager
+
+                    qm = QueueManager(websocket.app.state.redis if hasattr(websocket.app, "state") and hasattr(websocket.app.state, "redis") else None)
+                    takeover = qm.session_get(f"takeover_{call_sid}")
+                    if takeover:
+                        # Human is speaking — do not run the AI.
+                        logger.info("takeover_active_skipping_ai", call_sid=call_sid)
+                        return
+                    pending = qm.session_get(f"call_{call_sid}")
+                    agent_text = None
+                    if pending and isinstance(pending, dict):
+                        agent_text = pending.get("agent_message")
+                        if agent_text:
+                            qm.session_delete(f"call_{call_sid}")
+                    if agent_text:
+                        logger.info("speaking_agent_message", call_sid=call_sid, text=agent_text[:80])
+                        async for chunk in session.speak_stream(agent_text):
+                            await websocket.send_json({
+                                "event": "media",
+                                "media": {
+                                    "payload": base64.b64encode(chunk).decode("utf-8"),
+                                },
+                            })
+                except Exception as e:
+                    logger.warning("takeover_check_error", error=str(e))
+
             history = session.transcript[:-1]
             response = await orchestrator.step(
                 session.agent_state, history, text,
