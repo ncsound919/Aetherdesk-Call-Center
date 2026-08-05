@@ -37,7 +37,7 @@
 **Files:**
 - Modify: `src/api/services/db_schema.py` (append near the end, after the last `CREATE TABLE`)
 
-- [ ] **Step 1: Insert the 6 admin tables into the SCHEMA_SQL constant**
+- [x] **Step 1: Insert the 6 admin tables into the SCHEMA_SQL constant**
 
 Insert the SQL block **inside the `SCHEMA_SQL = """..."""` constant, immediately before its closing `"""`** (currently at line ~2348, after the `eval_metrics` table). Do NOT append to the physical end of the file (that would break the Python module). Because `init_sqlite_schema()` derives the SQLite schema at runtime from `SCHEMA_SQL` via `postgres_to_sqlite(...)`, adding the tables here provisions both Postgres and SQLite. The DDL uses only `TEXT`/`REAL`/`INTEGER`/`TIMESTAMP` types so the SQLite translator handles it cleanly.
 
@@ -114,12 +114,12 @@ CREATE TABLE IF NOT EXISTS flyer_templates (
 );
 ```
 
-- [ ] **Step 2: Verify schema loads**
+- [x] **Step 2: Verify schema loads**
 
 Run: `python -c "from api.services import db_schema; print('ok')"`
 Expected: prints `ok` (module imports and executes the schema SQL without error).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/api/services/db_schema.py
@@ -133,7 +133,7 @@ git commit -m "feat(admin): add Overlay365 admin tables to schema"
 **Files:**
 - Create: `alembic/versions/<hex>_admin_tables.py`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 Follow the existing pattern in `alembic/versions/459682371cf0_manual_initial_schema.py`: a revision chain, `use_postgres = os.getenv("USE_POSTGRES", "false").lower() == "true"` branch, `op.execute()` with Postgres DDL in the `if use_postgres:` branch and SQLite DDL in the `else:` branch. Set `down_revision = '459682371cf0'`. Use a fresh 12-hex revision id (generate one, e.g. `python -c "import uuid; print(uuid.uuid4().hex[:12])"`).
 
@@ -176,12 +176,12 @@ CREATE TABLE IF NOT EXISTS flyer_templates (
 
 SQLite (`else:`) branch: identical DDL (TEXT PK, REAL, INTEGER, TIMESTAMP all translate fine). `downgrade()` drops the 6 tables.
 
-- [ ] **Step 2: Verify the migration is discoverable**
+- [x] **Step 2: Verify the migration is discoverable**
 
 Run: `python -c "from alembic.config import Config; from alembic.script import ScriptDirectory; c=Config('alembic.ini'); s=ScriptDirectory.from_config(c); print([h.revision for h in s.walk_revisions()])"`
 Expected: includes the new revision id and the chain head is your new revision.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add alembic/versions/
@@ -194,7 +194,7 @@ git commit -m "feat(admin): alembic migration for admin tables"
 - Create: `src/api/services/db_admin_ops.py`
 - Test: `tests/unit/test_db_admin_ops.py` (covered implicitly via router tests in Task 4)
 
-- [ ] **Step 1: Write the DB layer**
+- [x] **Step 1: Write the DB layer**
 
 Create `src/api/services/db_admin_ops.py`:
 
@@ -438,12 +438,12 @@ async def create_flyer_save_db(template_id, title, subtitle, cta_text, cta_url, 
     return _row_to_dict(conn.execute("SELECT * FROM flyer_saves WHERE id=?", (fid,)).fetchone(), FLYER_KEYS)
 ```
 
-- [ ] **Step 2: Verify module imports**
+- [x] **Step 2: Verify module imports**
 
 Run: `python -c "from api.services.db_admin_ops import list_coupons_db; print('ok')"`
 Expected: prints `ok`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/api/services/db_admin_ops.py
@@ -456,7 +456,7 @@ git commit -m "feat(admin): add DB layer for Overlay365 admin suite"
 - Create: `src/api/routers/admin_ops.py`
 - Test: `tests/unit/test_admin_ops_router.py`
 
-- [ ] **Step 1: Write the router**
+- [x] **Step 1: Write the router**
 
 Create `src/api/routers/admin_ops.py`:
 
@@ -739,7 +739,7 @@ async def public_list_seo():
     return await list_seo_content_db(status="published")
 ```
 
-- [ ] **Step 2: Register the routers in main.py**
+- [x] **Step 2: Register the routers in main.py**
 
 Modify `src/api/main.py` — add imports near the other `from api.routers import (...)` block and include the routers after the existing includes:
 
@@ -755,12 +755,12 @@ app.include_router(admin_router)
 app.include_router(public_router)
 ```
 
-- [ ] **Step 3: Verify app imports**
+- [x] **Step 3: Verify app imports**
 
 Run: `python -c "from api.main import app; print('ok')"` (set env vars first: `APP_ENV=development`, `JWT_SECRET=x`, `INTERNAL_API_KEY=x`, `ENCRYPTION_KEY=<a valid 44-char Fernet key>`)
 Expected: prints `ok`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/api/routers/admin_ops.py src/api/main.py
@@ -772,7 +772,7 @@ git commit -m "feat(admin): add Overlay365 admin + public SEO routers"
 **Files:**
 - Create: `tests/unit/test_admin_ops_router.py`
 
-- [ ] **Step 1: Write router tests**
+- [x] **Step 1: Write router tests**
 
 Create `tests/unit/test_admin_ops_router.py`:
 
@@ -979,21 +979,21 @@ class TestPublicSEO:
         assert mock_list.call_args.kwargs["status"] == "published"
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 Run: `python -m pytest tests/unit/test_admin_ops_router.py -q --no-cov -p no:cacheprovider`
 Expected: all pass (17 tests).
 
-- [ ] **Step 3: Fix the users table column name if needed**
+- [x] **Step 3: Fix the users table column name if needed**
 
 The CRM signups query in the router uses `full_name`; if the `users` table uses a different column (check `db_schema.py` `CREATE TABLE IF NOT EXISTS users`), update the query column accordingly and re-run.
 
-- [ ] **Step 4: Run the full unit suite to confirm no regressions**
+- [x] **Step 4: Run the full unit suite to confirm no regressions**
 
 Run: `python -m pytest tests/unit -q --no-cov -p no:cacheprovider`
 Expected: all prior tests still pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/unit/test_admin_ops_router.py
@@ -1009,7 +1009,7 @@ git commit -m "test(admin): add router tests for Overlay365 admin suite"
 **Files:**
 - Modify: `agent-ui/src/services/api.js`
 
-- [ ] **Step 1: Add adminApi export**
+- [x] **Step 1: Add adminApi export**
 
 Append to `agent-ui/src/services/api.js` (before `export default api`):
 
@@ -1035,12 +1035,12 @@ export const adminApi = {
 }
 ```
 
-- [ ] **Step 2: Run frontend tests to confirm nothing broke**
+- [x] **Step 2: Run frontend tests to confirm nothing broke**
 
 Run: `cd agent-ui && npm test`
 Expected: existing tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd agent-ui
@@ -1053,16 +1053,16 @@ git commit -m "feat(admin): add adminApi client"
 **Files:**
 - Modify: `agent-ui/package.json`
 
-- [ ] **Step 1: Install the dependency**
+- [x] **Step 1: Install the dependency**
 
 Run: `cd agent-ui && npm install html2canvas`
 
-- [ ] **Step 2: Verify build**
+- [x] **Step 2: Verify build**
 
 Run: `cd agent-ui && npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd agent-ui
@@ -1077,7 +1077,7 @@ git commit -m "chore(admin): add html2canvas for flyer export"
 - Create: `agent-ui/src/pages/admin/flyers/templates.jsx`
 - Create: `agent-ui/src/pages/admin/flyers/FlyerPreview.jsx`
 
-- [ ] **Step 1: Write the export helper**
+- [x] **Step 1: Write the export helper**
 
 Create `agent-ui/src/pages/admin/flyers/exportFlyer.js`:
 
@@ -1100,7 +1100,7 @@ export async function exportFlyerToPng(element, filename = 'flyer.png') {
 }
 ```
 
-- [ ] **Step 2: Write the template registry**
+- [x] **Step 2: Write the template registry**
 
 Create `agent-ui/src/pages/admin/flyers/templates.jsx`:
 
@@ -1192,7 +1192,7 @@ export const FLYER_TEMPLATES = [
 export const FLYER_THEMES = Object.keys(THEMES)
 ```
 
-- [ ] **Step 3: Write the preview wrapper**
+- [x] **Step 3: Write the preview wrapper**
 
 Create `agent-ui/src/pages/admin/flyers/FlyerPreview.jsx`:
 
@@ -1213,12 +1213,12 @@ const FlyerPreview = forwardRef(function FlyerPreview({ templateId, theme, title
 export default FlyerPreview
 ```
 
-- [ ] **Step 4: Run build to verify**
+- [x] **Step 4: Run build to verify**
 
 Run: `cd agent-ui && npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd agent-ui
@@ -1231,7 +1231,7 @@ git commit -m "feat(admin): add flyer templates and html2canvas export helper"
 **Files:**
 - Create: `agent-ui/src/pages/admin/FlyersPage.jsx`
 
-- [ ] **Step 1: Write the page**
+- [x] **Step 1: Write the page**
 
 Create `agent-ui/src/pages/admin/FlyersPage.jsx`:
 
@@ -1386,12 +1386,12 @@ export default function FlyersPage() {
 }
 ```
 
-- [ ] **Step 2: Run build**
+- [x] **Step 2: Run build**
 
 Run: `cd agent-ui && npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 cd agent-ui
@@ -1406,7 +1406,7 @@ git commit -m "feat(admin): add Flyer Studio page"
 - Create: `agent-ui/src/pages/admin/CRMPage.jsx`
 - Create: `agent-ui/src/pages/admin/CouponsPage.jsx`
 
-- [ ] **Step 1: Write the SEO page**
+- [x] **Step 1: Write the SEO page**
 
 Create `agent-ui/src/pages/admin/SEOContentPage.jsx`:
 
@@ -1511,7 +1511,7 @@ export default function SEOContentPage() {
 }
 ```
 
-- [ ] **Step 2: Write the CRM page**
+- [x] **Step 2: Write the CRM page**
 
 Create `agent-ui/src/pages/admin/CRMPage.jsx`:
 
@@ -1661,7 +1661,7 @@ export default function CRMPage() {
 }
 ```
 
-- [ ] **Step 3: Write the Coupons page**
+- [x] **Step 3: Write the Coupons page**
 
 Create `agent-ui/src/pages/admin/CouponsPage.jsx`:
 
@@ -1770,12 +1770,12 @@ export default function CouponsPage() {
 }
 ```
 
-- [ ] **Step 4: Run build**
+- [x] **Step 4: Run build**
 
 Run: `cd agent-ui && npm run build`
 Expected: build succeeds.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd agent-ui
@@ -1788,7 +1788,7 @@ git commit -m "feat(admin): add SEO, CRM, and Coupons pages"
 **Files:**
 - Modify: `agent-ui/src/App.jsx`
 
-- [ ] **Step 1: Add lazy imports**
+- [x] **Step 1: Add lazy imports**
 
 After the existing lazy imports in `App.jsx` (around line 90), add:
 
@@ -1799,7 +1799,7 @@ const CRMPage        = lazy(() => import('./pages/admin/CRMPage'))
 const CouponsPage    = lazy(() => import('./pages/admin/CouponsPage'))
 ```
 
-- [ ] **Step 2: Add the nav group**
+- [x] **Step 2: Add the nav group**
 
 In `NAV_GROUPS`, after the "Management" group (closing `},` at line ~157), add a new group:
 
@@ -1815,7 +1815,7 @@ In `NAV_GROUPS`, after the "Management" group (closing `},` at line ~157), add a
   },
 ```
 
-- [ ] **Step 3: Add the routes**
+- [x] **Step 3: Add the routes**
 
 In the authenticated `<Routes>` block (after the "Management" routes, before the fallback), add:
 
@@ -1827,12 +1827,12 @@ In the authenticated `<Routes>` block (after the "Management" routes, before the
                       <Route path="/admin/coupons" element={<CouponsPage />} />
 ```
 
-- [ ] **Step 4: Run build + tests**
+- [x] **Step 4: Run build + tests**
 
 Run: `cd agent-ui && npm run build && npm test`
 Expected: build succeeds and existing tests pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd agent-ui
@@ -1846,7 +1846,7 @@ git commit -m "feat(admin): wire Overlay365 admin pages into navigation"
 - Create: `agent-ui/src/test/FlyerTemplate.test.jsx`
 - Create: `agent-ui/src/test/CouponsForm.test.jsx`
 
-- [ ] **Step 1: Write flyer template test**
+- [x] **Step 1: Write flyer template test**
 
 Create `agent-ui/src/test/FlyerTemplate.test.jsx`:
 
@@ -1877,7 +1877,7 @@ describe('Flyer templates', () => {
 })
 ```
 
-- [ ] **Step 2: Write the coupons form test**
+- [x] **Step 2: Write the coupons form test**
 
 Create `agent-ui/src/test/CouponsForm.test.jsx`:
 
@@ -1921,18 +1921,18 @@ describe('CouponsPage', () => {
 })
 ```
 
-- [ ] **Step 3: Run frontend tests**
+- [x] **Step 3: Run frontend tests**
 
 Run: `cd agent-ui && npm test`
 Expected: all pass (existing + new).
 
-- [ ] **Step 4: Fix jsdom globals if needed**
+- [x] **Step 4: Fix jsdom globals if needed**
 
 If `@testing-library/react` / `jsdom` are not installed as devDependencies, add them:
 Run: `cd agent-ui && npm install -D @testing-library/react @testing-library/jest-dom jsdom`
 Then add `import '@testing-library/jest-dom'` to `src/test/setup.js`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 cd agent-ui
@@ -1945,12 +1945,12 @@ git commit -m "test(admin): add flyer template and coupons form tests"
 **Files:**
 - Modify: `docs/ARCHITECTURE.md` (optional)
 
-- [ ] **Step 1: Run backend suite**
+- [x] **Step 1: Run backend suite**
 
 Run: `python -m pytest tests/unit -q --no-cov -p no:cacheprovider`
 Expected: all pass.
 
-- [ ] **Step 2: Run frontend suite + build**
+- [x] **Step 2: Run frontend suite + build**
 
 Run: `cd agent-ui && npm test && npm run build`
 Expected: tests pass, build succeeds.
