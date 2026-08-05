@@ -523,6 +523,11 @@ app.include_router(signup_overlay365_router)
 from api.routers.blocklabor_overlay365 import router as blocklabor_overlay365_router
 app.include_router(blocklabor_overlay365_router)
 
+# Overlay 365 admin + public SEO
+from api.routers.admin_ops import admin_router, public_router
+app.include_router(admin_router)
+app.include_router(public_router)
+
 
 # =============================================================================
 # Auth Routes (must be after CORS, before middleware)
