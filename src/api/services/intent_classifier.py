@@ -11,7 +11,7 @@ import structlog
 from api.middleware.metrics import track_llm_latency
 from api.services.connection_pool import get_http_client
 from api.services.langfuse_client import get_langfuse, score_call
-from api.services.llm_client import parse_json_content
+from api.services.llm_client import llm_client, parse_json_content
 from api.services.memory import memory_service
 from api.services.retry import retry_ollama
 
@@ -123,9 +123,7 @@ class IntentClassifier:
 
         prompt = f"{context}Current utterance: {transcript}"
 
-        from api.services.llm_client import llm_client as _lc
-
-        result = await _lc.chat(
+        result = await llm_client.chat(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
