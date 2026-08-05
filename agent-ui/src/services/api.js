@@ -403,4 +403,24 @@ export const platformApi = {
   getEmotionTrends: (callId) => api.get(`/ai-platform/voice-profiles/emotion-trends/${callId}`),
 }
 
+export const adminApi = {
+  // SEO
+  listSEO: () => api.get('/admin/seo/content'),
+  upsertSEO: (slug, data) => api.put(`/admin/seo/content/${slug}`, data),
+  generateSEO: (data) => api.post('/admin/seo/generate', data),
+  // CRM
+  listContacts: () => api.get('/admin/crm/contacts'),
+  listNotes: (source, contactId) => api.get(`/admin/crm/contacts/${source}/${contactId}/notes`),
+  addNote: (source, contactId, note) => api.post(`/admin/crm/contacts/${source}/${contactId}/notes`, { note }),
+  createDonor: (data) => api.post('/admin/crm/donors', data),
+  // Coupons
+  listCoupons: () => api.get('/admin/coupons'),
+  createCoupon: (data) => api.post('/admin/coupons', data),
+  disableCoupon: (couponId) => api.post(`/admin/coupons/${couponId}/disable`),
+  // Flyers
+  listFlyers: () => api.get('/admin/flyers'),
+  saveFlyer: (data) => api.post('/admin/flyers', data),
+  generateFlyerCopy: (data) => api.post('/admin/flyers/generate-copy', data),
+}
+
 export default api
