@@ -34,6 +34,12 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 LLM_FALLBACK_MODEL = os.getenv("LLM_FALLBACK_MODEL", "qwen3:1.7b")
 LLM_FALLBACK_PROVIDER = os.getenv("LLM_FALLBACK_PROVIDER", "ollama")
 
+# LiteLLM AI gateway (OpenAI-compatible). When configured it becomes the
+# preferred provider: multi-provider failover, cost tracking, guardrails.
+LITELLM_BASE_URL = os.getenv("LITELLM_BASE_URL", "")
+LITELLM_API_KEY = os.getenv("LITELLM_API_KEY", "")
+LITELLM_MODEL = os.getenv("LITELLM_MODEL", "deepseek-main")
+
 LLM_TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
 LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
 
@@ -216,6 +222,54 @@ class LLMClient:
             logger.warning("ollama_request_error", error=str(e))
             return None
 
+    # --- LiteLLM gateway (preferred when configured) ------------------------
+
+    async def _gateway_chat(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float,
+        json_mode: bool,
+        model: str,
+    ) -> dict[str, Any] | None:
+        """Call the LiteLLM proxy (OpenAI-format /chat/completions)."""
+        if not LITELLM_BASE_URL:
+            return None
+
+        client = self._get_client()
+        body: dict[str, Any] = {
+            "model": model,
+            "stream": False,
+            "temperature": temperature,
+        }
+        if json_mode:
+            body["response_format"] = {"type": "json_object"}
+
+        try:
+            headers = {"Content-Type": "application/json"}
+            if LITELLM_API_KEY:
+                headers["Authorization"] = f"Bearer {LITELLM_API_KEY}"
+            resp = await client.post(
+                f"{LITELLM_BASE_URL}/chat/completions",
+                headers=headers,
+                json=body,
+            )
+            if resp.status_code != 200:
+                logger.warning("litellm_http_error", status=resp.status_code, detail=resp.text[:200])
+                return None
+            data = resp.json()
+            choice = (data.get("choices") or [{}])[0]
+            content = (choice.get("message") or {}).get("content") or ""
+            if not content.strip():
+                return None
+            return {
+                "content": content,
+                "usage": data.get("usage") or {},
+                "model": model,
+            }
+        except (httpx.HTTPError, asyncio.TimeoutError) as e:
+            logger.warning("litellm_request_error", error=str(e))
+            return None
+
     # --- Public API ----------------------------------------------------------
 
     async def chat(
@@ -236,6 +290,7 @@ class LLMClient:
         preferred = force_provider or "deepseek"
         if preferred == "deepseek":
             candidates: list[tuple[str, str]] = [
+                ("litellm", model or LITELLM_MODEL),
                 ("deepseek", model or DEEPSEEK_MODEL),
                 (LLM_FALLBACK_PROVIDER, model or LLM_FALLBACK_MODEL),
             ]
@@ -244,7 +299,9 @@ class LLMClient:
 
         last_error = ""
         for provider, model_name in candidates:
-            if provider == "deepseek":
+            if provider == "litellm":
+                result = await self._gateway_chat(messages, temperature, json_mode, model_name)
+            elif provider == "deepseek":
                 result = await self._deepseek_chat(messages, temperature, json_mode, model_name)
             elif provider == "ollama":
                 result = await self._ollama_chat(messages, temperature, json_mode, model_name)

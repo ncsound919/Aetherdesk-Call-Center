@@ -277,8 +277,9 @@ services:
     restart: unless-stopped
     environment:
       MB_DB_TYPE: h2
-      MB_EMBEDDING_APP_ORIGIN: http://localhost:3001
-      MB_EMBDING_APP_ALLOW_EMBEDDING: "true"
+      MB_EMBEDDING_APP_ORIGIN: ${METABASE_EMBED_ORIGIN:-http://localhost:3001}
+      MB_EMBEDDING_APP_ALLOW_EMBEDDING: "true"
+      MB_EMBEDDING_SECRET_KEY: ${METABASE_SECRET_KEY}
     ports:
       - "3002:3000"
     networks:
@@ -290,6 +291,42 @@ services:
         limits:
           cpus: '1'
           memory: 2G
+
+  # LiteLLM — AI gateway / LLM proxy (OpenAI-format, cost tracking, failover)
+  litellm:
+    image: ghcr.io/berriai/litellm:main-latest
+    container_name: aetherdesk-litellm
+    restart: unless-stopped
+    command: ["--config", "/app/config.yaml"]
+    environment:
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-aetherdesk-local}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+    volumes:
+      - ./config/litellm/config.yaml:/app/config.yaml
+    ports:
+      - "4000:4000"
+    networks:
+      - aetherdesk-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  # Obscura — headless browser (CDP server) for AI agents and scraping
+  obscura:
+    image: h4ckf0r0day/obscura:latest
+    container_name: aetherdesk-obscura
+    restart: unless-stopped
+    ports:
+      - "9222:9222"
+    networks:
+      - aetherdesk-net
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
 
   prometheus:
     image: prom/prometheus:latest
