@@ -88,6 +88,10 @@ const SignupPage                   = lazy(() => import('./pages/SignupPage'));
 const ForgotPasswordPage           = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage            = lazy(() => import('./pages/ResetPasswordPage'));
 const VerifyEmailPage              = lazy(() => import('./pages/VerifyEmailPage'));
+const FlyersPage                   = lazy(() => import('./pages/admin/FlyersPage'));
+const SEOContentPage               = lazy(() => import('./pages/admin/SEOContentPage'));
+const CRMPage                      = lazy(() => import('./pages/admin/CRMPage'));
+const CouponsPage                  = lazy(() => import('./pages/admin/CouponsPage'));
 
 // ─── Nav structure (constant — defined outside component) ────────────────────
 const NAV_GROUPS = [
@@ -153,6 +157,15 @@ const NAV_GROUPS = [
       { name: 'White Label',         icon: Layers,          path: '/white-label' },
       { name: 'Billing',             icon: Briefcase,       path: '/billing' },
       { name: 'Settings',            icon: SettingsIcon,    path: '/settings' },
+    ],
+  },
+  {
+    label: 'Overlay365 Admin',
+    items: [
+      { name: 'Flyers',      icon: LayoutDashboard, path: '/admin/flyers' },
+      { name: 'SEO Content', icon: Globe,           path: '/admin/seo' },
+      { name: 'CRM',         icon: Users,           path: '/admin/crm' },
+      { name: 'Coupons',     icon: Zap,             path: '/admin/coupons' },
     ],
   },
 ];
@@ -565,6 +578,12 @@ export default function App() {
                       <Route path="/billing"         element={<BillingPage />} />
                       <Route path="/settings"        element={<Settings />} />
                       <Route path="/onboarding"      element={<SelfServeSetup />} />
+
+                      {/* Overlay365 Admin */}
+                      <Route path="/admin/flyers"  element={<FlyersPage />} />
+                      <Route path="/admin/seo"     element={<SEOContentPage />} />
+                      <Route path="/admin/crm"     element={<CRMPage />} />
+                      <Route path="/admin/coupons" element={<CouponsPage />} />
 
                       {/* Fallback */}
                       <Route path="*" element={<Navigate to="/" replace />} />
