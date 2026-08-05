@@ -56,6 +56,8 @@ class TTSService:
             return await self._synthesize_qwen3(text)
         elif engine == "edge":
             return await self._synthesize_edge(text)
+        elif engine == "edge-tts":
+            return await self._synthesize_edge_tts(text)
         else:
             raise ValueError(f"Unknown TTS engine: {engine}")
 
@@ -128,6 +130,20 @@ class TTSService:
         if audio_chunks:
             return b''.join(audio_chunks)
         raise Exception("Edge TTS returned no audio")
+
+    async def _synthesize_edge_tts(self, text: str) -> bytes:
+        import edge_tts
+        # Edge neural voices are Microsoft's fixed set — the chatterbox voice
+        # clone id (e.g. voice_cdf27738) is not valid here.
+        voice = os.getenv("TTS_VOICE") or "en-US-AriaNeural"
+        communicate = edge_tts.Communicate(text, voice)
+        audio_chunks = []
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_chunks.append(chunk["data"])
+        if not audio_chunks:
+            raise Exception("edge-tts returned no audio")
+        return b"".join(audio_chunks)
 
     async def synthesize_streaming(self, text: str):
         """Async generator that yields audio chunks as they are synthesized."""
