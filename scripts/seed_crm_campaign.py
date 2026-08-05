@@ -21,16 +21,19 @@ def _internal_api_key() -> str:
     if key:
         return key
     env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+    candidates = []
     try:
         with open(env_path, encoding="utf-8") as fh:
             for raw in fh:
                 line = raw.strip()
                 if line.startswith("INTERNAL_API_KEY="):
-                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
-                    break
+                    candidates.append(line.split("=", 1)[1].strip().strip('"').strip("'"))
     except OSError:
         pass
-    return key
+    for cand in reversed(candidates):
+        if cand and "REPLACE_ME" not in cand and len(cand) >= 16:
+            return cand
+    return ""
 
 # (company_name, city, phone, contact_name, industry, notes, email_only)
 LEADS = [
