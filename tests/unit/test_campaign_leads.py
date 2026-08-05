@@ -31,28 +31,36 @@ class TestCampaignLeadsList:
             yield c
 
     def test_list_leads(self, client):
-        mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = [
-            {"id": "L-1", "tenant_id": "T-001", "company_name": "Acme", "phone": "+15551111111", "priority": 3}
-        ]
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        with patch("api.routers.campaign.db_context_sync") as mock_ctx:
-            mock_ctx.return_value.__enter__ = MagicMock(return_value=mock_conn)
-            mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+        rows = [{"id": "L-1", "tenant_id": "T-001", "company_name": "Acme", "phone": "+15551111111", "priority": 3}]
+
+        async def fake_run(conn, query, params=(), fetch=None):
+            if fetch == "all":
+                return list(rows)
+            return None
+
+        with patch("api.routers.campaign._run_query", side_effect=fake_run), \
+             patch("api.routers.campaign.db_context") as mock_ctx:
+            mock_ctx.return_value = mock_ctx
+            mock_ctx.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_ctx.__aexit__ = AsyncMock(return_value=False)
             resp = client.get("/api/v1/campaign/leads", headers={"X-Api-Key": "dev-api-key"})
             assert resp.status_code == 200
             assert len(resp.json()) == 1
             assert resp.json()[0]["company_name"] == "Acme"
 
     def test_list_leads_with_status_filter(self, client):
-        mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = [{"id": "L-2", "status": "new"}]
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        with patch("api.routers.campaign.db_context_sync") as mock_ctx:
-            mock_ctx.return_value.__enter__ = MagicMock(return_value=mock_conn)
-            mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+        rows = [{"id": "L-2", "status": "new"}]
+
+        async def fake_run(conn, query, params=(), fetch=None):
+            if fetch == "all":
+                return list(rows)
+            return None
+
+        with patch("api.routers.campaign._run_query", side_effect=fake_run), \
+             patch("api.routers.campaign.db_context") as mock_ctx:
+            mock_ctx.return_value = mock_ctx
+            mock_ctx.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_ctx.__aexit__ = AsyncMock(return_value=False)
             resp = client.get("/api/v1/campaign/leads?status=new", headers={"X-Api-Key": "dev-api-key"})
             assert resp.status_code == 200
 
@@ -72,12 +80,14 @@ class TestCampaignLeadsCreate:
             yield c
 
     def test_create_lead(self, client):
-        mock_cursor = MagicMock()
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        with patch("api.routers.campaign.db_context_sync") as mock_ctx:
-            mock_ctx.return_value.__enter__ = MagicMock(return_value=mock_conn)
-            mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+        async def fake_run(conn, query, params=(), fetch=None):
+            return None
+
+        with patch("api.routers.campaign._run_query", side_effect=fake_run), \
+             patch("api.routers.campaign.db_context") as mock_ctx:
+            mock_ctx.return_value = mock_ctx
+            mock_ctx.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_ctx.__aexit__ = AsyncMock(return_value=False)
             resp = client.post("/api/v1/campaign/leads", json={
                 "company_name": "Acme Corp", "phone": "+15551234567",
                 "contact_name": "John Doe", "priority": 3,
@@ -110,13 +120,18 @@ class TestCampaignLaunch:
             yield c
 
     def test_launch_returns_no_leads_when_empty(self, client):
-        mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = []
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        with patch("api.routers.campaign.db_context_sync") as mock_ctx:
-            mock_ctx.return_value.__enter__ = MagicMock(return_value=mock_conn)
-            mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+        async def fake_run(conn, query, params=(), fetch=None):
+            if fetch == "all":
+                return []
+            return None
+
+        with patch("api.routers.campaign._run_query", side_effect=fake_run), \
+             patch("api.routers.campaign._campaign_running", False), \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("api.routers.campaign.db_context") as mock_ctx:
+            mock_ctx.return_value = mock_ctx
+            mock_ctx.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_ctx.__aexit__ = AsyncMock(return_value=False)
             resp = client.post("/api/v1/campaign/launch", json={
                 "profile_id": "PROF-TEST", "max_concurrent": 2,
                 "delay_between_calls": 5.0, "filter_status": "new",
@@ -147,16 +162,21 @@ class TestCampaignStats:
             yield c
 
     def test_stats_returns_conversion_rate(self, client):
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = {
+        mock_row = {
             "total_leads": 10, "new_leads": 5, "total_calls": 20,
             "interested": 4, "needs_human": 1,
         }
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        with patch("api.routers.campaign.db_context_sync") as mock_ctx:
-            mock_ctx.return_value.__enter__ = MagicMock(return_value=mock_conn)
-            mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+
+        async def fake_run(conn, query, params=(), fetch=None):
+            if fetch == "one":
+                return dict(mock_row)
+            return None
+
+        with patch("api.routers.campaign._run_query", side_effect=fake_run), \
+             patch("api.routers.campaign.db_context") as mock_ctx:
+            mock_ctx.return_value = mock_ctx
+            mock_ctx.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_ctx.__aexit__ = AsyncMock(return_value=False)
             resp = client.get("/api/v1/campaign/stats", headers={"X-Api-Key": "dev-api-key"})
             assert resp.status_code == 200
             data = resp.json()
@@ -164,16 +184,21 @@ class TestCampaignStats:
             assert data["conversion_rate"] == "20.0%"
 
     def test_stats_zero_calls(self, client):
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone.return_value = {
+        mock_row = {
             "total_leads": 0, "new_leads": 0, "total_calls": 0,
             "interested": 0, "needs_human": 0,
         }
-        mock_conn = MagicMock()
-        mock_conn.cursor.return_value = mock_cursor
-        with patch("api.routers.campaign.db_context_sync") as mock_ctx:
-            mock_ctx.return_value.__enter__ = MagicMock(return_value=mock_conn)
-            mock_ctx.return_value.__exit__ = MagicMock(return_value=False)
+
+        async def fake_run(conn, query, params=(), fetch=None):
+            if fetch == "one":
+                return dict(mock_row)
+            return None
+
+        with patch("api.routers.campaign._run_query", side_effect=fake_run), \
+             patch("api.routers.campaign.db_context") as mock_ctx:
+            mock_ctx.return_value = mock_ctx
+            mock_ctx.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_ctx.__aexit__ = AsyncMock(return_value=False)
             resp = client.get("/api/v1/campaign/stats", headers={"X-Api-Key": "dev-api-key"})
             assert resp.json()["conversion_rate"] == "0%"
 

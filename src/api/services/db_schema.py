@@ -1400,7 +1400,8 @@ CREATE TABLE IF NOT EXISTS campaign_calls (
     profile_id TEXT, call_sid TEXT, status TEXT DEFAULT 'initiated',
     outcome TEXT, needs_human_follow_up INTEGER DEFAULT 0,
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, ended_at TIMESTAMP,
-    duration_seconds INTEGER DEFAULT 0
+    duration_seconds INTEGER DEFAULT 0,
+    cost_usd REAL DEFAULT 0.0
 );
 
 CREATE INDEX IF NOT EXISTS idx_calls_tenant ON call_sessions(tenant_id);
@@ -1412,6 +1413,18 @@ CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
 CREATE INDEX IF NOT EXISTS idx_leads_tenant ON leads(tenant_id);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_campaign_calls_tenant ON campaign_calls(tenant_id);
+
+-- Campaigns (budget-gated outreach)
+CREATE TABLE IF NOT EXISTS campaigns (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name TEXT NOT NULL, description TEXT,
+    budget_cents INTEGER DEFAULT 0, spent_cents INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    filter_status TEXT DEFAULT 'new', profile_id TEXT,
+    max_concurrent INTEGER DEFAULT 3, delay_between_calls REAL DEFAULT 5.0,
+    started_at TIMESTAMP, ended_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 
 -- CRM tables
 CREATE TABLE IF NOT EXISTS customers (

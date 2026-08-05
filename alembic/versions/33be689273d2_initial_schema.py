@@ -430,6 +430,9 @@ DROP TABLE IF EXISTS call_sessions CASCADE;
 DROP TABLE IF EXISTS agents CASCADE;
 DROP TABLE IF EXISTS tenants CASCADE;
 DROP TABLE IF EXISTS plans CASCADE;
+DROP TABLE IF EXISTS campaigns CASCADE;
+DROP TABLE IF EXISTS campaign_calls CASCADE;
+DROP TABLE IF EXISTS leads CASCADE;
 """
 
 
@@ -613,7 +616,19 @@ CREATE TABLE IF NOT EXISTS campaign_calls (
     profile_id TEXT, call_sid TEXT, status TEXT DEFAULT 'initiated',
     outcome TEXT, needs_human_follow_up INTEGER DEFAULT 0,
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, ended_at TIMESTAMP,
-    duration_seconds INTEGER DEFAULT 0
+    duration_seconds INTEGER DEFAULT 0,
+    cost_usd REAL DEFAULT 0.0
+);
+
+CREATE TABLE IF NOT EXISTS campaigns (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    name TEXT NOT NULL, description TEXT,
+    budget_cents INTEGER DEFAULT 0, spent_cents INTEGER DEFAULT 0,
+    status TEXT DEFAULT 'draft',
+    filter_status TEXT DEFAULT 'new', profile_id TEXT,
+    max_concurrent INTEGER DEFAULT 3, delay_between_calls REAL DEFAULT 5.0,
+    started_at TIMESTAMP, ended_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_calls_tenant ON call_sessions(tenant_id);
@@ -648,6 +663,7 @@ INSERT OR IGNORE INTO tenants (id, name, slug, email, phone, plan_id, settings, 
 """
 
 SQLITE_DOWNGRADE = """
+DROP TABLE IF EXISTS campaigns;
 DROP TABLE IF EXISTS campaign_calls;
 DROP TABLE IF EXISTS leads;
 DROP TABLE IF EXISTS orders;
