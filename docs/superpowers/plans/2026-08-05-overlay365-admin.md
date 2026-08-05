@@ -37,9 +37,9 @@
 **Files:**
 - Modify: `src/api/services/db_schema.py` (append near the end, after the last `CREATE TABLE`)
 
-- [ ] **Step 1: Append the 6 admin tables**
+- [ ] **Step 1: Insert the 6 admin tables into the SCHEMA_SQL constant**
 
-Append to the end of `db_schema.py`:
+Insert the SQL block **inside the `SCHEMA_SQL = """..."""` constant, immediately before its closing `"""`** (currently at line ~2348, after the `eval_metrics` table). Do NOT append to the physical end of the file (that would break the Python module). Because `init_sqlite_schema()` derives the SQLite schema at runtime from `SCHEMA_SQL` via `postgres_to_sqlite(...)`, adding the tables here provisions both Postgres and SQLite. The DDL uses only `TEXT`/`REAL`/`INTEGER`/`TIMESTAMP` types so the SQLite translator handles it cleanly.
 
 ```sql
 -- ── Overlay365 Admin Suite ──────────────────────────────────────────
@@ -126,6 +126,68 @@ git add src/api/services/db_schema.py
 git commit -m "feat(admin): add Overlay365 admin tables to schema"
 ```
 
+### Task 1b: Alembic migration for admin tables
+
+**Why:** `init_pg_schema()`/`init_sqlite_schema()` run Alembic migrations first and only fall back to raw `SCHEMA_SQL` if Alembic fails. On already-migrated DBs, the new admin tables will NOT be provisioned unless an Alembic migration creates them. Fresh DBs provision via the raw-SQL fallback, but existing DBs need this migration.
+
+**Files:**
+- Create: `alembic/versions/<hex>_admin_tables.py`
+
+- [ ] **Step 1: Write the migration**
+
+Follow the existing pattern in `alembic/versions/459682371cf0_manual_initial_schema.py`: a revision chain, `use_postgres = os.getenv("USE_POSTGRES", "false").lower() == "true"` branch, `op.execute()` with Postgres DDL in the `if use_postgres:` branch and SQLite DDL in the `else:` branch. Set `down_revision = '459682371cf0'`. Use a fresh 12-hex revision id (generate one, e.g. `python -c "import uuid; print(uuid.uuid4().hex[:12])"`).
+
+Postgres branch DDL (id TEXT PK, timestamps TIMESTAMP):
+
+```sql
+CREATE TABLE IF NOT EXISTS seo_content (
+    id TEXT PRIMARY KEY,
+    slug TEXT NOT NULL UNIQUE,
+    meta_title TEXT, meta_description TEXT, og_title TEXT, og_description TEXT,
+    og_image TEXT, keywords TEXT, body TEXT,
+    status TEXT DEFAULT 'draft',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS donors (
+    id TEXT PRIMARY KEY, name TEXT, email TEXT, phone TEXT,
+    amount REAL DEFAULT 0.0, currency TEXT DEFAULT 'USD', tier TEXT, notes TEXT,
+    donation_date TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS coupons (
+    id TEXT PRIMARY KEY, code TEXT NOT NULL UNIQUE,
+    type TEXT DEFAULT 'percent', value REAL DEFAULT 0.0, min_amount REAL, max_uses INTEGER,
+    starts_at TIMESTAMP, ends_at TIMESTAMP, stripe_coupon_id TEXT,
+    status TEXT DEFAULT 'local_only', created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS contact_notes (
+    id TEXT PRIMARY KEY, source TEXT, contact_id TEXT, note TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS flyer_saves (
+    id TEXT PRIMARY KEY, template_id TEXT, title TEXT, subtitle TEXT, cta_text TEXT,
+    cta_url TEXT, theme TEXT, logo_url TEXT, config_json TEXT DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS flyer_templates (
+    id TEXT PRIMARY KEY, category TEXT, name TEXT, preset_json TEXT DEFAULT '{}'
+);
+```
+
+SQLite (`else:`) branch: identical DDL (TEXT PK, REAL, INTEGER, TIMESTAMP all translate fine). `downgrade()` drops the 6 tables.
+
+- [ ] **Step 2: Verify the migration is discoverable**
+
+Run: `python -c "from alembic.config import Config; from alembic.script import ScriptDirectory; c=Config('alembic.ini'); s=ScriptDirectory.from_config(c); print([h.revision for h in s.walk_revisions()])"`
+Expected: includes the new revision id and the chain head is your new revision.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add alembic/versions/
+git commit -m "feat(admin): alembic migration for admin tables"
+```
+
 ### Task 2: Create the admin DB layer
 
 **Files:**
@@ -153,7 +215,13 @@ def _now():
     return datetime.now(UTC).isoformat()
 
 def _row_to_dict(row, keys):
-    return dict(zip(keys, row)) if row else None
+    # db_pool's SQLite connections use _dict_factory, so rows are already
+    # dicts. Pass dicts through untouched; zip only for tuple rows (defensive).
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        return dict(row)
+    return dict(zip(keys, row))
 
 
 # ── SEO content ──────────────────────────────────────────────────────
@@ -217,7 +285,7 @@ async def upsert_seo_content_db(slug, data):
               data.get("og_description"), data.get("og_image"), data.get("keywords"),
               data.get("body"), data.get("status", "draft"), now, slug))
         conn.commit()
-        return get_seo_content_db(slug)
+        return await get_seo_content_db(slug)
     conn.execute("""
         INSERT INTO seo_content (id, slug, meta_title, meta_description, og_title, og_description, og_image, keywords, body, status, updated_at, created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
@@ -225,7 +293,7 @@ async def upsert_seo_content_db(slug, data):
           data.get("og_description"), data.get("og_image"), data.get("keywords"),
           data.get("body"), data.get("status", "draft"), now, now))
     conn.commit()
-    return get_seo_content_db(slug)
+    return await get_seo_content_db(slug)
 
 
 # ── Donors ───────────────────────────────────────────────────────────
