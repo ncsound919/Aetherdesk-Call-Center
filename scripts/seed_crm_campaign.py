@@ -8,12 +8,29 @@ Usage:
     python scripts/seed_crm_campaign.py
 """
 import json
+import os
 import sys
 import urllib.request
 import urllib.error
 
 API = "http://127.0.0.1:8000/api/v1"
-API_KEY = "d2CrSyTi5rv2HMjOg12ilY6qBNDBxfpeYoHOls4aB-E"
+
+
+def _internal_api_key() -> str:
+    key = os.environ.get("INTERNAL_API_KEY", "")
+    if key:
+        return key
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+    try:
+        with open(env_path, encoding="utf-8") as fh:
+            for raw in fh:
+                line = raw.strip()
+                if line.startswith("INTERNAL_API_KEY="):
+                    key = line.split("=", 1)[1].strip().strip('"').strip("'")
+                    break
+    except OSError:
+        pass
+    return key
 
 # (company_name, city, phone, contact_name, industry, notes, email_only)
 LEADS = [
@@ -95,11 +112,15 @@ def lead_payload(company: str, city: str, phone: str, contact: str | None,
 
 
 def main() -> int:
+    api_key = _internal_api_key()
+    if not api_key:
+        print("INTERNAL_API_KEY is not set; export it or add it to .env")
+        return 1
     payload = {"leads": [lead_payload(*lead) for lead in LEADS]}
     req = urllib.request.Request(
         f"{API}/campaign/leads/bulk",
         data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "x-api-key": API_KEY},
+        headers={"Content-Type": "application/json", "x-api-key": api_key},
         method="POST",
     )
     try:
