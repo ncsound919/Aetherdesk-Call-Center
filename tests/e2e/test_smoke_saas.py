@@ -1,11 +1,22 @@
 import os
+import sys
+
 import pytest
 
-os.environ["ENCRYPTION_KEY"] = "REDACTED_ENCRYPTION_KEY_PLEASE_ROTATE="
+os.environ["APP_ENV"] = "development"
+os.environ["USE_POSTGRES"] = "false"
+os.environ["ENCRYPTION_KEY"] = "0KbqB9reCq9pLKXpQcAY_GLYSf5m5aLKIwgymbAg6Fg="
+os.environ["JWT_SECRET"] = "test-jwt-secret"
+os.environ["INTERNAL_API_KEY"] = "dev-api-key"
 os.environ["WEBSOCKET_SECRET_KEY"] = "test-websocket-secret-for-testing-only"
 
-from api.main import app
-from httpx import AsyncClient, ASGITransport
+# Evict a mock api.main pre-registered by unit tests (see tests/conftest.py).
+_existing_main = sys.modules.get("api.main")
+if _existing_main is not None and not hasattr(_existing_main, "app"):
+    del sys.modules["api.main"]
+
+from api.main import app  # noqa: E402
+from httpx import AsyncClient, ASGITransport  # noqa: E402
 
 
 @pytest.mark.asyncio
@@ -13,7 +24,7 @@ async def test_health_endpoint():
     """Test health endpoint works."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/health")
+        response = await client.get("/api/v1/health")
         assert response.status_code == 200
 
 

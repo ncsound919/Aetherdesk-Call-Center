@@ -7,7 +7,7 @@ import os
 
 os.environ.setdefault("APP_ENV", "development")
 os.environ.setdefault("USE_POSTGRES", "false")
-os.environ.setdefault("ENCRYPTION_KEY", "REDACTED_ENCRYPTION_KEY_PLEASE_ROTATE=")
+os.environ.setdefault("ENCRYPTION_KEY", "0KbqB9reCq9pLKXpQcAY_GLYSf5m5aLKIwgymbAg6Fg=")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
 os.environ.setdefault("DEEPGRAM_API_KEY", "test-key")
 os.environ.setdefault("GROQ_API_KEY", "test-key")

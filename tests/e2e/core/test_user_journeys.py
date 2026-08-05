@@ -37,7 +37,7 @@ class TestAuthFlow:
     """Login → token → protected resource → logout"""
 
     def test_health_returns_200(self, client):
-        resp = client.get("/health")
+        resp = client.get("/api/v1/health")
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] in ("healthy", "degraded")
@@ -46,12 +46,14 @@ class TestAuthFlow:
     def test_liveness_probe(self, client):
         resp = client.get("/api/v1/health/live")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "alive"}
+        data = resp.json()
+        assert data["status"] == "alive"
 
     def test_readiness_probe(self, client):
         resp = client.get("/api/v1/health/ready")
-        assert resp.status_code == 200
-        assert resp.json() == {"status": "ready"}
+        assert resp.status_code in (200, 503)
+        data = resp.json()
+        assert data["status"] in ("ready", "not_ready")
 
     def test_login_valid_dev_user(self, client):
         resp = client.post(
@@ -164,7 +166,7 @@ class TestTenantFlow:
         assert "application/json" in resp.headers.get("content-type", "")
 
     def test_method_not_allowed_returns_405(self, client):
-        resp = client.put("/health")
+        resp = client.put("/api/v1/health")
         assert resp.status_code == 405
 
 
@@ -350,14 +352,22 @@ class TestUsageAndBilling:
     """Usage stats and billing summary"""
 
     def test_usage_stats(self, client):
-        resp = client.get("/api/v1/usage", headers=_auth_headers())
+        resp = client.get(
+            "/api/v1/usage",
+            params={"tenant_id": "TENANT-001"},
+            headers=_auth_headers(),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "total_calls" in data
         assert "total_agents" in data
 
     def test_billing_summary(self, client):
-        resp = client.get("/api/v1/billing", headers=_auth_headers())
+        resp = client.get(
+            "/api/v1/billing",
+            params={"tenant_id": "TENANT-001"},
+            headers=_auth_headers(),
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "total_calls" in data

@@ -16,6 +16,7 @@ Scoring:
 import asyncio
 import json
 import os
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -27,13 +28,19 @@ os.environ.setdefault("DATABASE_URL", "sqlite:///test_att.db")
 os.environ.setdefault("OLLAMA_MODEL", "hf.co/unsloth/gemma-4-E2B-it-GGUF:UD-IQ2_M")
 os.environ.setdefault("OLLAMA_HOST", "http://localhost:11434")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
+os.environ.setdefault("INTERNAL_API_KEY", "dev-api-key")
 os.environ.setdefault("APP_ENV", "development")
 os.environ.setdefault("USE_POSTGRES", "false")
 
 import pytest
 from fastapi.testclient import TestClient
 
-from api.main import app
+# Evict a mock api.main pre-registered by unit tests (see tests/conftest.py).
+_existing_main = sys.modules.get("api.main")
+if _existing_main is not None and not hasattr(_existing_main, "app"):
+    del sys.modules["api.main"]
+
+from api.main import app  # noqa: E402
 
 _client = TestClient(app)
 

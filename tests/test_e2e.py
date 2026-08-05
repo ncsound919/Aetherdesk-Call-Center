@@ -333,15 +333,20 @@ class APIEndpointTests(unittest.TestCase):
 
         os.environ.setdefault("ENCRYPTION_KEY", "dGVzdGtleWZvcmVuY3J5cHRpb25vbjEyMzQ1Njc4OTA=")
         os.environ.setdefault("JWT_SECRET", "test-jwt-secret-for-unit-tests-only")
+        os.environ.setdefault("INTERNAL_API_KEY", "dev-api-key")
+        # Evict a mock api.main pre-registered by unit tests (see tests/conftest.py).
+        _existing_main = sys.modules.get("api.main")
+        if _existing_main is not None and not hasattr(_existing_main, "app"):
+            del sys.modules["api.main"]
         from api.main import app
         self.client = TestClient(app, raise_server_exceptions=False)
 
     def test_root_returns_ok(self):
-        r = self.client.get("/health")
+        r = self.client.get("/api/v1/health")
         self.assertEqual(r.status_code, 200)
 
     def test_health_endpoint(self):
-        r = self.client.get("/health")
+        r = self.client.get("/api/v1/health")
         self.assertEqual(r.status_code, 200)
 
     def test_peek_queue_returns_items_key(self):

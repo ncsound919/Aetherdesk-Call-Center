@@ -7,8 +7,9 @@ import sys
 import uuid
 from unittest.mock import AsyncMock, patch, MagicMock
 
-os.environ.setdefault("ENCRYPTION_KEY", "REDACTED_ENCRYPTION_KEY_PLEASE_ROTATE=")
+os.environ.setdefault("ENCRYPTION_KEY", "0KbqB9reCq9pLKXpQcAY_GLYSf5m5aLKIwgymbAg6Fg=")
 os.environ.setdefault("JWT_SECRET", "test-jwt-secret")
+os.environ.setdefault("INTERNAL_API_KEY", "dev-api-key")
 os.environ.setdefault("DEEPGRAM_API_KEY", "test-key")
 os.environ.setdefault("GROQ_API_KEY", "test-key")
 os.environ.setdefault("APP_ENV", "development")
@@ -16,7 +17,13 @@ os.environ.setdefault("USE_POSTGRES", "false")
 
 import pytest
 from fastapi.testclient import TestClient
-from api.main import app
+
+# Evict a mock api.main pre-registered by unit tests (see tests/conftest.py).
+_existing_main = sys.modules.get("api.main")
+if _existing_main is not None and not hasattr(_existing_main, "app"):
+    del sys.modules["api.main"]
+
+from api.main import app  # noqa: E402
 
 # Single shared TestClient for all tests — avoids lifecycle conflicts
 _client = TestClient(app)

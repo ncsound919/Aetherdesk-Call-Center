@@ -79,7 +79,7 @@ async def create_agent(request: Request, tenant_id: str, agent: AgentCreate, _=D
     sip_extension = db_agent["sip_extension"]
 
     # Create Fonster Voice Application for agent
-    fonster_client = request.app.state.fonster_client
+    fonster_client = getattr(request.app.state, "fonster_client", None)
     if fonster_client:
         try:
             await fonster_client.create_application({
