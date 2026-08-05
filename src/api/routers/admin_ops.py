@@ -23,6 +23,7 @@ from api.services.db_admin_ops import (
 )
 from api.services.db_config import USE_POSTGRES
 from api.services.db_pool import get_pg_pool
+from api.services.db_tenants import list_leads_db
 from api.services.llm_client import llm_client
 
 logger = structlog.get_logger()
@@ -100,7 +101,6 @@ async def admin_generate_seo(body: dict, payload: dict = Depends(require_admin))
 @admin_router.get("/crm/contacts")
 async def admin_crm_contacts(payload: dict = Depends(require_admin)):
     """Unified contacts: leads + donors + signups."""
-    from api.services.db_tenants import list_leads_db
     leads = await list_leads_db("TENANT-001", limit=500, offset=0)
     donors = await list_donors_db()
 
