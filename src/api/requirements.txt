@@ -2,7 +2,7 @@
 # Python 3.11+ recommended (3.12 has issues with some dependencies)
 
 # Web Framework
-fastapi>=0.104.0,<1.0
+fastapi>=0.141.1,<1.0
 uvicorn>=0.24.0,<1.0
 gunicorn>=21.2.0
 
@@ -17,14 +17,15 @@ aioredis>=2.0
 
 # HTTP Client
 httpx>=0.25.0
+aiohttp>=3.14.3
 
 # Auth & Security
-pyjwt[crypto]>=2.10.1
+pyjwt[crypto]>=2.13.0
 python-dotenv>=1.0
 pwdlib[argon2]>=0.2.0
 
 # Encryption (HIPAA compliance)
-cryptography>=42.0.8
+cryptography>=50.0.0
 
 # Speech Services
 deepgram-sdk>=3.0
@@ -51,7 +52,7 @@ playwright>=1.40
 
 # Utilities
 aiofiles>=23.0
-python-multipart>=0.0.6
+python-multipart>=0.0.31
 
 # Observability — Langfuse (LLM tracing)
 langfuse>=2.0.0

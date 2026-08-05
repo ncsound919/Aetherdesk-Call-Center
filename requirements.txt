@@ -1,6 +1,6 @@
 # AetherDesk Call Center Platform - Python Dependencies
 # Core Framework
-fastapi==0.104.0
+fastapi==0.141.1
 uvicorn[standard]==0.24.0
 
 # Database
@@ -12,12 +12,12 @@ alembic==1.12.0
 redis==5.0.0
 
 # Configuration
-python-dotenv==1.0.0
-pydantic==2.5.0
-pydantic-settings==2.0.0
+python-dotenv==1.2.2
+pydantic==2.13.4
+pydantic-settings==2.14.2
 
 # Authentication
-PyJWT[crypto]==2.10.1
+PyJWT[crypto]==2.13.0
 pwdlib[argon2]==0.2.0
 
 # Speech-to-Text
@@ -40,21 +40,21 @@ pandas==2.0.0
 
 # Real-Time Communication
 websockets==12.0
-python-socketio==5.10.0
-python-engineio==4.8.0
+python-socketio==5.16.3
+python-engineio==4.13.4
 
 # HTTP Client
 httpx==0.25.0
-requests==2.31.0
+requests==2.34.2
 
 # Security
-cryptography==42.0.8
+cryptography==50.0.0
 
 # Background Tasks
 celery==5.5.3
 
 # Testing
-pytest==7.4.0
+pytest==8.3.4
 pytest-asyncio==0.21.0
 pytest-cov==4.1.0
 playwright==1.40.0
@@ -66,11 +66,11 @@ sentry-sdk[fastapi]==1.30.0
 
 # Code Quality
 ruff==0.1.0
-black==23.0.0
+black==26.3.1
 isort==5.12.0
 mypy==1.7.0
 
 # Serialization
-orjson==3.9.0
-msgpack==1.0.0
-protobuf==5.29.0
+orjson==3.11.7
+msgpack==1.2.1
+protobuf==5.29.6
