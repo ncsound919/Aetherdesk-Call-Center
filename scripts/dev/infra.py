@@ -100,6 +100,9 @@ def _ensure_litellm_venv() -> str:
     subprocess.run([sys.executable, "-m", "venv", str(LITELLM_VENV)], check=True)
     subprocess.run([str(python), "-m", "pip", "install", "--quiet", "--upgrade", "pip"], check=True)
     subprocess.run([str(python), "-m", "pip", "install", "--quiet", "litellm[proxy]"], check=True)
+    subprocess.run(
+        [str(python), "-m", "pip", "install", "--quiet", "fastapi<0.116"], check=True
+    )
     return str(python)
 
 
