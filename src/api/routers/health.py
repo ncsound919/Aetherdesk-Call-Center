@@ -1,8 +1,10 @@
 from datetime import UTC, datetime
 
 import structlog
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+
+from api.services.auth import verify_api_key
 
 from api.models.dto import HealthCheck
 from api.services.database import USE_POSTGRES, get_pg_pool
@@ -131,7 +133,7 @@ async def pool_stats():
 
 
 @router.get("/metrics")
-async def metrics_endpoint():
-    """Prometheus metrics endpoint"""
+async def metrics_endpoint(tenant_id: str = Depends(verify_api_key)):
+    """Prometheus metrics endpoint (protected by API key)."""
     from api.middleware.metrics import metrics_endpoint as metrics_handler
     return await metrics_handler()

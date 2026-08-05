@@ -1,3 +1,4 @@
+import os
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Header, Query
@@ -51,7 +52,7 @@ async def get_usage(
         total_minutes=stats["total_minutes"],
         avg_call_duration=avg_duration,
         queue_depth=queue_depth,
-        total_cost=stats["total_minutes"] * 0.015,
+        total_cost=stats["total_minutes"] * float(os.getenv("CALL_COST_PER_MINUTE", "0.015")),
         by_agent=[],
         by_day=[],
     )

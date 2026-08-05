@@ -1,4 +1,5 @@
 import json
+import os
 import uuid
 from datetime import UTC, datetime
 
@@ -185,12 +186,13 @@ async def get_usage_stats(tenant_id):
 
 
 async def get_billing_summary(tenant_id, period_start, period_end):
+    cost_per_minute = float(os.getenv("CALL_COST_PER_MINUTE", "0.015"))
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
             total_calls = await pool.fetchval("SELECT COUNT(*) FROM call_sessions WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3", tenant_id, period_start, period_end)
             total_minutes = await pool.fetchval("SELECT COALESCE(SUM(duration_seconds)/60.0, 0) FROM call_sessions WHERE tenant_id = $1 AND created_at BETWEEN $2 AND $3", tenant_id, period_start, period_end)
-            return {"total_calls": total_calls, "total_minutes": float(total_minutes or 0), "total_cost": float(total_minutes or 0) * 0.015, "currency": "USD"}
+            return {"total_calls": total_calls, "total_minutes": float(total_minutes or 0), "total_cost": float(total_minutes or 0) * cost_per_minute, "currency": "USD"}
     else:
         conn = _get_sqlite_conn()
         try:
@@ -198,7 +200,7 @@ async def get_billing_summary(tenant_id, period_start, period_end):
             total_minutes = (conn.execute("SELECT COALESCE(SUM(duration_seconds)/60.0, 0) AS mins FROM call_sessions WHERE tenant_id = ? AND created_at BETWEEN ? AND ?", (tenant_id, period_start, period_end)).fetchone() or {}).get("mins", 0)
         finally:
             conn.close()
-        return {"total_calls": total_calls or 0, "total_minutes": float(total_minutes or 0), "total_cost": float(total_minutes or 0) * 0.015, "currency": "USD"}
+        return {"total_calls": total_calls or 0, "total_minutes": float(total_minutes or 0), "total_cost": float(total_minutes or 0) * cost_per_minute, "currency": "USD"}
 
 
 # --- Audit Logging ---

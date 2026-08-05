@@ -57,13 +57,14 @@ async def get_billing(
         period_end = now
 
     summary = await get_billing_summary(tenant_id, period_start, period_end)
+    cost_per_minute = float(os.getenv("CALL_COST_PER_MINUTE", "0.015"))
     return {
         "total_calls": summary["total_calls"],
         "total_minutes": summary["total_minutes"],
         "total_cost": summary["total_cost"],
         "currency": summary["currency"],
         "breakdown": {
-            "per_minute": 0.015,
+            "per_minute": cost_per_minute,
             "ai_minutes": summary["total_minutes"] * 0.5,
             "standard_minutes": summary["total_minutes"] * 0.5,
         },
