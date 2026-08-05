@@ -83,6 +83,7 @@ class TestHandoffConfirmationGate:
     async def test_handoff_confirmation_flow(self):
         from unittest.mock import MagicMock, AsyncMock, patch
         from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
 
         mock_actions = MagicMock()
         mock_actions.run.return_value = {"success": True}
@@ -90,28 +91,20 @@ class TestHandoffConfirmationGate:
 
         history = [{"from": "customer", "text": "I want to speak to a manager"}]
 
-        mock_client = AsyncMock()
-        mock_client.is_closed = False
+        mock_chat = AsyncMock(side_effect=[
+            LlmResult(
+                text='{"thought": "customer wants manager", "tool": "handoff_to_human", "tool_input": "customer requested manager"}',
+                provider="deepseek",
+                model="deepseek-v4-flash",
+            ),
+            LlmResult(
+                text='{"thought": "confirmation pending", "response": "Let me check with my supervisor."}',
+                provider="deepseek",
+                model="deepseek-v4-flash",
+            ),
+        ])
 
-        handoff_response = MagicMock()
-        handoff_response.raise_for_status = MagicMock()
-        handoff_response.json.return_value = {
-            "message": {
-                "content": '{"thought": "customer wants manager", "tool": "handoff_to_human", "tool_input": "customer requested manager"}'
-            }
-        }
-
-        response_response = MagicMock()
-        response_response.raise_for_status = MagicMock()
-        response_response.json.return_value = {
-            "message": {
-                "content": '{"thought": "confirmation pending", "response": "Let me check with my supervisor."}'
-            }
-        }
-
-        mock_client.post.side_effect = [handoff_response, response_response]
-
-        with patch.object(agent, "_get_client", return_value=mock_client):
+        with patch("api.services.agent.llm_client.chat", mock_chat):
             from api.services.agent import AgentResponse
             result = await agent.step(history, "Connect me to a manager")
             assert isinstance(result, AgentResponse)
@@ -122,6 +115,7 @@ class TestHandoffConfirmationGate:
     async def test_handoff_second_call_confirms(self):
         from unittest.mock import MagicMock, AsyncMock, patch
         from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
 
         mock_actions = MagicMock()
         mock_actions.run.return_value = {"success": True}
@@ -130,28 +124,20 @@ class TestHandoffConfirmationGate:
 
         history = [{"from": "customer", "text": "Yes, transfer me"}]
 
-        mock_client = AsyncMock()
-        mock_client.is_closed = False
+        mock_chat = AsyncMock(side_effect=[
+            LlmResult(
+                text='{"thought": "confirmed", "tool": "handoff_to_human", "tool_input": "customer requested manager"}',
+                provider="deepseek",
+                model="deepseek-v4-flash",
+            ),
+            LlmResult(
+                text='{"thought": "confirmed", "response": "Transferring you now."}',
+                provider="deepseek",
+                model="deepseek-v4-flash",
+            ),
+        ])
 
-        handoff_response = MagicMock()
-        handoff_response.raise_for_status = MagicMock()
-        handoff_response.json.return_value = {
-            "message": {
-                "content": '{"thought": "confirmed", "tool": "handoff_to_human", "tool_input": "customer requested manager"}'
-            }
-        }
-
-        response_response = MagicMock()
-        response_response.raise_for_status = MagicMock()
-        response_response.json.return_value = {
-            "message": {
-                "content": '{"thought": "confirmed", "response": "Transferring you now."}'
-            }
-        }
-
-        mock_client.post.side_effect = [handoff_response, response_response]
-
-        with patch.object(agent, "_get_client", return_value=mock_client):
+        with patch("api.services.agent.llm_client.chat", mock_chat):
             from api.services.agent import AgentResponse
             result = await agent.step(history, "Yes, transfer me")
             assert isinstance(result, AgentResponse)

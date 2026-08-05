@@ -84,19 +84,19 @@ class TestAgentServiceAnswer:
     @pytest.mark.asyncio
     async def test_answer_with_context(self):
         from api.services.agent import AgentService
+        from api.services.llm_client import LlmResult
 
         svc = AgentService()
-        svc._get_client = MagicMock()
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"message": {"content": "The refund takes 5-7 business days."}}
-        mock_response.status_code = 200
-        mock_client.post = AsyncMock(return_value=mock_response)
-        svc._get_client.return_value = mock_client
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text="The refund takes 5-7 business days.",
+            provider="deepseek",
+            model="deepseek-v4-flash",
+        ))
 
-        result = await svc.answer("How long for refund?", [
-            {"content": "Refunds process within 5-7 business days.", "metadata": {"source": "billing_faq"}}
-        ])
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await svc.answer("How long for refund?", [
+                {"content": "Refunds process within 5-7 business days.", "metadata": {"source": "billing_faq"}}
+            ])
 
         assert result.text == "The refund takes 5-7 business days."
         assert result.sources == ["billing_faq"]
@@ -117,40 +117,40 @@ class TestAgentServiceAnswer:
     @pytest.mark.asyncio
     async def test_answer_with_history(self):
         from api.services.agent import AgentService
+        from api.services.llm_client import LlmResult
 
         svc = AgentService()
-        svc._get_client = MagicMock()
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"message": {"content": "Yes, I can help with that."}}
-        mock_response.status_code = 200
-        mock_client.post = AsyncMock(return_value=mock_response)
-        svc._get_client.return_value = mock_client
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text="Yes, I can help with that.",
+            provider="deepseek",
+            model="deepseek-v4-flash",
+        ))
 
-        result = await svc.answer("What about discounts?", [
-            {"content": "Discounts available for bulk orders.", "metadata": {"source": "pricing"}}
-        ], history=[
-            {"customer": "Hi", "agent": "Hello, how can I help?"}
-        ])
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await svc.answer("What about discounts?", [
+                {"content": "Discounts available for bulk orders.", "metadata": {"source": "pricing"}}
+            ], history=[
+                {"customer": "Hi", "agent": "Hello, how can I help?"}
+            ])
 
         assert result.text == "Yes, I can help with that."
 
     @pytest.mark.asyncio
     async def test_answer_detects_need_agent_keyword(self):
         from api.services.agent import AgentService
+        from api.services.llm_client import LlmResult
 
         svc = AgentService()
-        svc._get_client = MagicMock()
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"message": {"content": "I don't know the answer to that."}}
-        mock_response.status_code = 200
-        mock_client.post = AsyncMock(return_value=mock_response)
-        svc._get_client.return_value = mock_client
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text="I don't know the answer to that.",
+            provider="deepseek",
+            model="deepseek-v4-flash",
+        ))
 
-        result = await svc.answer("Complex question?", [
-            {"content": "Some info.", "metadata": {"source": "faq"}}
-        ])
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await svc.answer("Complex question?", [
+                {"content": "Some info.", "metadata": {"source": "faq"}}
+            ])
 
         assert result.needs_agent is True
 
@@ -159,14 +159,12 @@ class TestAgentServiceAnswer:
         from api.services.agent import AgentService
 
         svc = AgentService()
-        svc._get_client = MagicMock()
-        mock_client = MagicMock()
-        mock_client.post = AsyncMock(side_effect=Exception("HTTP 500"))
-        svc._get_client.return_value = mock_client
+        mock_chat = AsyncMock(side_effect=Exception("HTTP 500"))
 
-        result = await svc.answer("Question?", [
-            {"content": "Info.", "metadata": {"source": "faq"}}
-        ])
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await svc.answer("Question?", [
+                {"content": "Info.", "metadata": {"source": "faq"}}
+            ])
 
         assert "having trouble processing" in result.text
         assert result.needs_agent is True
@@ -237,21 +235,19 @@ class TestDynamicAgent:
     @pytest.mark.asyncio
     async def test_step_returns_response(self):
         from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
 
-        agent._get_client = MagicMock()
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "message": {"content": json.dumps({"thought": "answering", "response": "Hello, how can I help?"})}
-        }
-        mock_response.status_code = 200
-        mock_client.post = AsyncMock(return_value=mock_response)
-        agent._get_client.return_value = mock_client
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text=json.dumps({"thought": "answering", "response": "Hello, how can I help?"}),
+            provider="deepseek",
+            model="deepseek-v4-flash",
+        ))
 
-        result = await agent.step([], "Hi there")
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await agent.step([], "Hi there")
 
         assert result.text == "Hello, how can I help?"
         assert result.needs_agent is False
@@ -259,52 +255,39 @@ class TestDynamicAgent:
     @pytest.mark.asyncio
     async def test_step_tool_call_then_response(self):
         from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
 
-        agent._get_client = MagicMock()
-        mock_client = MagicMock()
+        mock_chat = AsyncMock(side_effect=[
+            LlmResult(text=json.dumps({"thought": "looking up", "tool": "lookup_invoice", "tool_input": "INV-001"}), provider="deepseek", model="deepseek-v4-flash"),
+            LlmResult(text=json.dumps({"thought": "done", "response": "Invoice INV-001 is paid."}), provider="deepseek", model="deepseek-v4-flash"),
+        ])
 
-        tool_response = MagicMock()
-        tool_response.json.return_value = {
-            "message": {"content": json.dumps({"thought": "looking up", "tool": "lookup_invoice", "tool_input": "INV-001"})}
-        }
-        tool_response.status_code = 200
-
-        final_response = MagicMock()
-        final_response.json.return_value = {
-            "message": {"content": json.dumps({"thought": "done", "response": "Invoice INV-001 is paid."})}
-        }
-        final_response.status_code = 200
-
-        mock_client.post = AsyncMock(side_effect=[tool_response, final_response])
-        agent._get_client.return_value = mock_client
-
-        with patch.object(agent, "_execute_tool", new_callable=AsyncMock, return_value="Invoice found"):
+        with patch("api.services.agent.llm_client.chat", mock_chat), \
+             patch.object(agent, "_execute_tool", new_callable=AsyncMock, return_value="Invoice found"):
             result = await agent.step([], "Check invoice INV-001")
 
         assert result.text == "Invoice INV-001 is paid."
-        assert mock_client.post.call_count == 2
+        assert mock_chat.call_count == 2
 
     @pytest.mark.asyncio
     async def test_step_handoff_sets_needs_agent(self):
         from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
 
-        agent._get_client = MagicMock()
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "message": {"content": json.dumps({"thought": "handing off", "tool": "handoff_to_human", "tool_input": "customer upset"})}
-        }
-        mock_response.status_code = 200
-        mock_client.post = AsyncMock(return_value=mock_response)
-        agent._get_client.return_value = mock_client
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text=json.dumps({"thought": "handing off", "tool": "handoff_to_human", "tool_input": "customer upset"}),
+            provider="deepseek",
+            model="deepseek-v4-flash",
+        ))
 
-        with patch.object(agent, "_execute_tool", new_callable=AsyncMock, return_value="Handoff initiated."):
+        with patch("api.services.agent.llm_client.chat", mock_chat), \
+             patch.object(agent, "_execute_tool", new_callable=AsyncMock, return_value="Handoff initiated."):
             result = await agent.step([], "Speak to a human")
 
         assert result.needs_agent is True
@@ -312,22 +295,20 @@ class TestDynamicAgent:
     @pytest.mark.asyncio
     async def test_step_max_steps_exceeded(self):
         from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
         agent._max_steps = 1
 
-        agent._get_client = MagicMock()
-        mock_client = MagicMock()
-        tool_response = MagicMock()
-        tool_response.json.return_value = {
-            "message": {"content": json.dumps({"thought": "using tool", "tool": "search_knowledge_base", "tool_input": "policy"})}
-        }
-        tool_response.status_code = 200
-        mock_client.post = AsyncMock(return_value=tool_response)
-        agent._get_client.return_value = mock_client
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text=json.dumps({"thought": "using tool", "tool": "search_knowledge_base", "tool_input": "policy"}),
+            provider="deepseek",
+            model="deepseek-v4-flash",
+        ))
 
-        with patch.object(agent, "_execute_tool", new_callable=AsyncMock, return_value="Policy info"):
+        with patch("api.services.agent.llm_client.chat", mock_chat), \
+             patch.object(agent, "_execute_tool", new_callable=AsyncMock, return_value="Policy info"):
             result = await agent.step([], "Check policy")
 
         assert "taking too long" in result.text
@@ -336,44 +317,36 @@ class TestDynamicAgent:
     @pytest.mark.asyncio
     async def test_step_json_decode_error_retry(self):
         from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
 
-        agent._get_client = MagicMock()
-        mock_client = MagicMock()
-        bad_response = MagicMock()
-        bad_response.json.return_value = {"message": {"content": "not valid json"}}
-        bad_response.status_code = 200
-        good_response = MagicMock()
-        good_response.json.return_value = {
-            "message": {"content": json.dumps({"thought": "fixed", "response": "Here you go."})}
-        }
-        good_response.status_code = 200
-        mock_client.post = AsyncMock(side_effect=[bad_response, good_response])
-        agent._get_client.return_value = mock_client
+        mock_chat = AsyncMock(side_effect=[
+            LlmResult(text="not valid json", provider="deepseek", model="deepseek-v4-flash"),
+            LlmResult(text=json.dumps({"thought": "fixed", "response": "Here you go."}), provider="deepseek", model="deepseek-v4-flash"),
+        ])
 
-        result = await agent.step([], "Hello")
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await agent.step([], "Hello")
 
         assert result.text == "Here you go."
-        assert mock_client.post.call_count == 2
+        assert mock_chat.call_count == 2
 
     @pytest.mark.asyncio
     async def test_step_json_decode_error_fails_after_retry(self):
         from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
 
-        agent._get_client = MagicMock()
-        mock_client = MagicMock()
-        bad_response = MagicMock()
-        bad_response.json.return_value = {"message": {"content": "not valid json and still bad on retry"}}
-        bad_response.status_code = 200
-        mock_client.post = AsyncMock(return_value=bad_response)
-        agent._get_client.return_value = mock_client
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text="not valid json and still bad on retry", provider="deepseek", model="deepseek-v4-flash"
+        ))
 
-        result = await agent.step([], "Hello")
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await agent.step([], "Hello")
 
         assert "error processing" in result.text
         assert result.needs_agent is True
@@ -385,12 +358,10 @@ class TestDynamicAgent:
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
 
-        agent._get_client = MagicMock()
-        mock_client = MagicMock()
-        mock_client.post = AsyncMock(side_effect=Exception("Connection refused"))
-        agent._get_client.return_value = mock_client
+        mock_chat = AsyncMock(side_effect=Exception("Connection refused"))
 
-        result = await agent.step([], "Hello")
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await agent.step([], "Hello")
 
         assert "having trouble processing" in result.text
         assert result.needs_agent is True
@@ -398,24 +369,22 @@ class TestDynamicAgent:
     @pytest.mark.asyncio
     async def test_step_uses_history(self):
         from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
 
         mock_actions = MagicMock()
         agent = DynamicAgent(mock_actions)
 
-        agent._get_client = MagicMock()
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "message": {"content": json.dumps({"thought": "responding", "response": "I remember our chat."})}
-        }
-        mock_response.status_code = 200
-        mock_client.post = AsyncMock(return_value=mock_response)
-        agent._get_client.return_value = mock_client
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text=json.dumps({"thought": "responding", "response": "I remember our chat."}),
+            provider="deepseek",
+            model="deepseek-v4-flash",
+        ))
 
-        result = await agent.step([
-            {"from": "customer", "text": "My order is late"},
-            {"from": "agent", "text": "Let me check"}
-        ], "Where is it?")
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await agent.step([
+                {"from": "customer", "text": "My order is late"},
+                {"from": "agent", "text": "Let me check"}
+            ], "Where is it?")
 
         assert result.text == "I remember our chat."
 

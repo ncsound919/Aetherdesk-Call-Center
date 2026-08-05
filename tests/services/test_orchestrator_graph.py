@@ -106,16 +106,16 @@ async def test_orchestrator_step_fallback_when_langchain_disabled(orch_no_init, 
     monkeypatch.setattr("api.services.database.db_context", lambda: mock_db_context)
     monkeypatch.setattr("api.services.database.USE_POSTGRES", True)
 
-    # Mock fallback HTTP client calls to Ollama
-    async def mock_post(*args, **kwargs):
-        mock_resp = MagicMock()
-        mock_resp.raise_for_status = MagicMock()
-        # Include 'response' key for the fallback agent
-        mock_resp.json = MagicMock(return_value={"message": {"content": json.dumps({"response": "Fallback Ollama response"})}})
-        return mock_resp
+    # Mock the unified LLM client (DeepSeek/Ollama adapter)
+    async def mock_chat(*args, **kwargs):
+        from api.services.llm_client import LlmResult
+        return LlmResult(
+            text=json.dumps({"response": "Fallback Ollama response"}),
+            provider="ollama",
+            model="qwen3:1.7b",
+        )
 
-    monkeypatch.setattr("httpx.AsyncClient.post", mock_post)
-    
+    monkeypatch.setattr("api.services.orchestrator.llm_client.chat", mock_chat)
     # Patch security and escalation
     monkeypatch.setattr("api.services.orchestrator.detect_prompt_injection", lambda t: (False, 0.0))
     monkeypatch.setattr("api.routers.campaign.push_escalation_alert", AsyncMock())

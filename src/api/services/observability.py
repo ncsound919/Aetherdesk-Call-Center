@@ -198,9 +198,28 @@ async def check_asr_health() -> bool:
 
 
 async def check_ollama_health() -> bool:
+    import os
     try:
         client = await http_pool.get_client()
-        response = await client.get("http://localhost:11434/api/tags")
+        host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        response = await client.get(f"{host}/api/tags")
+        return response.status_code == 200
+    except Exception:
+        return False
+
+
+async def check_deepseek_health() -> bool:
+    import os
+    key = os.getenv("DEEPSEEK_API_KEY", "")
+    if not key:
+        return False
+    try:
+        client = await http_pool.get_client()
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
+        response = await client.get(
+            f"{base_url}/models",
+            headers={"Authorization": f"Bearer {key}"},
+        )
         return response.status_code == 200
     except Exception:
         return False
@@ -209,6 +228,7 @@ async def check_ollama_health() -> bool:
 HEALTH_CHECKS = {
     "redis": check_redis_health,
     "ollama": check_ollama_health,
+    "deepseek": check_deepseek_health,
     "asr": check_asr_health,
 }
 

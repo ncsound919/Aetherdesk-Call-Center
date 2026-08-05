@@ -71,15 +71,15 @@ class VendorHealthMonitor:
             return {"status": "unhealthy", "error": str(e)}
 
     async def _check_groq(self) -> dict:
-        """Check Groq API health."""
+        """Check DeepSeek LLM API health (formerly Groq)."""
         import os
-        key = os.getenv("GROQ_API_KEY", "")
+        key = os.getenv("DEEPSEEK_API_KEY", "")
         if not key:
-            return {"status": "not_configured", "message": "No Groq API key"}
+            return {"status": "not_configured", "message": "No DeepSeek API key"}
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.get(
-                    "https://api.groq.com/openai/v1/models",
+                    f"{os.getenv('DEEPSEEK_BASE_URL', 'https://api.deepseek.com')}/models",
                     headers={"Authorization": f"Bearer {key}"}
                 )
                 if resp.status_code == 200:

@@ -11,6 +11,7 @@ import structlog
 from api.middleware.metrics import track_llm_latency
 from api.services.connection_pool import get_http_client
 from api.services.langfuse_client import get_langfuse, score_call
+from api.services.llm_client import llm_client, parse_json_content
 from api.services.memory import memory_service
 from api.services.retry import retry_ollama
 
@@ -122,23 +123,20 @@ class IntentClassifier:
 
         prompt = f"{context}Current utterance: {transcript}"
 
-        async with get_http_client() as client:
-            response = await client.post(
-                f"{self.host}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "format": "json",
-                    "temperature": 0.1,
-                    "num_predict": 50,
-                    "stream": False,
-                }
-            )
-            response.raise_for_status()
-            return response.json()
+        from api.services.llm_client import llm_client as _lc
+
+        result = await _lc.chat(
+            [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,
+            json_mode=True,
+        )
+        try:
+            return parse_json_content(result.text)
+        except ValueError:
+            return {"content": result.text}
 
     async def classify(self, transcript: str) -> IntentResult:
         start_time = time.time()
@@ -171,12 +169,7 @@ class IntentClassifier:
 
         try:
             data = await retry_ollama.execute(self._call_ollama, transcript)
-            content = data.get("message", {}).get("content", "{}")
-
-            try:
-                result = json.loads(content)
-            except json.JSONDecodeError:
-                result = {}
+            result = data if isinstance(data, dict) and data.get("intent") else {}
 
             if not result.get("intent"):
                 return await self._keyword_fallback(transcript)

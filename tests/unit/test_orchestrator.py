@@ -28,28 +28,33 @@ def orch(mock_actions):
 # ---------------------------------------------------------------------------
 
 class TestOrchestratorInit:
-    def test_init_with_langchain(self, mock_actions):
+    def test_init_with_langchain(self, mock_actions, monkeypatch):
         import api.services.orchestrator as orch_mod
+        monkeypatch.setattr("api.services.orchestrator.DEEPSEEK_API_KEY", "test-key")
+        monkeypatch.setattr("api.services.orchestrator.DEEPSEEK_MODEL", "deepseek-v4-flash")
         orch_mod.model = None
-        with patch("langchain_core.language_models.FakeListChatModel") as mock_fake:
+        with patch("langchain_openai.ChatOpenAI") as mock_chat:
             orch = Orchestrator(mock_actions)
             assert orch.langchain_initialized is True
             assert orch.actions == mock_actions
             assert orch.agents == {}
             assert orch.agent_graphs == {}
-            mock_fake.assert_called_once()
+            mock_chat.assert_called_once()
 
-    def test_init_without_langchain(self, mock_actions):
+    def test_init_without_langchain(self, mock_actions, monkeypatch):
         import api.services.orchestrator as orch_mod
+        # No DeepSeek key -> LangChain path skipped, llm_client fallback.
+        monkeypatch.setattr("api.services.orchestrator.DEEPSEEK_API_KEY", "")
         orch_mod.model = None
-        with patch("langchain_core.language_models.FakeListChatModel", side_effect=ImportError):
-            orch = Orchestrator(mock_actions)
-            assert orch.langchain_initialized is False
+        orch = Orchestrator(mock_actions)
+        assert orch.langchain_initialized is False
 
-    def test_init_sets_global_model(self, mock_actions):
+    def test_init_sets_global_model(self, mock_actions, monkeypatch):
         import api.services.orchestrator as orch_mod
+        monkeypatch.setattr("api.services.orchestrator.DEEPSEEK_API_KEY", "test-key")
+        monkeypatch.setattr("api.services.orchestrator.DEEPSEEK_MODEL", "deepseek-v4-flash")
         orch_mod.model = None
-        with patch("langchain_core.language_models.FakeListChatModel", return_value=MagicMock()):
+        with patch("langchain_openai.ChatOpenAI", return_value=MagicMock()):
             orch = Orchestrator(mock_actions)
             assert orch_mod.model is not None
 

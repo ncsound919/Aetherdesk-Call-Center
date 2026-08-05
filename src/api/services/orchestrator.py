@@ -12,6 +12,8 @@ import structlog
 
 from api.services.actions import Actions
 from api.services.langfuse_client import get_langfuse, score_call
+from api.services.llm_client import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
+from api.services.llm_client import llm_client, parse_json_content
 from api.services.security_guard import detect_prompt_injection, redact_pii
 
 AGENTOPS_API_KEY = os.getenv("AGENTOPS_API_KEY")
@@ -261,6 +263,7 @@ class ReActAgent:
         lf = get_langfuse()
         trace_id = None
         ao_session = None
+        _provider_hint = [""]
         try:
             if _agentops_initialized:
                 ao_session = agentops.start_session(tags=[tenant_id, self.name])
@@ -319,24 +322,21 @@ class ReActAgent:
                         generation = None
                         if lf:
                             generation = lf.generation(
-                                name="ollama_chat",
+                                name="llm_chat",
                                 model=self.model,
                                 input={"messages": messages[-3:]},  # last 3 messages for context
                                 metadata={"attempt": attempt, "tenant_id": tenant_id},
                             )
 
-                        response = await client.post(
-                            f"{self.host}/api/chat",
-                            json={
-                                "model": self.model,
-                                "messages": messages,
-                                "temperature": 0.1,
-                                "stream": False,
-                                "format": "json"
-                            }
+                        from api.services.llm_client import llm_client as _lc
+                        result = await _lc.chat(
+                            messages,
+                            temperature=0.1,
+                            json_mode=True,
                         )
-                        response.raise_for_status()
-                        ai_msg = response.json().get("message", {}).get("content", "")
+                        ai_msg = result.text
+                        # Track provider for budget/observability.
+                        _provider_hint[0] = result.provider
 
                         # Update generation with output
                         if generation:
@@ -346,10 +346,10 @@ class ReActAgent:
                                 pass
 
                         try:
-                            parsed = json.loads(ai_msg)
-                        except json.JSONDecodeError:
+                            parsed = parse_json_content(ai_msg)
+                        except ValueError:
                             # SELF-HEALING: Prompt the model to fix its JSON
-                            logger.warning("self_healing_triggered", reason="json_decode_error")
+                            logger.warning("self_healing_triggered", reason="json_decode_error", raw=ai_msg[:200])
                             messages.append({"role": "assistant", "content": ai_msg})
                             messages.append({"role": "user", "content": "Your previous response was not valid JSON. Please respond with ONLY JSON."})
                             continue
@@ -585,17 +585,32 @@ class Orchestrator:
         self._init_langchain()
 
     def _init_langchain(self):
-        """Initialise LangChain / LangGraph components if available."""
+        """Initialise LangChain / LangGraph components if available.
+
+        Uses a real DeepSeek-backed ChatOpenAI when a key is configured.
+        Never falls back to a fake stub that silently answers
+        "Simulated text response." — that traps production callers.
+        """
         global model
+
+        if not DEEPSEEK_API_KEY:
+            logger.info("langchain_not_configured", fallback="llm_client")
+            self.langchain_initialized = False
+            return
+
         try:
-            from langchain_core.language_models import FakeListChatModel
-            from langchain_core.messages import AIMessage
-            if model is None:
-                model = FakeListChatModel(responses=[AIMessage(content="Simulated text response.")])
+            from langchain_openai import ChatOpenAI
+
+            model = ChatOpenAI(
+                model=DEEPSEEK_MODEL,
+                base_url=f"{DEEPSEEK_BASE_URL}/v1",
+                api_key=DEEPSEEK_API_KEY,
+                temperature=0.1,
+            )
             self.langchain_initialized = True
-            logger.info("langchain_initialized", status="success")
+            logger.info("langchain_initialized", status="success", model=DEEPSEEK_MODEL)
         except ImportError:
-            logger.info("langchain_not_available", fallback="ollama")
+            logger.info("langchain_not_available", fallback="llm_client")
             self.langchain_initialized = False
 
     async def get_agent_graph(self, tenant_id: str, profile_id: str, system_prompt: str):

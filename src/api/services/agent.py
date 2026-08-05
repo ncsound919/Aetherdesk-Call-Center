@@ -7,6 +7,8 @@ import httpx
 import structlog
 from pydantic import BaseModel, Field, ValidationError
 
+from api.services.llm_client import llm_client, parse_json_content
+
 logger = structlog.get_logger()
 
 OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
@@ -111,22 +113,14 @@ class AgentService:
         client = self._get_client()
 
         try:
-            response = await client.post(
-                f"{self.host}/api/chat",
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": prompt},
-                        {"role": "user", "content": question}
-                    ],
-                    "temperature": 0.7,
-                    "stream": False
-                }
+            result = await llm_client.chat(
+                [
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": question}
+                ],
+                temperature=0.7,
             )
-            response.raise_for_status()
-            data = response.json()
-
-            answer_text = data.get("message", {}).get("content", "")
+            answer_text = result.text
             sources = [r.get("metadata", {}).get("source", "unknown") for r in context_results]
 
             needs_agent = any(
@@ -241,22 +235,15 @@ Keep your responses natural, conversational, and concise for voice interaction.
         for _step_idx in range(max_steps):
             for attempt in range(2): # SELF-HEALING LOOP
                 try:
-                    response = await client.post(
-                        f"{self.host}/api/chat",
-                        json={
-                            "model": self.model,
-                            "messages": messages,
-                            "temperature": 0.1,
-                            "stream": False,
-                            "format": "json"
-                        }
+                    result = await llm_client.chat(
+                        messages,
+                        temperature=0.1,
+                        json_mode=True,
                     )
-                    response.raise_for_status()
-                    data = response.json()
-                    ai_msg = data.get("message", {}).get("content", "")
+                    ai_msg = result.text
 
                     try:
-                        parsed = json.loads(ai_msg)
+                        parsed = parse_json_content(ai_msg)
                         if "response" in parsed:
                             ToolCallResponse(**parsed)
                         elif "tool" in parsed:
@@ -264,7 +251,7 @@ Keep your responses natural, conversational, and concise for voice interaction.
                         else:
                             raise ValueError("Agent output must contain 'response' or 'tool'")
                         break
-                    except (json.JSONDecodeError, ValidationError, ValueError) as e:
+                    except (ValueError, ValidationError) as e:
                         logger.warning("agent_json_parse_error", raw=ai_msg, error=str(e))
                         if attempt == 0:
                             messages.append({"role": "assistant", "content": ai_msg})

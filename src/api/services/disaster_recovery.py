@@ -79,16 +79,27 @@ class DRService:
 
         import httpx
         checks = []
-        key = os.getenv("GROQ_API_KEY", "")
+        key = os.getenv("DEEPSEEK_API_KEY", "")
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com")
         if key:
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    r = await client.get("https://api.groq.com/openai/v1/models", headers={"Authorization": f"Bearer {key}"})
-                    checks.append({"name": "groq", "status": "passed" if r.status_code == 200 else "failed"})
+                    r = await client.get(f"{base_url}/models", headers={"Authorization": f"Bearer {key}"})
+                    checks.append({"name": "deepseek", "status": "passed" if r.status_code == 200 else "failed"})
             except Exception as e:
-                checks.append({"name": "groq", "status": "failed", "error": str(e)})
+                checks.append({"name": "deepseek", "status": "failed", "error": str(e)})
         else:
-            checks.append({"name": "groq", "status": "skipped", "reason": "not_configured"})
+            checks.append({"name": "deepseek", "status": "skipped", "reason": "not_configured"})
+
+        # Also probe the local fallback (Ollama).
+        ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                r = await client.get(f"{ollama_host}/api/tags")
+                checks.append({"name": "ollama", "status": "passed" if r.status_code == 200 else "failed"})
+        except Exception as e:
+            checks.append({"name": "ollama", "status": "failed", "error": str(e)})
+
         status = "passed" if all(c["status"] == "passed" for c in checks) else "degraded"
         return {"status": status, "checks": checks}
 

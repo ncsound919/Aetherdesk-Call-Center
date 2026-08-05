@@ -86,9 +86,10 @@ class TestIntentClassifierClassify:
     async def test_successful_ollama_response(self):
         cls = IntentClassifier()
         ollama_response = {
-            "message": {
-                "content": '{"intent": "pharmacy_refill", "entities": {"rx_number": "12345"}, "confidence": 0.95, "reasoning": "Patient wants refill"}'
-            }
+            "intent": "pharmacy_refill",
+            "entities": {"rx_number": "12345"},
+            "confidence": 0.95,
+            "reasoning": "Patient wants refill",
         }
         with patch.object(cls, "_call_ollama", AsyncMock(return_value=ollama_response)), \
              patch("api.services.intent_classifier.track_llm_latency") as mock_track:
@@ -103,9 +104,7 @@ class TestIntentClassifierClassify:
     async def test_ollama_returns_no_intent_falls_back(self):
         cls = IntentClassifier()
         ollama_response = {
-            "message": {
-                "content": '{"entities": {}, "confidence": 0.1}'
-            }
+            "entities": {}, "confidence": 0.1
         }
         with patch.object(cls, "_call_ollama", AsyncMock(return_value=ollama_response)):
             result = await cls.classify("help me with refund")
@@ -117,9 +116,7 @@ class TestIntentClassifierClassify:
     async def test_ollama_returns_invalid_json(self):
         cls = IntentClassifier()
         ollama_response = {
-            "message": {
-                "content": "not valid json"
-            }
+            "content": "not valid json"
         }
         with patch.object(cls, "_call_ollama", AsyncMock(return_value=ollama_response)):
             result = await cls.classify("I need help")
@@ -130,7 +127,7 @@ class TestIntentClassifierClassify:
     @pytest.mark.asyncio
     async def test_ollama_returns_empty_content(self):
         cls = IntentClassifier()
-        ollama_response = {"message": {"content": ""}}
+        ollama_response = {}
         with patch.object(cls, "_call_ollama", AsyncMock(return_value=ollama_response)):
             result = await cls.classify("test")
         assert result.intent == "generalInquiry"
@@ -155,30 +152,30 @@ class TestIntentClassifierClassify:
 class TestIntentClassifierCallOllama:
     @pytest.mark.asyncio
     async def test_call_ollama_success(self):
-        cls = IntentClassifier()
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"message": {"content": '{"intent":"test"}'}}
-        mock_client.post = AsyncMock(return_value=mock_response)
+        from api.services.llm_client import LlmResult
 
-        with patch("api.services.intent_classifier.get_http_client") as mock_get_client:
-            mock_get_client.return_value.__aenter__.return_value = mock_client
+        cls = IntentClassifier()
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text='{"intent":"test"}', provider="deepseek", model="deepseek-v4-flash"
+        ))
+
+        with patch("api.services.intent_classifier.llm_client.chat", mock_chat):
             result = await cls._call_ollama("test transcript")
 
-        assert result["message"]["content"] == '{"intent":"test"}'
-        mock_client.post.assert_called_once()
+        assert result["intent"] == "test"
+        mock_chat.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_call_ollama_with_session_memory(self):
-        cls = IntentClassifier()
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"message": {"content": '{}'}}
-        mock_client.post = AsyncMock(return_value=mock_response)
+        from api.services.llm_client import LlmResult
 
-        with patch("api.services.intent_classifier.get_http_client") as mock_get_client, \
+        cls = IntentClassifier()
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text='{}', provider="deepseek", model="deepseek-v4-flash"
+        ))
+
+        with patch("api.services.intent_classifier.llm_client.chat", mock_chat), \
              patch("api.services.intent_classifier.memory_service") as mock_memory:
-            mock_get_client.return_value.__aenter__.return_value = mock_client
             mock_memory.search_memories = AsyncMock(return_value=[
                 {"content": "Customer mentioned order ORD-001"},
                 {"content": "Customer is frustrated"}
@@ -192,33 +189,31 @@ class TestIntentClassifierCallOllama:
 
     @pytest.mark.asyncio
     async def test_call_ollama_memory_search_fails_gracefully(self):
-        cls = IntentClassifier()
-        mock_client = MagicMock()
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"message": {"content": '{}'}}
-        mock_client.post = AsyncMock(return_value=mock_response)
+        from api.services.llm_client import LlmResult
 
-        with patch("api.services.intent_classifier.get_http_client") as mock_get_client, \
+        cls = IntentClassifier()
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text='{}', provider="deepseek", model="deepseek-v4-flash"
+        ))
+
+        with patch("api.services.intent_classifier.llm_client.chat", mock_chat), \
              patch("api.services.intent_classifier.memory_service") as mock_memory:
-            mock_get_client.return_value.__aenter__.return_value = mock_client
             mock_memory.search_memories = AsyncMock(side_effect=Exception("Memory error"))
             result = await cls._call_ollama("test", session_id="SESS-001")
 
         assert result is not None
-        mock_client.post.assert_called_once()
+        mock_chat.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_call_ollama_http_error(self):
         cls = IntentClassifier()
-        mock_client = MagicMock()
-        mock_client.post = AsyncMock(side_effect=Exception("HTTP 500"))
+        mock_chat = AsyncMock(side_effect=Exception("HTTP 500"))
 
-        with patch("api.services.intent_classifier.get_http_client") as mock_get_client, \
+        with patch("api.services.intent_classifier.llm_client.chat", mock_chat), \
              pytest.raises(Exception, match="HTTP 500"):
-            mock_get_client.return_value.__aenter__.return_value = mock_client
             await cls._call_ollama("test")
 
-        mock_client.post.assert_called_once()
+        mock_chat.assert_called_once()
 
 
 class TestIntentClassifierClassifyWithRetry:

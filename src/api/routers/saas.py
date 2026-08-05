@@ -16,6 +16,7 @@ from api.services.database import (
     rent_agent_db,
     update_tenant_settings_db,
 )
+from api.services.llm_client import llm_client
 
 router = APIRouter(prefix="/saas", tags=["saas"])
 
@@ -97,17 +98,11 @@ async def generate_script(goal: dict, tenant_id: str = Depends(get_tenant_id)):
     prompt = f"Write a system prompt for an AI call center agent. The objective is: {objective}. Include objection handling and compliance."
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            res = await client.post(
-                f"{OLLAMA_HOST}/api/chat",
-                json={
-                    "model": OLLAMA_MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream": False
-                }
-            )
-            data = res.json().get("message", {}).get("content", "")
-            return {"script": data}
+        result = await llm_client.chat(
+            [{"role": "user", "content": prompt}],
+            temperature=0.7,
+        )
+        return {"script": result.text}
     except Exception:
         return {"script": f"You are an AI agent designed to handle: {objective}. Be polite, handle objections gracefully, and ensure compliance with all requests."}
 

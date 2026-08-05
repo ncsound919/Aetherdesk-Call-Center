@@ -203,18 +203,15 @@ class TestGenerateScript:
     @pytest.mark.asyncio
     async def test_generate_script_success(self):
         from api.routers.saas import generate_script
-        from unittest.mock import MagicMock
+        from api.services.llm_client import LlmResult
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {
-            "message": {"content": "You are an AI agent for customer support."}
-        }
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text="You are an AI agent for customer support.",
+            provider="deepseek",
+            model="deepseek-v4-flash",
+        ))
 
-        with patch("api.routers.saas.httpx.AsyncClient") as mock_client_class:
-            mock_instance = AsyncMock()
-            mock_client_class.return_value.__aenter__.return_value = mock_instance
-            mock_instance.post = AsyncMock(return_value=mock_response)
-
+        with patch("api.routers.saas.llm_client.chat", mock_chat):
             result = await generate_script(
                 goal={"objective": "customer support"},
                 tenant_id="TENANT-001",
@@ -225,11 +222,7 @@ class TestGenerateScript:
     async def test_generate_script_fallback_on_ollama_error(self):
         from api.routers.saas import generate_script
 
-        with patch("api.routers.saas.httpx.AsyncClient") as mock_client_class:
-            mock_instance = AsyncMock()
-            mock_client_class.return_value.__aenter__.return_value = mock_instance
-            mock_instance.post.side_effect = Exception("Ollama connection refused")
-
+        with patch("api.routers.saas.llm_client.chat", AsyncMock(side_effect=Exception("LLM connection refused"))):
             result = await generate_script(
                 goal={"objective": "customer support"},
                 tenant_id="TENANT-001",
@@ -241,11 +234,7 @@ class TestGenerateScript:
     async def test_generate_script_handles_empty_objective(self):
         from api.routers.saas import generate_script
 
-        with patch("api.routers.saas.httpx.AsyncClient") as mock_client_class:
-            mock_instance = AsyncMock()
-            mock_client_class.return_value.__aenter__.return_value = mock_instance
-            mock_instance.post.side_effect = Exception("Ollama connection refused")
-
+        with patch("api.routers.saas.llm_client.chat", AsyncMock(side_effect=Exception("LLM connection refused"))):
             result = await generate_script(
                 goal={},
                 tenant_id="TENANT-001",
