@@ -30,6 +30,7 @@ build/
 *.deb
 *.rpm
 *.zip
+*.jar
 *.tar
 *.gz
 *.7z
@@ -110,6 +111,8 @@ stdout*.txt
 # Secrets / keys
 jwt-*.pem
 sealed-secrets.json
+keys.txt
+docs/keys.txt
 
 # Generated lock files
 *.lock
@@ -129,6 +132,9 @@ agentops.log
 
 # Dev tooling (local helper scripts that should never be committed)
 dev-tools/
+
+# Downloaded local runtime binaries (Metabase JAR, Obscura browser)
+tools/
 verify.py
 
 # Debug scripts (root level - dev scripts live in scripts/dev/)
