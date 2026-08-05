@@ -14,7 +14,13 @@ def _now():
     return datetime.now(UTC).isoformat()
 
 def _row_to_dict(row, keys):
-    return dict(zip(keys, row)) if row else None
+    # db_pool's SQLite connections use _dict_factory, so rows are already
+    # dicts. Pass dicts through untouched; zip only for tuple rows (defensive).
+    if row is None:
+        return None
+    if isinstance(row, dict):
+        return dict(row)
+    return dict(zip(keys, row))
 
 
 # ── SEO content ──────────────────────────────────────────────────────
@@ -78,7 +84,7 @@ async def upsert_seo_content_db(slug, data):
               data.get("og_description"), data.get("og_image"), data.get("keywords"),
               data.get("body"), data.get("status", "draft"), now, slug))
         conn.commit()
-        return get_seo_content_db(slug)
+        return await get_seo_content_db(slug)
     conn.execute("""
         INSERT INTO seo_content (id, slug, meta_title, meta_description, og_title, og_description, og_image, keywords, body, status, updated_at, created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
@@ -86,7 +92,7 @@ async def upsert_seo_content_db(slug, data):
           data.get("og_description"), data.get("og_image"), data.get("keywords"),
           data.get("body"), data.get("status", "draft"), now, now))
     conn.commit()
-    return get_seo_content_db(slug)
+    return await get_seo_content_db(slug)
 
 
 # ── Donors ───────────────────────────────────────────────────────────
