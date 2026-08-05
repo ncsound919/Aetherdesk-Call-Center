@@ -6,9 +6,14 @@ import { MemoryRouter } from 'react-router-dom'
 import Login from '../pages/Login'
 
 const mockLogin = vi.fn()
+const mockPost = vi.fn()
 
 vi.mock('../context/AuthContext', () => ({
   useAuth: () => ({ login: mockLogin }),
+}))
+
+vi.mock('../services/api', () => ({
+  default: { post: (...args) => mockPost(...args) },
 }))
 
 vi.mock('react-router-dom', async () => {
@@ -27,6 +32,7 @@ function renderLogin() {
 describe('Login', () => {
   beforeEach(() => {
     mockLogin.mockReset()
+    mockPost.mockReset()
   })
 
   it('renders welcome heading', () => {
@@ -48,7 +54,7 @@ describe('Login', () => {
 
   it('renders forgot password link', () => {
     renderLogin()
-    expect(screen.getByText('Forgot password?')).toBeInTheDocument()
+    expect(screen.getByText(/Forgot Password/i)).toBeInTheDocument()
   })
 
   it('renders sign up link', () => {
@@ -57,6 +63,7 @@ describe('Login', () => {
   })
 
   it('calls login with email and password on submit', async () => {
+    mockPost.mockResolvedValueOnce({ data: {} })
     mockLogin.mockResolvedValueOnce({})
     renderLogin()
     await userEvent.type(screen.getByPlaceholderText('admin@aetherdesk.com'), 'test@example.com')
@@ -68,7 +75,7 @@ describe('Login', () => {
   })
 
   it('shows error message on login failure', async () => {
-    mockLogin.mockRejectedValueOnce({ response: { data: { detail: 'Invalid credentials' } } })
+    mockPost.mockRejectedValueOnce({ response: { data: { detail: 'Invalid credentials' } } })
     renderLogin()
     await userEvent.type(screen.getByPlaceholderText('admin@aetherdesk.com'), 'bad@example.com')
     await userEvent.type(screen.getByPlaceholderText('Enter your password'), 'wrong')
@@ -82,7 +89,7 @@ describe('Login', () => {
     renderLogin()
     const pwInput = screen.getByPlaceholderText('Enter your password')
     expect(pwInput.type).toBe('password')
-    const toggleBtn = screen.getByRole('button', { name: '' })
+    const toggleBtn = screen.getByRole('button', { name: /show password/i })
     await userEvent.click(toggleBtn)
     expect(pwInput.type).toBe('text')
   })

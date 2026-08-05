@@ -1,14 +1,14 @@
 import React from 'react'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import Dashboard from '../pages/Dashboard'
 
+const TEST_USER = { name: 'Admin', role: 'admin' }
+const TEST_TENANT = { id: 'TENANT-001' }
+
 vi.mock('../context/AuthContext', () => ({
-  useAuth: () => ({
-    user: { name: 'Admin', role: 'admin' },
-    tenant: { id: 'TENANT-001' },
-  }),
+  useAuth: () => ({ user: TEST_USER, tenant: TEST_TENANT }),
 }))
 
 vi.mock('../context/SocketContext', () => ({
@@ -42,37 +42,37 @@ function renderDashboard() {
 
 describe('Dashboard', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
+    mockGet.mockReset().mockResolvedValue({ data: {} })
+    mockPost.mockReset().mockResolvedValue({ data: {} })
+    mockList.mockReset().mockResolvedValue({ data: [] })
   })
 
-  it('renders page heading', () => {
+  it('renders page heading', async () => {
     renderDashboard()
-    expect(screen.getByText('Dashboard')).toBeInTheDocument()
+    expect(await screen.findByText('Dashboard')).toBeInTheDocument()
     expect(screen.getByText('Overview of your call center operations')).toBeInTheDocument()
   })
 
   it('renders stat cards', async () => {
     renderDashboard()
-    await waitFor(() => {
-      expect(screen.getByText('Active Calls')).toBeInTheDocument()
-    })
-    expect(screen.getByText('Total Calls Today')).toBeInTheDocument()
-    expect(screen.getByText('Avg Call Duration')).toBeInTheDocument()
-    expect(screen.getByText('Available Agents')).toBeInTheDocument()
+    expect(await screen.findByText('Active Calls')).toBeInTheDocument()
+    expect(await screen.findByText('Total Calls Today')).toBeInTheDocument()
+    expect(await screen.findByText('Avg Call Duration')).toBeInTheDocument()
+    expect(await screen.findByText('Available Agents')).toBeInTheDocument()
   })
 
-  it('renders Make a Call button', () => {
+  it('renders Make a Call button', async () => {
     renderDashboard()
-    expect(screen.getByText('Make a Call')).toBeInTheDocument()
+    expect(await screen.findByText('Make a Call')).toBeInTheDocument()
   })
 
-  it('renders welcome section when no calls', () => {
+  it('renders welcome section when no calls', async () => {
     renderDashboard()
-    expect(screen.getByText('Welcome to AetherDesk')).toBeInTheDocument()
+    expect(await screen.findByText('Welcome to AetherDesk')).toBeInTheDocument()
   })
 
-  it('renders RecentCalls component', () => {
+  it('renders RecentCalls component', async () => {
     renderDashboard()
-    expect(screen.getByTestId('recent-calls')).toBeInTheDocument()
+    expect(await screen.findByTestId('recent-calls')).toBeInTheDocument()
   })
 })
