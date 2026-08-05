@@ -18,9 +18,10 @@ _in_memory_config = {
 
 
 class FailoverTestingService:
-
     async def test_telephony_failover(self):
-        logger.info("Running telephony failover test", primary="twilio", secondary="fonster")
+        logger.info(
+            "Running telephony failover test", primary="twilio", secondary="fonster"
+        )
         start = time.monotonic()
 
         # Simulate failover from Twilio to Fonoster
@@ -65,7 +66,9 @@ class FailoverTestingService:
         return {
             "scheduled": True,
             "interval_hours": interval_hours,
-            "next_test_at": (datetime.now(UTC) + timedelta(hours=interval_hours)).isoformat(),
+            "next_test_at": (
+                datetime.now(UTC) + timedelta(hours=interval_hours)
+            ).isoformat(),
         }
 
     async def get_failover_history(self, limit: int = 20):

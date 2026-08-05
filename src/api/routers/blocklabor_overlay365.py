@@ -1,10 +1,11 @@
 """Blocklabor integration for Aetherdesk - hire workers from call center UI."""
-import os
+
 import logging
-from typing import List, Literal, Optional
+import os
+from typing import Literal
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Header, Security
+from fastapi import APIRouter, Depends, Header, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
@@ -39,7 +40,7 @@ async def get_verified_tenant(
 class PostJobRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=200)
     description: str = Field(..., min_length=1, max_length=5000)
-    skills_required: List[str] = Field(default_factory=list, max_length=20)
+    skills_required: list[str] = Field(default_factory=list, max_length=20)
     pay_rate: float = Field(..., gt=0, le=10000)
     duration: Literal["temp", "contract", "full-time"] = Field(default="temp")
     tenant_id: str = Field(..., min_length=1, max_length=100)
@@ -76,7 +77,9 @@ async def post_job_to_blocklabor(
             return {"status": "error", "detail": response.text}
         except httpx.RequestError as e:
             logger.warning(f"Blocklabor unreachable: {e}")
-            raise HTTPException(status_code=503, detail="Blocklabor service unreachable")
+            raise HTTPException(
+                status_code=503, detail="Blocklabor service unreachable"
+            ) from e
 
 
 @router.get("/workers/match")

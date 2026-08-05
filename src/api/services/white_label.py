@@ -13,7 +13,6 @@ logger = structlog.get_logger()
 
 
 class WhiteLabelService:
-
     @staticmethod
     async def get_branding(tenant_id: str) -> dict | None:
         branding = await get_tenant_branding_db(tenant_id)
@@ -39,7 +38,9 @@ class WhiteLabelService:
         return await get_custom_domain_db(tenant_id)
 
     @staticmethod
-    async def set_custom_domain(tenant_id: str, domain: str, ssl_status: str = "pending") -> dict | None:
+    async def set_custom_domain(
+        tenant_id: str, domain: str, ssl_status: str = "pending"
+    ) -> dict | None:
         result = await set_custom_domain_db(tenant_id, domain, ssl_status)
         logger.info("custom_domain_set", tenant_id=tenant_id, domain=domain)
         return result

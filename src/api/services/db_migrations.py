@@ -64,6 +64,7 @@ async def stamp_db(revision: str = "head") -> bool:
         from alembic.config import Config
 
         from alembic import command
+
         alembic_cfg = Config(str(ALEMBIC_CFG_PATH))
         command.stamp(alembic_cfg, revision)
         logger.info("Database stamped at %s", revision)
@@ -81,7 +82,6 @@ async def check_migration_status() -> dict:
         from alembic.runtime.environment import EnvironmentContext
         from alembic.script import ScriptDirectory
         from sqlalchemy import create_engine
-
 
         USE_POSTGRES = os.getenv("USE_POSTGRES", "false").lower() == "true"
         if USE_POSTGRES:
@@ -111,5 +111,3 @@ async def check_migration_status() -> dict:
                 }
 
     return await asyncio.to_thread(_check)
-
-

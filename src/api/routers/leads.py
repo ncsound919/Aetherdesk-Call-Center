@@ -13,6 +13,7 @@ router = APIRouter(prefix="/leads", tags=["leads"])
 
 # --- Pydantic models ---
 
+
 class LeadCreate(BaseModel):
     phone: str
     company_name: str | None = None
@@ -54,11 +55,15 @@ class ImportRequest(BaseModel):
 
 # --- Auth helper ---
 
-async def get_tenant_id(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))) -> str:
+
+async def get_tenant_id(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
+) -> str:
     """Extract tenant_id from JWT token."""
     if not credentials:
         raise HTTPException(status_code=401, detail="Authentication required")
     from api.services.auth import verify_access_token
+
     payload = await verify_access_token(credentials.credentials)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -70,10 +75,12 @@ async def get_tenant_id(credentials: HTTPAuthorizationCredentials = Depends(HTTP
 
 # --- Endpoints ---
 
+
 @router.post("")
 async def create_lead(lead: LeadCreate, tenant_id: str = Depends(get_tenant_id)):
     """Create a new lead."""
     from api.services.db_tenants import create_lead_db
+
     result = await create_lead_db(
         tenant_id=tenant_id,
         phone=lead.phone,
@@ -103,12 +110,15 @@ async def list_leads(
 ):
     """List leads with optional filters."""
     from api.services.db_tenants import list_leads_db
-    rows = await list_leads_db(tenant_id, status=status, industry=industry, limit=limit, offset=offset)
+
+    rows = await list_leads_db(
+        tenant_id, status=status, industry=industry, limit=limit, offset=offset
+    )
     items = []
     for row in rows:
         if isinstance(row, dict):
             item = dict(row)
-        elif hasattr(row, 'keys'):
+        elif hasattr(row, "keys"):
             item = {k: row[k] for k in row.keys()}
         else:
             continue
@@ -125,12 +135,13 @@ async def list_leads(
 async def get_lead(lead_id: str, tenant_id: str = Depends(get_tenant_id)):
     """Get a single lead by ID."""
     from api.services.db_tenants import get_lead_db
+
     row = await get_lead_db(lead_id, tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Lead not found")
     if isinstance(row, dict):
         item = dict(row)
-    elif hasattr(row, 'keys'):
+    elif hasattr(row, "keys"):
         item = {k: row[k] for k in row.keys()}
     else:
         raise HTTPException(status_code=500, detail="Invalid row format")
@@ -143,9 +154,12 @@ async def get_lead(lead_id: str, tenant_id: str = Depends(get_tenant_id)):
 
 
 @router.patch("/{lead_id}")
-async def update_lead(lead_id: str, updates: LeadUpdate, tenant_id: str = Depends(get_tenant_id)):
+async def update_lead(
+    lead_id: str, updates: LeadUpdate, tenant_id: str = Depends(get_tenant_id)
+):
     """Update a lead."""
     from api.services.db_tenants import update_lead_db
+
     update_dict = {k: v for k, v in updates.model_dump().items() if v is not None}
     if not update_dict:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -160,6 +174,7 @@ async def update_lead(lead_id: str, updates: LeadUpdate, tenant_id: str = Depend
 async def delete_lead(lead_id: str, tenant_id: str = Depends(get_tenant_id)):
     """Delete a lead."""
     from api.services.db_tenants import delete_lead_db
+
     success = await delete_lead_db(lead_id, tenant_id)
     if not success:
         raise HTTPException(status_code=404, detail="Lead not found")
@@ -168,9 +183,12 @@ async def delete_lead(lead_id: str, tenant_id: str = Depends(get_tenant_id)):
 
 
 @router.post("/bulk-update")
-async def bulk_update_leads(req: BulkUpdateRequest, tenant_id: str = Depends(get_tenant_id)):
+async def bulk_update_leads(
+    req: BulkUpdateRequest, tenant_id: str = Depends(get_tenant_id)
+):
     """Bulk update leads by IDs."""
     from api.services.db_tenants import bulk_update_leads_db
+
     update_dict = {k: v for k, v in req.updates.model_dump().items() if v is not None}
     if not req.lead_ids or not update_dict:
         raise HTTPException(status_code=400, detail="lead_ids and updates required")
@@ -180,9 +198,12 @@ async def bulk_update_leads(req: BulkUpdateRequest, tenant_id: str = Depends(get
 
 
 @router.post("/bulk-delete")
-async def bulk_delete_leads(req: BulkUpdateRequest, tenant_id: str = Depends(get_tenant_id)):
+async def bulk_delete_leads(
+    req: BulkUpdateRequest, tenant_id: str = Depends(get_tenant_id)
+):
     """Bulk delete leads by IDs."""
     from api.services.db_tenants import bulk_delete_leads_db
+
     if not req.lead_ids:
         raise HTTPException(status_code=400, detail="lead_ids required")
     count = await bulk_delete_leads_db(tenant_id, req.lead_ids)
@@ -191,6 +212,7 @@ async def bulk_delete_leads(req: BulkUpdateRequest, tenant_id: str = Depends(get
 
 
 # --- CSV Import ---
+
 
 @router.post("/upload")
 async def upload_leads_csv(
@@ -203,7 +225,9 @@ async def upload_leads_csv(
 
     # Accept CSV only for now
     if not file.filename.lower().endswith(".csv"):
-        raise HTTPException(status_code=400, detail="Only CSV files are supported currently")
+        raise HTTPException(
+            status_code=400, detail="Only CSV files are supported currently"
+        )
 
     content = await file.read()
     if len(content) > 10 * 1024 * 1024:  # 10MB
@@ -215,13 +239,17 @@ async def upload_leads_csv(
         try:
             text = content.decode("latin-1")
         except Exception:
-            raise HTTPException(status_code=400, detail="File encoding not supported")
+            raise HTTPException(
+                status_code=400, detail="File encoding not supported"
+            ) from None
 
     try:
         reader = csv.DictReader(io.StringIO(text))
         rows = list(reader)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to parse CSV: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail=f"Failed to parse CSV: {str(e)}"
+        ) from e
 
     if not rows:
         raise HTTPException(status_code=400, detail="CSV has no data rows")
@@ -281,7 +309,9 @@ async def import_leads(
 
         if not lead_data.get("phone"):
             errors.append({"row": i + 1, "error": "Missing phone number"})
-            logger.warning("lead_import_validation_error", row=i + 1, error="Missing phone number")
+            logger.warning(
+                "lead_import_validation_error", row=i + 1, error="Missing phone number"
+            )
             continue
 
         try:
@@ -295,7 +325,9 @@ async def import_leads(
                 email=lead_data.get("email"),
                 industry=lead_data.get("industry"),
                 notes=lead_data.get("notes"),
-                priority=int(lead_data.get("priority", 5)) if lead_data.get("priority") else 5,
+                priority=int(lead_data.get("priority", 5))
+                if lead_data.get("priority")
+                else 5,
                 source="csv",
             )
             imported += 1
@@ -303,7 +335,9 @@ async def import_leads(
             logger.error("lead_import_db_error", row=i + 1, error=str(e))
             errors.append({"row": i + 1, "error": f"DB error: {str(e)}"})
 
-    logger.info("leads_imported", imported=imported, errors=len(errors), tenant_id=tenant_id)
+    logger.info(
+        "leads_imported", imported=imported, errors=len(errors), tenant_id=tenant_id
+    )
     return {
         "imported": imported,
         "errors": errors,

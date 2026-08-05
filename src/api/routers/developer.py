@@ -22,6 +22,7 @@ router = APIRouter(prefix="/developer", tags=["developer"])
 
 # ── API Key Endpoints ──────────────────────────────────────────────
 
+
 @router.post("/api-keys", response_model=APIKeyCreatedResponse)
 async def create_api_key(
     data: APIKeyCreateRequest,
@@ -107,6 +108,7 @@ async def get_api_key_usage(
 
 # ── Webhook Endpoints ──────────────────────────────────────────────
 
+
 @router.post("/webhooks", response_model=WebhookResponse)
 async def register_webhook(
     data: WebhookRegisterRequest,
@@ -121,6 +123,7 @@ async def register_webhook(
     events = result.get("events_json", [])
     if isinstance(events, str):
         import json
+
         events = json.loads(events)
 
     return WebhookResponse(
@@ -143,15 +146,18 @@ async def list_webhooks(
         events = wh.get("events_json", [])
         if isinstance(events, str):
             import json
+
             events = json.loads(events)
-        result.append(WebhookResponse(
-            id=wh["id"],
-            url=wh["url"],
-            events=events,
-            secret=wh.get("secret"),
-            is_active=bool(wh.get("is_active", True)),
-            created_at=str(wh.get("created_at", "")),
-        ))
+        result.append(
+            WebhookResponse(
+                id=wh["id"],
+                url=wh["url"],
+                events=events,
+                secret=wh.get("secret"),
+                is_active=bool(wh.get("is_active", True)),
+                created_at=str(wh.get("created_at", "")),
+            )
+        )
     return result
 
 
@@ -186,19 +192,26 @@ async def test_webhook(
         _deliver_webhook,
         create_webhook_delivery_log_db,
     )
+
     log_entry = await create_webhook_delivery_log_db(
         tenant_id, webhook_id, "webhook.test", "test"
     )
     if log_entry:
         success = await _deliver_webhook(
-            wh["url"], test_payload, wh.get("secret"),
-            log_entry["id"], tenant_id, webhook_id,
+            wh["url"],
+            test_payload,
+            wh.get("secret"),
+            log_entry["id"],
+            tenant_id,
+            webhook_id,
         )
         return {"success": success, "log_id": log_entry["id"]}
     return {"success": False}
 
 
-@router.get("/webhooks/{webhook_id}/logs", response_model=list[WebhookDeliveryLogResponse])
+@router.get(
+    "/webhooks/{webhook_id}/logs", response_model=list[WebhookDeliveryLogResponse]
+)
 async def get_webhook_logs(
     webhook_id: str,
     tenant_id: str = Depends(verify_tenant_access),
@@ -232,6 +245,7 @@ async def retry_webhook_delivery(
 
 
 # ── Event Catalog ──────────────────────────────────────────────────
+
 
 @router.get("/events", response_model=EventCatalogResponse)
 async def get_event_catalog():

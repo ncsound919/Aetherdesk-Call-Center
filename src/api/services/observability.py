@@ -13,11 +13,24 @@ from api.services.connection_pool import http_pool
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 PII_PATTERNS = [
-    (re.compile(r'\b\d{3}-\d{2}-\d{4}\b'), 'XXX-XX-XXXX'),  # SSN
-    (re.compile(r'\b[\w\.-]+@[\w\.-]+\.\w+\b'), '[REDACTED_EMAIL]'), # Email
-    (re.compile(r'\b(?:\+\d{1,2}\s)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b'), '[REDACTED_PHONE]') # Phone
+    (re.compile(r"\b\d{3}-\d{2}-\d{4}\b"), "XXX-XX-XXXX"),  # SSN
+    (re.compile(r"\b[\w\.-]+@[\w\.-]+\.\w+\b"), "[REDACTED_EMAIL]"),  # Email
+    (
+        re.compile(r"\b(?:\+\d{1,2}\s)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b"),
+        "[REDACTED_PHONE]",
+    ),  # Phone
 ]
-SENSITIVE_KEYS = {"email", "phone", "ssn", "password", "customer_name", "credit_card", "address", "shipping_address"}
+SENSITIVE_KEYS = {
+    "email",
+    "phone",
+    "ssn",
+    "password",
+    "customer_name",
+    "credit_card",
+    "address",
+    "shipping_address",
+}
+
 
 def redact_pii_processor(logger, log_method, event_dict):
     """Redacts PII from log event dicts."""
@@ -30,13 +43,14 @@ def redact_pii_processor(logger, log_method, event_dict):
             event_dict[key] = value
     return event_dict
 
+
 structlog.configure(
     processors=[
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso"),
         redact_pii_processor,
-        structlog.processors.JSONRenderer()
+        structlog.processors.JSONRenderer(),
     ],
     wrapper_class=structlog.make_filtering_bound_logger(logging.getLogger().level),
     context_class=dict,
@@ -65,7 +79,7 @@ def log_call(endpoint: str = "unknown"):
                 "api_call_start",
                 endpoint=endpoint,
                 function=func.__name__,
-                args_len=len(args)
+                args_len=len(args),
             )
             try:
                 result = await func(*args, **kwargs)
@@ -75,7 +89,7 @@ def log_call(endpoint: str = "unknown"):
                     endpoint=endpoint,
                     function=func.__name__,
                     duration_ms=int(duration * 1000),
-                    status="success"
+                    status="success",
                 )
                 return result
             except Exception as e:
@@ -86,10 +100,12 @@ def log_call(endpoint: str = "unknown"):
                     function=func.__name__,
                     duration_ms=int(duration * 1000),
                     error=str(e),
-                    status="error"
+                    status="error",
                 )
                 raise
+
         return wrapper
+
     return decorator
 
 
@@ -101,27 +117,18 @@ class CallLogger:
         self.active_calls[call_sid] = {
             "started_at": time.time(),
             "metadata": metadata or {},
-            "events": []
+            "events": [],
         }
         logger.info(
-            "call_started",
-            call_sid=call_sid,
-            **self.active_calls[call_sid]["metadata"]
+            "call_started", call_sid=call_sid, **self.active_calls[call_sid]["metadata"]
         )
 
     def log_event(self, call_sid: str, event: str, data: dict[str, Any] = None):
         if call_sid in self.active_calls:
-            self.active_calls[call_sid]["events"].append({
-                "event": event,
-                "timestamp": time.time(),
-                "data": data or {}
-            })
-            logger.info(
-                "call_event",
-                call_sid=call_sid,
-                event=event,
-                **(data or {})
+            self.active_calls[call_sid]["events"].append(
+                {"event": event, "timestamp": time.time(), "data": data or {}}
             )
+            logger.info("call_event", call_sid=call_sid, event=event, **(data or {}))
 
     def end_call(self, call_sid: str, status: str = "completed"):
         if call_sid in self.active_calls:
@@ -131,7 +138,7 @@ class CallLogger:
                 call_sid=call_sid,
                 duration_sec=int(duration),
                 status=status,
-                events_count=len(self.active_calls[call_sid]["events"])
+                events_count=len(self.active_calls[call_sid]["events"]),
             )
             del self.active_calls[call_sid]
 
@@ -162,10 +169,10 @@ class MetricsCollector:
                     "count": len(v),
                     "avg_ms": sum(v) // len(v) if v else 0,
                     "min_ms": min(v) if v else 0,
-                    "max_ms": max(v) if v else 0
+                    "max_ms": max(v) if v else 0,
                 }
                 for k, v in self.timers.items()
-            }
+            },
         }
 
     def reset(self):
@@ -179,7 +186,8 @@ metrics = MetricsCollector()
 async def check_redis_health() -> bool:
     try:
         from api.main import app
-        if hasattr(app, 'state') and hasattr(app.state, 'redis'):
+
+        if hasattr(app, "state") and hasattr(app.state, "redis"):
             app.state.redis.ping()
             return True
     except Exception:
@@ -190,6 +198,7 @@ async def check_redis_health() -> bool:
 async def check_asr_health() -> bool:
     try:
         from api.services.asr import asr_service
+
         if asr_service._model is not None:
             return True
     except Exception:
@@ -199,6 +208,7 @@ async def check_asr_health() -> bool:
 
 async def check_ollama_health() -> bool:
     import os
+
     try:
         client = await http_pool.get_client()
         host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
@@ -210,6 +220,7 @@ async def check_ollama_health() -> bool:
 
 async def check_deepseek_health() -> bool:
     import os
+
     key = os.getenv("DEEPSEEK_API_KEY", "")
     if not key:
         return False
@@ -321,25 +332,30 @@ async def get_health_status() -> dict[str, Any]:
     for name, check_fn in HEALTH_CHECKS.items():
         try:
             healthy = await check_fn()
-            results[name] = {"status": "healthy" if healthy else "unhealthy", "initialized": initialized_services.get(name, False)}
+            results[name] = {
+                "status": "healthy" if healthy else "unhealthy",
+                "initialized": initialized_services.get(name, False),
+            }
             if not healthy:
                 all_healthy = False
         except Exception as e:
-            results[name] = {"status": "error", "error": str(e), "initialized": initialized_services.get(name, False)}
+            results[name] = {
+                "status": "error",
+                "error": str(e),
+                "initialized": initialized_services.get(name, False),
+            }
             all_healthy = False
 
     # System Metrics (Checklist Section 7)
     system_metrics = {
         "cpu_percent": psutil.cpu_percent(interval=None),
         "memory_percent": psutil.virtual_memory().percent,
-        "memory_available_mb": psutil.virtual_memory().available // (1024 * 1024)
+        "memory_available_mb": psutil.virtual_memory().available // (1024 * 1024),
     }
 
     return {
         "status": "healthy" if all_healthy else "degraded",
         "services": results,
         "system_metrics": system_metrics,
-        "metrics": metrics.get_metrics()
+        "metrics": metrics.get_metrics(),
     }
-
-

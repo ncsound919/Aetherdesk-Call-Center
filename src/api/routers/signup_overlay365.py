@@ -1,7 +1,8 @@
 """Public signup endpoint for Overlay 365 Aetherdesk trial."""
-import os
+
 import logging
-from typing import Optional, Literal
+import os
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, EmailStr, Field
@@ -18,17 +19,47 @@ VALID_TIERS = Literal["starter", "pro", "scale", "enterprise"]
 
 
 TIERS = [
-    {"id": "starter", "name": "Starter", "price": 99, "features": ["1 AI agent", "100 min/mo", "Basic scripts"]},
-    {"id": "pro", "name": "Pro", "price": 299, "features": ["5 AI agents", "1000 min/mo", "Custom scripts", "Blocklabor lite"]},
-    {"id": "scale", "name": "Scale", "price": 999, "features": ["Unlimited agents", "Full Blocklabor", "AgentBrowser", "Claw Protect"]},
-    {"id": "enterprise", "name": "Enterprise", "price": 5000, "features": ["Everything in Scale", "Custom AI training", "Dedicated support", "SLA"]},
+    {
+        "id": "starter",
+        "name": "Starter",
+        "price": 99,
+        "features": ["1 AI agent", "100 min/mo", "Basic scripts"],
+    },
+    {
+        "id": "pro",
+        "name": "Pro",
+        "price": 299,
+        "features": ["5 AI agents", "1000 min/mo", "Custom scripts", "Blocklabor lite"],
+    },
+    {
+        "id": "scale",
+        "name": "Scale",
+        "price": 999,
+        "features": [
+            "Unlimited agents",
+            "Full Blocklabor",
+            "AgentBrowser",
+            "Claw Protect",
+        ],
+    },
+    {
+        "id": "enterprise",
+        "name": "Enterprise",
+        "price": 5000,
+        "features": [
+            "Everything in Scale",
+            "Custom AI training",
+            "Dedicated support",
+            "SLA",
+        ],
+    },
 ]
 
 
 class SignupRequest(BaseModel):
     email: EmailStr
     company_name: str = Field(..., min_length=1, max_length=200)
-    phone: Optional[str] = Field(default=None, max_length=20)
+    phone: str | None = Field(default=None, max_length=20)
     tier: VALID_TIERS = Field(default="starter")
 
 
@@ -71,9 +102,13 @@ async def _create_checkout(request: SignupRequest):
 
     # Mock mode for development without Stripe keys
     if not stripe_secret or stripe_secret == "":
-        from api.services.security_guard import mask_email
         from urllib.parse import quote
-        logger.info(f"[MOCK] Stripe checkout for {mask_email(request.email)}, tier={request.tier}")
+
+        from api.services.security_guard import mask_email
+
+        logger.info(
+            f"[MOCK] Stripe checkout for {mask_email(request.email)}, tier={request.tier}"
+        )
         return SignupResponse(
             status="mock_checkout",
             checkout_url=f"https://overlay365.com/aetherdesk/mock-checkout?email={quote(request.email)}&tier={request.tier}",
@@ -97,11 +132,18 @@ async def _create_checkout(request: SignupRequest):
                 "tier": request.tier,
                 "platform": "overlay365",
             },
-            success_url=os.getenv("STRIPE_SUCCESS_URL", "http://localhost:5173/billing?success=true"),
-            cancel_url=os.getenv("STRIPE_CANCEL_URL", "http://localhost:5173/billing?canceled=true"),
+            success_url=os.getenv(
+                "STRIPE_SUCCESS_URL", "http://localhost:5173/billing?success=true"
+            ),
+            cancel_url=os.getenv(
+                "STRIPE_CANCEL_URL", "http://localhost:5173/billing?canceled=true"
+            ),
         )
         from api.services.security_guard import mask_email
-        logger.info(f"Stripe checkout created: email={mask_email(request.email)}, tier={request.tier}")
+
+        logger.info(
+            f"Stripe checkout created: email={mask_email(request.email)}, tier={request.tier}"
+        )
         return SignupResponse(
             status="success",
             checkout_url=checkout_session.url,
@@ -110,7 +152,7 @@ async def _create_checkout(request: SignupRequest):
         )
     except stripe.error.StripeError as e:
         logger.error(f"Stripe checkout failed: {type(e).__name__}")
-        raise HTTPException(status_code=500, detail="Checkout creation failed")
+        raise HTTPException(status_code=500, detail="Checkout creation failed") from e
     except Exception as e:
         logger.error(f"Unexpected checkout error: {type(e).__name__}")
-        raise HTTPException(status_code=500, detail="Checkout creation failed")
+        raise HTTPException(status_code=500, detail="Checkout creation failed") from e

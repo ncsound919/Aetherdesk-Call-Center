@@ -71,28 +71,30 @@ async def handle_message(websocket, message, client_id):
 
             if await verify_token(token):
                 connected_clients[client_id]["tenant_id"] = tenant_id
-                await websocket.send(json.dumps({
-                    "type": "auth_success",
-                    "timestamp": datetime.now(UTC).isoformat()
-                }))
+                await websocket.send(
+                    json.dumps(
+                        {
+                            "type": "auth_success",
+                            "timestamp": datetime.now(UTC).isoformat(),
+                        }
+                    )
+                )
             else:
-                await websocket.send(json.dumps({
-                    "type": "auth_error",
-                    "message": "Invalid token"
-                }))
+                await websocket.send(
+                    json.dumps({"type": "auth_error", "message": "Invalid token"})
+                )
 
         elif message_type == "subscribe":
             # Subscribe to events
             event_type = data.get("event")
-            connected_clients[client_id]["subscriptions"] = (
-                connected_clients[client_id].get("subscriptions", [])
-            )
+            connected_clients[client_id]["subscriptions"] = connected_clients[
+                client_id
+            ].get("subscriptions", [])
             connected_clients[client_id]["subscriptions"].append(event_type)
 
-            await websocket.send(json.dumps({
-                "type": "subscribed",
-                "event": event_type
-            }))
+            await websocket.send(
+                json.dumps({"type": "subscribed", "event": event_type})
+            )
 
         elif message_type == "call_action":
             # Handle call actions from agents
@@ -102,10 +104,9 @@ async def handle_message(websocket, message, client_id):
             await process_call_action(call_id, action)
 
         elif message_type == "ping":
-            await websocket.send(json.dumps({
-                "type": "pong",
-                "timestamp": datetime.now(UTC).isoformat()
-            }))
+            await websocket.send(
+                json.dumps({"type": "pong", "timestamp": datetime.now(UTC).isoformat()})
+            )
 
     except json.JSONDecodeError:
         logger.error(f"Invalid JSON from client {client_id}")
@@ -115,7 +116,9 @@ async def handle_message(websocket, message, client_id):
     except Exception as e:
         logger.error(f"Error handling message: {e}", exc_info=True)
         try:
-            await websocket.send(json.dumps({"type": "error", "message": "Internal error"}))
+            await websocket.send(
+                json.dumps({"type": "error", "message": "Internal error"})
+            )
         except websockets.exceptions.ConnectionClosed:
             pass  # Client already disconnected
         except Exception as e:
@@ -128,19 +131,18 @@ async def process_call_action(call_id, action):
     if redis_client:
         await redis_client.publish(
             f"call:{call_id}:actions",
-            json.dumps({
-                "action": action,
-                "timestamp": datetime.now(UTC).isoformat()
-            })
+            json.dumps({"action": action, "timestamp": datetime.now(UTC).isoformat()}),
         )
 
     # Broadcast to all subscribed clients
-    message = json.dumps({
-        "type": "call_action",
-        "call_id": call_id,
-        "action": action,
-        "timestamp": datetime.now(UTC).isoformat()
-    })
+    message = json.dumps(
+        {
+            "type": "call_action",
+            "call_id": call_id,
+            "action": action,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+    )
 
     for _client_id, client in list(connected_clients.items()):
         if "call_updates" in client.get("subscriptions", []):
@@ -153,6 +155,7 @@ async def process_call_action(call_id, action):
 async def verify_token(token):
     """Verify JWT token using RS256 (with HS256 fallback)."""
     from api.services.jwt_utils import verify_access_token
+
     return verify_access_token(token) is not None
 
 
@@ -172,11 +175,15 @@ async def redis_listener():
             # Broadcast to all connected clients
             for _client_id, client in list(connected_clients.items()):
                 try:
-                    await client["websocket"].send(json.dumps({
-                        "type": event_type,
-                        "data": data,
-                        "timestamp": datetime.now(UTC).isoformat()
-                    }))
+                    await client["websocket"].send(
+                        json.dumps(
+                            {
+                                "type": event_type,
+                                "data": data,
+                                "timestamp": datetime.now(UTC).isoformat(),
+                            }
+                        )
+                    )
                 except websockets.exceptions.ConnectionClosed:
                     pass
 
@@ -193,7 +200,10 @@ async def health_monitor():
                 disconnected.append(client_id)
             else:
                 last_activity = client.get("last_activity")
-                if last_activity and (now - last_activity).total_seconds() > IDLE_TIMEOUT:
+                if (
+                    last_activity
+                    and (now - last_activity).total_seconds() > IDLE_TIMEOUT
+                ):
                     idle_clients.append(client_id)
 
         for client_id in idle_clients:
@@ -212,8 +222,7 @@ async def main():
 
     # Connect to Redis
     redis_client = redis.from_url(
-        "redis://aetherdesk-redis:6379",
-        decode_responses=True
+        "redis://aetherdesk-redis:6379", decode_responses=True
     )
 
     # Start Redis listener
@@ -225,7 +234,9 @@ async def main():
     _background_tasks.add(health_task)
 
     # Start WebSocket server
-    ws_host = os.getenv("WS_HOST", "0.0.0.0" if os.getenv("APP_ENV") == "production" else "127.0.0.1")
+    ws_host = os.getenv(
+        "WS_HOST", "0.0.0.0" if os.getenv("APP_ENV") == "production" else "127.0.0.1"
+    )
     async with serve(
         handle_message,
         ws_host,

@@ -33,7 +33,9 @@ def _validate_pen_test_target(target_url: str) -> str:
 
     hostname = parsed.hostname
     if not hostname:
-        raise HTTPException(status_code=400, detail="target_url must include a valid host")
+        raise HTTPException(
+            status_code=400, detail="target_url must include a valid host"
+        )
 
     if hostname.lower() in _BLOCKED_HOSTNAMES:
         raise HTTPException(status_code=400, detail="target_url host is not allowed")
@@ -41,7 +43,9 @@ def _validate_pen_test_target(target_url: str) -> str:
     try:
         resolved_ips = {info[4][0] for info in socket.getaddrinfo(hostname, None)}
     except socket.gaierror:
-        raise HTTPException(status_code=400, detail="target_url host could not be resolved") from None
+        raise HTTPException(
+            status_code=400, detail="target_url host could not be resolved"
+        ) from None
 
     for ip_str in resolved_ips:
         ip = ipaddress.ip_address(ip_str)
@@ -128,13 +132,20 @@ async def get_data_classification(
 async def classify_field(
     table: str = Query(...),
     column: str = Query(...),
-    sensitivity: str = Query(..., description=f"One of: {', '.join(SENSITIVITY_LEVELS)}"),
+    sensitivity: str = Query(
+        ..., description=f"One of: {', '.join(SENSITIVITY_LEVELS)}"
+    ),
     description: str = Query(None),
     tenant_id: str = Depends(verify_tenant_access),
 ):
     if sensitivity not in SENSITIVITY_LEVELS:
-        raise HTTPException(status_code=400, detail=f"Invalid sensitivity. Must be one of {SENSITIVITY_LEVELS}")
-    return await data_classification_service.classify_field(table, column, sensitivity, tenant_id, description=description)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid sensitivity. Must be one of {SENSITIVITY_LEVELS}",
+        )
+    return await data_classification_service.classify_field(
+        table, column, sensitivity, tenant_id, description=description
+    )
 
 
 @router.get("/data-classification/validate")
@@ -144,7 +155,9 @@ async def validate_data_access(
     column: str = Query(...),
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    return await data_classification_service.validate_access(role, table, column, tenant_id)
+    return await data_classification_service.validate_access(
+        role, table, column, tenant_id
+    )
 
 
 @router.post("/rbac/audit")
@@ -177,4 +190,9 @@ async def force_user_password_reset(
     result = await force_password_reset(user_id)
     if not result:
         raise HTTPException(status_code=404, detail="User not found")
-    return {"success": True, "user_id": user_id, "email": result["email"], "message": "Password reset forced"}
+    return {
+        "success": True,
+        "user_id": user_id,
+        "email": result["email"],
+        "message": "Password reset forced",
+    }

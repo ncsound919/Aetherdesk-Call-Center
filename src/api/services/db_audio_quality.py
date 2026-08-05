@@ -10,34 +10,82 @@ from api.services.db_pool import _get_sqlite_conn, get_pg_pool
 logger = structlog.get_logger()
 
 
-async def create_quality_metric_db(tenant_id, call_id, agent_id, mos, jitter_ms, packet_loss_pct, latency_ms, rtt_samples, codec, quality_rating):
+async def create_quality_metric_db(
+    tenant_id,
+    call_id,
+    agent_id,
+    mos,
+    jitter_ms,
+    packet_loss_pct,
+    latency_ms,
+    rtt_samples,
+    codec,
+    quality_rating,
+):
     metric_id = str(uuid.uuid4())
-    rtt_json = json.dumps(rtt_samples) if isinstance(rtt_samples, list) else json.dumps([])
+    rtt_json = (
+        json.dumps(rtt_samples) if isinstance(rtt_samples, list) else json.dumps([])
+    )
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO voice_quality_metrics (id, tenant_id, call_id, agent_id, mos, jitter_ms, packet_loss_pct, latency_ms, rtt_samples_json, codec, quality_rating, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, NOW())
-            """, metric_id, tenant_id, call_id, agent_id, mos, jitter_ms, packet_loss_pct, latency_ms, rtt_json, codec, quality_rating)
-            row = await pool.fetchrow("SELECT * FROM voice_quality_metrics WHERE id = $1", metric_id)
+            """,
+                metric_id,
+                tenant_id,
+                call_id,
+                agent_id,
+                mos,
+                jitter_ms,
+                packet_loss_pct,
+                latency_ms,
+                rtt_json,
+                codec,
+                quality_rating,
+            )
+            row = await pool.fetchrow(
+                "SELECT * FROM voice_quality_metrics WHERE id = $1", metric_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
             now = datetime.now(UTC).isoformat()
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO voice_quality_metrics (id, tenant_id, call_id, agent_id, mos, jitter_ms, packet_loss_pct, latency_ms, rtt_samples_json, codec, quality_rating, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (metric_id, tenant_id, call_id, agent_id, mos, jitter_ms, packet_loss_pct, latency_ms, rtt_json, codec, quality_rating, now))
+            """,
+                (
+                    metric_id,
+                    tenant_id,
+                    call_id,
+                    agent_id,
+                    mos,
+                    jitter_ms,
+                    packet_loss_pct,
+                    latency_ms,
+                    rtt_json,
+                    codec,
+                    quality_rating,
+                    now,
+                ),
+            )
             conn.commit()
-            row = conn.execute("SELECT * FROM voice_quality_metrics WHERE id = ?", (metric_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM voice_quality_metrics WHERE id = ?", (metric_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
 
 
-async def list_quality_metrics_db(tenant_id, limit=50, offset=0, min_mos=None, start_date=None, end_date=None):
+async def list_quality_metrics_db(
+    tenant_id, limit=50, offset=0, min_mos=None, start_date=None, end_date=None
+):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
@@ -88,7 +136,13 @@ async def get_quality_summary_db(tenant_id, start_date=None, end_date=None):
         "total_calls": 0,
         "p95_jitter_ms": 0.0,
         "p95_packet_loss_pct": 0.0,
-        "quality_distribution": {"excellent": 0, "good": 0, "fair": 0, "poor": 0, "bad": 0},
+        "quality_distribution": {
+            "excellent": 0,
+            "good": 0,
+            "fair": 0,
+            "poor": 0,
+            "bad": 0,
+        },
     }
     if USE_POSTGRES:
         pool = await get_pg_pool()
@@ -105,12 +159,18 @@ async def get_quality_summary_db(tenant_id, start_date=None, end_date=None):
                 params.append(end_date)
                 idx += 1
 
-            agg = await pool.fetchrow(f"SELECT COUNT(*) as total, COALESCE(AVG(mos), 0) as avg_mos {base_query}", *params)
+            agg = await pool.fetchrow(
+                f"SELECT COUNT(*) as total, COALESCE(AVG(mos), 0) as avg_mos {base_query}",
+                *params,
+            )
             if agg:
                 result["total_calls"] = agg["total"]
                 result["avg_mos"] = float(agg["avg_mos"])
 
-            rows = await pool.fetch(f"SELECT mos, jitter_ms, packet_loss_pct, quality_rating {base_query}", *params)
+            rows = await pool.fetch(
+                f"SELECT mos, jitter_ms, packet_loss_pct, quality_rating {base_query}",
+                *params,
+            )
             if rows:
                 data = [dict(r) for r in rows]
                 jitters = sorted([r["jitter_ms"] for r in data])
@@ -134,12 +194,18 @@ async def get_quality_summary_db(tenant_id, start_date=None, end_date=None):
                 base_query += " AND created_at <= ?"
                 params.append(end_date)
 
-            agg = conn.execute(f"SELECT COUNT(*) as total, COALESCE(AVG(mos), 0) as avg_mos {base_query}", params).fetchone()
+            agg = conn.execute(
+                f"SELECT COUNT(*) as total, COALESCE(AVG(mos), 0) as avg_mos {base_query}",
+                params,
+            ).fetchone()
             if agg:
                 result["total_calls"] = agg["total"]
                 result["avg_mos"] = float(agg["avg_mos"])
 
-            rows = conn.execute(f"SELECT mos, jitter_ms, packet_loss_pct, quality_rating {base_query}", params).fetchall()
+            rows = conn.execute(
+                f"SELECT mos, jitter_ms, packet_loss_pct, quality_rating {base_query}",
+                params,
+            ).fetchall()
             if rows:
                 data = [dict(r) for r in rows]
                 jitters = sorted([r["jitter_ms"] for r in data])
@@ -156,7 +222,9 @@ async def get_quality_summary_db(tenant_id, start_date=None, end_date=None):
     return result
 
 
-async def get_quality_trends_db(tenant_id, start_date=None, end_date=None, granularity="hour"):
+async def get_quality_trends_db(
+    tenant_id, start_date=None, end_date=None, granularity="hour"
+):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
@@ -230,7 +298,8 @@ async def get_call_quality_db(tenant_id, call_id):
         if pool:
             row = await pool.fetchrow(
                 "SELECT * FROM voice_quality_metrics WHERE tenant_id = $1 AND call_id = $2 ORDER BY created_at DESC LIMIT 1",
-                tenant_id, call_id
+                tenant_id,
+                call_id,
             )
             return dict(row) if row else None
     else:
@@ -238,7 +307,7 @@ async def get_call_quality_db(tenant_id, call_id):
         try:
             row = conn.execute(
                 "SELECT * FROM voice_quality_metrics WHERE tenant_id = ? AND call_id = ? ORDER BY created_at DESC LIMIT 1",
-                (tenant_id, call_id)
+                (tenant_id, call_id),
             ).fetchone()
             return dict(row) if row else None
         finally:

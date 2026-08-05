@@ -22,11 +22,15 @@ class RedisCacheService:
         if self._redis is None and self.redis_url:
             try:
                 import redis.asyncio as aioredis
+
                 self._redis = aioredis.from_url(self.redis_url, decode_responses=True)
                 await self._redis.ping()
                 logger.info("redis_cache_connected")
             except Exception as e:
-                logger.warning("redis_cache_connection_failed, using in-memory fallback", error=str(e))
+                logger.warning(
+                    "redis_cache_connection_failed, using in-memory fallback",
+                    error=str(e),
+                )
                 self._redis = False
 
     async def get(self, key: str) -> Any | None:
@@ -66,7 +70,9 @@ class RedisCacheService:
         self._local_expiry[key] = time.time() + ttl
 
         if len(self._local) > self._local_max_size:
-            oldest = min(self._local_expiry.keys(), key=lambda k: self._local_expiry.get(k, 0))
+            oldest = min(
+                self._local_expiry.keys(), key=lambda k: self._local_expiry.get(k, 0)
+            )
             self._local.pop(oldest, None)
             self._local_expiry.pop(oldest, None)
 
@@ -109,7 +115,12 @@ class RedisCacheService:
                 stats["redis_connected"] = True
         else:
             import sys
-            local_size = sum(sys.getsizeof(v) for v in self._local.values()) if self._local else 0
+
+            local_size = (
+                sum(sys.getsizeof(v) for v in self._local.values())
+                if self._local
+                else 0
+            )
             stats["local_memory_used_bytes"] = local_size
 
         return stats
@@ -119,7 +130,11 @@ class RedisCacheService:
         if cached is not None:
             return cached
 
-        value = data_func() if not asyncio.iscoroutinefunction(data_func) else await data_func()
+        value = (
+            data_func()
+            if not asyncio.iscoroutinefunction(data_func)
+            else await data_func()
+        )
         await self.set(key, value, ttl)
         return value
 

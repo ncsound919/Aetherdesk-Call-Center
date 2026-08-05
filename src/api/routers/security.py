@@ -51,7 +51,9 @@ async def setup_mfa(token_data: dict = Depends(get_current_user)):
 
 
 @router.post("/verify")
-async def verify_mfa_setup(request: MFAVerifyRequest, token_data: dict = Depends(get_current_user)):
+async def verify_mfa_setup(
+    request: MFAVerifyRequest, token_data: dict = Depends(get_current_user)
+):
     """Verify TOTP code to complete MFA enrollment."""
     user_id = token_data.get("sub")
     if not user_id:
@@ -61,7 +63,9 @@ async def verify_mfa_setup(request: MFAVerifyRequest, token_data: dict = Depends
         raise HTTPException(status_code=400, detail="Invalid TOTP code")
     result = await mfa_service.enable_mfa(user_id)
     if not result["success"]:
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to enable MFA"))
+        raise HTTPException(
+            status_code=400, detail=result.get("error", "Failed to enable MFA")
+        )
     return {"message": "MFA enabled successfully"}
 
 
@@ -73,7 +77,9 @@ async def disable_mfa(token_data: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="Missing user info in token")
     result = await mfa_service.disable_mfa(user_id)
     if not result["success"]:
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to disable MFA"))
+        raise HTTPException(
+            status_code=400, detail=result.get("error", "Failed to disable MFA")
+        )
     return {"message": "MFA disabled successfully"}
 
 
@@ -88,7 +94,9 @@ async def mfa_login(request: MFALoginRequest):
         raise HTTPException(status_code=401, detail="Invalid or expired session token")
 
     if not payload.get("mfa_pending"):
-        raise HTTPException(status_code=400, detail="Token is not an MFA pending session")
+        raise HTTPException(
+            status_code=400, detail="Token is not an MFA pending session"
+        )
 
     user_id = payload.get("sub")
     valid = await mfa_service.verify_totp(user_id, request.code)
@@ -117,7 +125,9 @@ async def mfa_login(request: MFALoginRequest):
 
 
 @router.post("/backup-code")
-async def mfa_backup_code(request: MFABackupCodeRequest, token_data: dict = Depends(get_current_user)):
+async def mfa_backup_code(
+    request: MFABackupCodeRequest, token_data: dict = Depends(get_current_user)
+):
     """Login with backup code."""
     user_id = token_data.get("sub")
     if not user_id:

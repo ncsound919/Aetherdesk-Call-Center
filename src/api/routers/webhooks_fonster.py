@@ -12,6 +12,7 @@ from api.services.database import update_call_status as db_update_call_status
 router = APIRouter(prefix="/webhooks/fonster", tags=["webhooks"])
 logger = logging.getLogger(__name__)
 
+
 @router.post("")
 async def fonster_webhook(
     request: Request,
@@ -57,7 +58,9 @@ async def fonster_webhook(
     logger.info(f"Fonster webhook: {event_type} for call {call_id}")
 
     if event_type == "call.answered":
-        background_tasks.add_task(handle_fonster_webhook, request, call_id, "active", session_ref)
+        background_tasks.add_task(
+            handle_fonster_webhook, request, call_id, "active", session_ref
+        )
     elif event_type == "call.completed":
         background_tasks.add_task(handle_fonster_webhook, request, call_id, "completed")
     elif event_type == "call.failed":
@@ -66,7 +69,9 @@ async def fonster_webhook(
     return {"status": "ok"}
 
 
-async def handle_fonster_webhook(request: Request, call_id: str, status: str, session_ref: str = None):
+async def handle_fonster_webhook(
+    request: Request, call_id: str, status: str, session_ref: str = None
+):
     """Update call status in DB and notify via WebSocket/Redis"""
     logger.info(f"Call {call_id} status updated to {status}")
 
@@ -80,10 +85,12 @@ async def handle_fonster_webhook(request: Request, call_id: str, status: str, se
     if redis_client:
         await redis_client.publish(
             f"call:{call_id}:status",
-            json.dumps({
-                "call_id": call_id,
-                "status": status,
-                "session_ref": session_ref,
-                "timestamp": datetime.now(UTC).isoformat(),
-            })
+            json.dumps(
+                {
+                    "call_id": call_id,
+                    "status": status,
+                    "session_ref": session_ref,
+                    "timestamp": datetime.now(UTC).isoformat(),
+                }
+            ),
         )

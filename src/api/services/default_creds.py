@@ -11,7 +11,15 @@ logger = structlog.get_logger()
 
 DEFAULT_ADMIN_EMAIL = "admin@aetherdesk.com"
 DEFAULT_ADMIN_PASSWORD = "admin123"
-WEAK_PASSWORDS = {"password", "password123", "admin", "admin123", "123456", "letmein", "welcome"}
+WEAK_PASSWORDS = {
+    "password",
+    "password123",
+    "admin",
+    "admin123",
+    "123456",
+    "letmein",
+    "welcome",
+}
 
 
 async def check_default_credentials():
@@ -55,9 +63,12 @@ async def force_password_reset(user_id: str):
         if pool:
             await pool.execute(
                 "UPDATE users SET reset_token = $1, reset_token_expires = NOW() + INTERVAL '1 hour', password_hash = '' WHERE id = $2",
-                reset_token, user_id,
+                reset_token,
+                user_id,
             )
-            row = await pool.fetchrow("SELECT id, email FROM users WHERE id = $1", user_id)
+            row = await pool.fetchrow(
+                "SELECT id, email FROM users WHERE id = $1", user_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
@@ -67,7 +78,9 @@ async def force_password_reset(user_id: str):
                 (reset_token, expires_at, user_id),
             )
             conn.commit()
-            row = conn.execute("SELECT id, email FROM users WHERE id = ?", (user_id,)).fetchone()
+            row = conn.execute(
+                "SELECT id, email FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -94,23 +107,31 @@ async def audit_credential_strength():
         if pool:
             rows = await pool.fetch("SELECT id, email FROM users")
             for row in rows:
-                results.append({
-                    "user_id": str(row["id"]),
-                    "email": row["email"],
-                    "has_default_credential": row["email"] == DEFAULT_ADMIN_EMAIL,
-                    "status": "critical" if row["email"] == DEFAULT_ADMIN_EMAIL else "ok",
-                })
+                results.append(
+                    {
+                        "user_id": str(row["id"]),
+                        "email": row["email"],
+                        "has_default_credential": row["email"] == DEFAULT_ADMIN_EMAIL,
+                        "status": "critical"
+                        if row["email"] == DEFAULT_ADMIN_EMAIL
+                        else "ok",
+                    }
+                )
     else:
         conn = _get_sqlite_conn()
         try:
             rows = conn.execute("SELECT id, email FROM users").fetchall()
             for row in rows:
-                results.append({
-                    "user_id": row["id"],
-                    "email": row["email"],
-                    "has_default_credential": row["email"] == DEFAULT_ADMIN_EMAIL,
-                    "status": "critical" if row["email"] == DEFAULT_ADMIN_EMAIL else "ok",
-                })
+                results.append(
+                    {
+                        "user_id": row["id"],
+                        "email": row["email"],
+                        "has_default_credential": row["email"] == DEFAULT_ADMIN_EMAIL,
+                        "status": "critical"
+                        if row["email"] == DEFAULT_ADMIN_EMAIL
+                        else "ok",
+                    }
+                )
         finally:
             conn.close()
 

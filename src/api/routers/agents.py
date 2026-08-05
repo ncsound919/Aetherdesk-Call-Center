@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["agents"])
 
+
 async def safe_redis_publish(request: Request, channel: str, message: str) -> bool:
     """Publish to Redis using app state."""
     try:
@@ -64,8 +65,15 @@ async def build_agent_response(agent_data: dict, tenant_id: str | None = None) -
     }
 
 
-@router.post("/tenants/{tenant_id}/agents", response_model=AgentResponse, status_code=201)
-async def create_agent(request: Request, tenant_id: str, agent: AgentCreate, _=Depends(verify_tenant_access)):
+@router.post(
+    "/tenants/{tenant_id}/agents", response_model=AgentResponse, status_code=201
+)
+async def create_agent(
+    request: Request,
+    tenant_id: str,
+    agent: AgentCreate,
+    _=Depends(verify_tenant_access),
+):
     """Create a new agent with SIP extension and Fonster integration"""
     db_agent = await create_agent_db(
         tenant_id=tenant_id,
@@ -82,19 +90,21 @@ async def create_agent(request: Request, tenant_id: str, agent: AgentCreate, _=D
     fonster_client = getattr(request.app.state, "fonster_client", None)
     if fonster_client:
         try:
-            await fonster_client.create_application({
-                "name": f"Agent-{agent.name}",
-                "type": "EXTERNAL",
-                "endpoint": "tcp://aetherdesk-voice:50061",
-                "speechToText": {
-                    "productRef": "stt.deepgram",
-                    "config": {"languageCode": "en-US"}
-                },
-                "textToSpeech": {
-                    "productRef": "tts.chatterbox",
-                    "config": {"voice": "default", "emotion": "neutral"}
-                },
-            })
+            await fonster_client.create_application(
+                {
+                    "name": f"Agent-{agent.name}",
+                    "type": "EXTERNAL",
+                    "endpoint": "tcp://aetherdesk-voice:50061",
+                    "speechToText": {
+                        "productRef": "stt.deepgram",
+                        "config": {"languageCode": "en-US"},
+                    },
+                    "textToSpeech": {
+                        "productRef": "tts.chatterbox",
+                        "config": {"voice": "default", "emotion": "neutral"},
+                    },
+                }
+            )
         except Exception as e:
             logger.warning(f"Fonster agent app creation failed (non-fatal): {e}")
 
@@ -136,12 +146,17 @@ async def get_agent(tenant_id: str, agent_id: str, _=Depends(verify_tenant_acces
 
 
 @router.put("/tenants/{tenant_id}/agents/{agent_id}", response_model=AgentResponse)
-async def update_agent(tenant_id: str, agent_id: str, agent: AgentCreate, _=Depends(verify_tenant_access)):
+async def update_agent(
+    tenant_id: str, agent_id: str, agent: AgentCreate, _=Depends(verify_tenant_access)
+):
     """Update an agent's configuration"""
     updated = await update_agent_db(
-        agent_id=agent_id, tenant_id=tenant_id,
-        name=agent.name, display_name=agent.display_name,
-        agent_type=agent.agent_type, skills=agent.skills,
+        agent_id=agent_id,
+        tenant_id=tenant_id,
+        name=agent.name,
+        display_name=agent.display_name,
+        agent_type=agent.agent_type,
+        skills=agent.skills,
         config=agent.config,
     )
     if not updated:
@@ -181,15 +196,19 @@ async def handle_update_agent_status(
     await safe_redis_publish(
         request,
         f"agent:{agent_id}:status",
-        json.dumps({
-            "agent_id": agent_id,
-            "status": status.status,
-            "session_ref": status.session_ref,
-            "timestamp": datetime.now(UTC).isoformat(),
-        })
+        json.dumps(
+            {
+                "agent_id": agent_id,
+                "status": status.status,
+                "session_ref": status.session_ref,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        ),
     )
 
     if not result.get("success"):
-        raise HTTPException(status_code=404, detail=result.get("error", "Agent not found"))
+        raise HTTPException(
+            status_code=404, detail=result.get("error", "Agent not found")
+        )
 
     return result

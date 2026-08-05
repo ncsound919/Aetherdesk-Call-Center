@@ -17,6 +17,7 @@ router = APIRouter(prefix="/integrations", tags=["integrations"])
 
 # ── CRM Endpoints ──────────────────────────────────────────────
 
+
 @router.post("/crm/contacts")
 async def create_crm_contact(
     data: dict,
@@ -25,7 +26,9 @@ async def create_crm_contact(
     config = await _get_crm_config(tenant_id)
     if not config:
         raise HTTPException(status_code=400, detail="No CRM integration configured")
-    connector = CRMConnectorFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+    connector = CRMConnectorFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     return await connector.create_contact(data)
 
 
@@ -36,8 +39,15 @@ async def search_crm_contacts(
 ):
     config = await _get_crm_config(tenant_id)
     if not config:
-        return {"success": True, "data": {"contacts": [], "total": 0}, "provider": "none", "timestamp": ""}
-    connector = CRMConnectorFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+        return {
+            "success": True,
+            "data": {"contacts": [], "total": 0},
+            "provider": "none",
+            "timestamp": "",
+        }
+    connector = CRMConnectorFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     return await connector.search_contacts(query)
 
 
@@ -49,7 +59,9 @@ async def get_crm_contact(
     config = await _get_crm_config(tenant_id)
     if not config:
         raise HTTPException(status_code=400, detail="No CRM integration configured")
-    connector = CRMConnectorFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+    connector = CRMConnectorFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     return await connector.get_contact(contact_id)
 
 
@@ -62,7 +74,9 @@ async def update_crm_contact(
     config = await _get_crm_config(tenant_id)
     if not config:
         raise HTTPException(status_code=400, detail="No CRM integration configured")
-    connector = CRMConnectorFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+    connector = CRMConnectorFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     return await connector.update_contact(contact_id, data)
 
 
@@ -73,10 +87,13 @@ async def sync_crm_contacts(
     config = await _get_crm_config(tenant_id)
     if not config:
         raise HTTPException(status_code=400, detail="No CRM integration configured")
-    connector = CRMConnectorFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+    connector = CRMConnectorFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     result = await connector.sync_contacts()
     await update_integration_config_db(
-        tenant_id, config["provider"],
+        tenant_id,
+        config["provider"],
         last_sync_at=result.get("timestamp"),
         status="active",
     )
@@ -89,12 +106,20 @@ async def crm_health(
 ):
     config = await _get_crm_config(tenant_id)
     if not config:
-        return {"success": True, "data": {"status": "not_configured"}, "provider": "none", "timestamp": ""}
-    connector = CRMConnectorFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+        return {
+            "success": True,
+            "data": {"status": "not_configured"},
+            "provider": "none",
+            "timestamp": "",
+        }
+    connector = CRMConnectorFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     return await connector.get_health()
 
 
 # ── Ticketing Endpoints ────────────────────────────────────────
+
 
 @router.post("/ticketing/tickets")
 async def create_ticket(
@@ -103,14 +128,22 @@ async def create_ticket(
 ):
     config = await _get_ticketing_config(tenant_id)
     if not config:
-        raise HTTPException(status_code=400, detail="No ticketing integration configured")
-    connector = TicketingFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+        raise HTTPException(
+            status_code=400, detail="No ticketing integration configured"
+        )
+    connector = TicketingFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     service = TicketingService(connector)
     result = await service.create_ticket(data.model_dump())
     await create_ticket_sync_log_db(
-        tenant_id, result.get("data", {}).get("id", ""),
-        call_id=data.call_id, direction="outbound", status="success",
-        payload_json=data.model_dump(), response_json=result,
+        tenant_id,
+        result.get("data", {}).get("id", ""),
+        call_id=data.call_id,
+        direction="outbound",
+        status="success",
+        payload_json=data.model_dump(),
+        response_json=result,
     )
     return result
 
@@ -122,8 +155,15 @@ async def list_tickets(
 ):
     config = await _get_ticketing_config(tenant_id)
     if not config:
-        return {"success": True, "data": {"tickets": [], "total": 0}, "provider": "none", "timestamp": ""}
-    connector = TicketingFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+        return {
+            "success": True,
+            "data": {"tickets": [], "total": 0},
+            "provider": "none",
+            "timestamp": "",
+        }
+    connector = TicketingFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     service = TicketingService(connector)
     return await service.list_tickets(tenant_id, status)
 
@@ -135,8 +175,12 @@ async def get_ticket(
 ):
     config = await _get_ticketing_config(tenant_id)
     if not config:
-        raise HTTPException(status_code=400, detail="No ticketing integration configured")
-    connector = TicketingFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+        raise HTTPException(
+            status_code=400, detail="No ticketing integration configured"
+        )
+    connector = TicketingFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     service = TicketingService(connector)
     return await service.get_ticket(ticket_id)
 
@@ -149,8 +193,12 @@ async def update_ticket(
 ):
     config = await _get_ticketing_config(tenant_id)
     if not config:
-        raise HTTPException(status_code=400, detail="No ticketing integration configured")
-    connector = TicketingFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+        raise HTTPException(
+            status_code=400, detail="No ticketing integration configured"
+        )
+    connector = TicketingFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     service = TicketingService(connector)
     return await service.update_ticket(ticket_id, data)
 
@@ -162,14 +210,22 @@ async def sync_from_call(
 ):
     config = await _get_ticketing_config(tenant_id)
     if not config:
-        raise HTTPException(status_code=400, detail="No ticketing integration configured")
-    connector = TicketingFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+        raise HTTPException(
+            status_code=400, detail="No ticketing integration configured"
+        )
+    connector = TicketingFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     service = TicketingService(connector)
     result = await service.sync_from_call(data)
     await create_ticket_sync_log_db(
-        tenant_id, result.get("data", {}).get("id", ""),
-        call_id=data.get("call_id"), direction="outbound", status="success",
-        payload_json=data, response_json=result,
+        tenant_id,
+        result.get("data", {}).get("id", ""),
+        call_id=data.get("call_id"),
+        direction="outbound",
+        status="success",
+        payload_json=data,
+        response_json=result,
     )
     return result
 
@@ -180,13 +236,21 @@ async def ticketing_health(
 ):
     config = await _get_ticketing_config(tenant_id)
     if not config:
-        return {"success": True, "data": {"status": "not_configured"}, "provider": "none", "timestamp": ""}
-    connector = TicketingFactory.get_connector(tenant_id, config["provider"], config.get("config_json", {}))
+        return {
+            "success": True,
+            "data": {"status": "not_configured"},
+            "provider": "none",
+            "timestamp": "",
+        }
+    connector = TicketingFactory.get_connector(
+        tenant_id, config["provider"], config.get("config_json", {})
+    )
     service = TicketingService(connector)
     return await service.get_health()
 
 
 # ── Integration Management ─────────────────────────────────────
+
 
 @router.get("/configs")
 async def list_configs(
@@ -204,13 +268,18 @@ async def create_or_update_config(
     existing = await get_integration_config_db(tenant_id, data.provider)
     if existing:
         result = await update_integration_config_db(
-            tenant_id, data.provider,
-            config_json=data.config, status=data.status,
+            tenant_id,
+            data.provider,
+            config_json=data.config,
+            status=data.status,
         )
     else:
         result = await create_integration_config_db(
-            tenant_id, data.provider, data.integration_type,
-            data.config, data.status,
+            tenant_id,
+            data.provider,
+            data.integration_type,
+            data.config,
+            data.status,
         )
     if not result:
         raise HTTPException(status_code=400, detail="Failed to save integration config")
@@ -228,21 +297,29 @@ async def all_health(
         provider = cfg.get("provider", "")
         try:
             if ptype == "crm":
-                connector = CRMConnectorFactory.get_connector(tenant_id, provider, cfg.get("config_json", {}))
+                connector = CRMConnectorFactory.get_connector(
+                    tenant_id, provider, cfg.get("config_json", {})
+                )
                 h = await connector.get_health()
             elif ptype == "ticketing":
-                connector = TicketingFactory.get_connector(tenant_id, provider, cfg.get("config_json", {}))
+                connector = TicketingFactory.get_connector(
+                    tenant_id, provider, cfg.get("config_json", {})
+                )
                 service = TicketingService(connector)
                 h = await service.get_health()
             else:
                 h = {"success": False, "data": {"status": "unknown_type"}}
             health[provider] = h
         except Exception as e:
-            health[provider] = {"success": False, "data": {"status": "error", "error": str(e)}}
+            health[provider] = {
+                "success": False,
+                "data": {"status": "error", "error": str(e)},
+            }
     return {"health": health}
 
 
 # ── Helpers ─────────────────────────────────────────────────────
+
 
 async def _get_crm_config(tenant_id: str) -> dict | None:
     configs = await list_integration_configs_db(tenant_id, integration_type="crm")

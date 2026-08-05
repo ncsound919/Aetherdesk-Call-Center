@@ -91,14 +91,70 @@ class PenetrationTestingService:
 class WAFService:
     def __init__(self):
         self._rules = [
-            {"id": "waf-001", "name": "SQL Injection", "action": "block", "enabled": True, "priority": 1, "pattern": "SQL injection patterns"},
-            {"id": "waf-002", "name": "XSS Attack", "action": "block", "enabled": True, "priority": 2, "pattern": "Cross-site scripting patterns"},
-            {"id": "waf-003", "name": "Path Traversal", "action": "block", "enabled": True, "priority": 3, "pattern": "Directory traversal patterns"},
-            {"id": "waf-004", "name": "Rate Limit Exceeded", "action": "block", "enabled": True, "priority": 4, "pattern": "Rate limit threshold"},
-            {"id": "waf-005", "name": "Bad Bot Detection", "action": "captcha", "enabled": True, "priority": 5, "pattern": "Known bot signatures"},
-            {"id": "waf-006", "name": "File Inclusion", "action": "block", "enabled": False, "priority": 6, "pattern": "Remote/Local file inclusion"},
-            {"id": "waf-007", "name": "Command Injection", "action": "block", "enabled": True, "priority": 7, "pattern": "OS command injection patterns"},
-            {"id": "waf-008", "name": "API Abuse", "action": "log", "enabled": True, "priority": 8, "pattern": "Abnormal API usage"},
+            {
+                "id": "waf-001",
+                "name": "SQL Injection",
+                "action": "block",
+                "enabled": True,
+                "priority": 1,
+                "pattern": "SQL injection patterns",
+            },
+            {
+                "id": "waf-002",
+                "name": "XSS Attack",
+                "action": "block",
+                "enabled": True,
+                "priority": 2,
+                "pattern": "Cross-site scripting patterns",
+            },
+            {
+                "id": "waf-003",
+                "name": "Path Traversal",
+                "action": "block",
+                "enabled": True,
+                "priority": 3,
+                "pattern": "Directory traversal patterns",
+            },
+            {
+                "id": "waf-004",
+                "name": "Rate Limit Exceeded",
+                "action": "block",
+                "enabled": True,
+                "priority": 4,
+                "pattern": "Rate limit threshold",
+            },
+            {
+                "id": "waf-005",
+                "name": "Bad Bot Detection",
+                "action": "captcha",
+                "enabled": True,
+                "priority": 5,
+                "pattern": "Known bot signatures",
+            },
+            {
+                "id": "waf-006",
+                "name": "File Inclusion",
+                "action": "block",
+                "enabled": False,
+                "priority": 6,
+                "pattern": "Remote/Local file inclusion",
+            },
+            {
+                "id": "waf-007",
+                "name": "Command Injection",
+                "action": "block",
+                "enabled": True,
+                "priority": 7,
+                "pattern": "OS command injection patterns",
+            },
+            {
+                "id": "waf-008",
+                "name": "API Abuse",
+                "action": "log",
+                "enabled": True,
+                "priority": 8,
+                "pattern": "Abnormal API usage",
+            },
         ]
 
     def get_waf_rules(self):
@@ -120,29 +176,71 @@ class WAFService:
 
 
 class DataClassificationService:
-    async def classify_field(self, table: str, column: str, sensitivity: str, tenant_id: str = "system", schema_name: str = "public", description: str = None):
+    async def classify_field(
+        self,
+        table: str,
+        column: str,
+        sensitivity: str,
+        tenant_id: str = "system",
+        schema_name: str = "public",
+        description: str = None,
+    ):
         if sensitivity not in SENSITIVITY_LEVELS:
-            raise ValueError(f"Invalid sensitivity level. Must be one of {SENSITIVITY_LEVELS}")
-        return await set_data_classification_db(tenant_id, schema_name, table, column, sensitivity, description)
+            raise ValueError(
+                f"Invalid sensitivity level. Must be one of {SENSITIVITY_LEVELS}"
+            )
+        return await set_data_classification_db(
+            tenant_id, schema_name, table, column, sensitivity, description
+        )
 
     async def get_classification_schema(self, tenant_id: str = "system"):
         return await get_data_classification_db(tenant_id)
 
-    async def validate_access(self, user_role: str, table: str, column: str, tenant_id: str = "system"):
+    async def validate_access(
+        self, user_role: str, table: str, column: str, tenant_id: str = "system"
+    ):
         classifications = await get_data_classification_db(tenant_id)
         for c in classifications:
             if c["table_name"] == table and c["column_name"] == column:
                 sensitivity = c["sensitivity"]
                 break
         else:
-            return {"allowed": True, "reason": "No classification found — default allow"}
+            return {
+                "allowed": True,
+                "reason": "No classification found — default allow",
+            }
 
         role_access_map = {
-            "admin": {"public": True, "internal": True, "confidential": True, "restricted": True},
-            "manager": {"public": True, "internal": True, "confidential": True, "restricted": False},
-            "agent": {"public": True, "internal": True, "confidential": False, "restricted": False},
-            "viewer": {"public": True, "internal": False, "confidential": False, "restricted": False},
-            "auditor": {"public": True, "internal": True, "confidential": True, "restricted": True},
+            "admin": {
+                "public": True,
+                "internal": True,
+                "confidential": True,
+                "restricted": True,
+            },
+            "manager": {
+                "public": True,
+                "internal": True,
+                "confidential": True,
+                "restricted": False,
+            },
+            "agent": {
+                "public": True,
+                "internal": True,
+                "confidential": False,
+                "restricted": False,
+            },
+            "viewer": {
+                "public": True,
+                "internal": False,
+                "confidential": False,
+                "restricted": False,
+            },
+            "auditor": {
+                "public": True,
+                "internal": True,
+                "confidential": True,
+                "restricted": True,
+            },
         }
 
         allowed = role_access_map.get(user_role, {}).get(sensitivity, False)
@@ -152,7 +250,9 @@ class DataClassificationService:
             "sensitivity": sensitivity,
             "table": table,
             "column": column,
-            "reason": "Access granted" if allowed else f"Role '{user_role}' cannot access '{sensitivity}' fields",
+            "reason": "Access granted"
+            if allowed
+            else f"Role '{user_role}' cannot access '{sensitivity}' fields",
         }
 
 
@@ -180,7 +280,15 @@ class RBACTestService:
     async def run_full_audit(self, tenant_id: str = "system"):
         self._audit_results = []
         roles = ["admin", "manager", "agent", "viewer", "auditor"]
-        resources = ["agents", "calls", "scripts", "billing", "analytics", "tenants", "health"]
+        resources = [
+            "agents",
+            "calls",
+            "scripts",
+            "billing",
+            "analytics",
+            "tenants",
+            "health",
+        ]
         actions = ["read", "write", "delete"]
 
         for role in roles:
@@ -208,11 +316,51 @@ class RBACTestService:
 
     def _get_expected_permission(self, role: str, resource: str, action: str) -> bool:
         matrix = {
-            "admin": {"agents": True, "calls": True, "scripts": True, "billing": True, "analytics": True, "tenants": True, "health": True},
-            "manager": {"agents": True, "calls": True, "scripts": True, "billing": True, "analytics": True, "tenants": False, "health": True},
-            "agent": {"agents": False, "calls": True, "scripts": True, "billing": False, "analytics": True, "tenants": False, "health": True},
-            "viewer": {"agents": True, "calls": True, "scripts": True, "billing": True, "analytics": True, "tenants": False, "health": True},
-            "auditor": {"agents": True, "calls": True, "scripts": True, "billing": True, "analytics": True, "tenants": True, "health": True},
+            "admin": {
+                "agents": True,
+                "calls": True,
+                "scripts": True,
+                "billing": True,
+                "analytics": True,
+                "tenants": True,
+                "health": True,
+            },
+            "manager": {
+                "agents": True,
+                "calls": True,
+                "scripts": True,
+                "billing": True,
+                "analytics": True,
+                "tenants": False,
+                "health": True,
+            },
+            "agent": {
+                "agents": False,
+                "calls": True,
+                "scripts": True,
+                "billing": False,
+                "analytics": True,
+                "tenants": False,
+                "health": True,
+            },
+            "viewer": {
+                "agents": True,
+                "calls": True,
+                "scripts": True,
+                "billing": True,
+                "analytics": True,
+                "tenants": False,
+                "health": True,
+            },
+            "auditor": {
+                "agents": True,
+                "calls": True,
+                "scripts": True,
+                "billing": True,
+                "analytics": True,
+                "tenants": True,
+                "health": True,
+            },
         }
         allowed = matrix.get(role, {}).get(resource, False)
         if action == "delete":

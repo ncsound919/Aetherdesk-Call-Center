@@ -38,7 +38,14 @@ class VoiceProfileStore:
     def list_all(self) -> list[dict]:
         with self._lock:
             return [
-                {"voice_id": vid, **{k: v for k, v in prof.items() if k in ("name", "language", "engine", "fallback")}}
+                {
+                    "voice_id": vid,
+                    **{
+                        k: v
+                        for k, v in prof.items()
+                        if k in ("name", "language", "engine", "fallback")
+                    },
+                }
                 for vid, prof in self._profiles.items()
             ]
 
@@ -49,5 +56,3 @@ class VoiceProfileStore:
     def items_snapshot(self) -> list[tuple[str, dict]]:
         with self._lock:
             return list(self._profiles.items())
-
-

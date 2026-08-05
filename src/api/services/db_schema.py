@@ -2418,6 +2418,7 @@ CREATE TABLE IF NOT EXISTS eval_metrics (
 CREATE INDEX IF NOT EXISTS idx_eval_metrics ON eval_metrics(tenant_id, model_id, model_version);
 """
 
+
 async def init_pg_schema(pool: asyncpg.Pool):
     """Initialize PostgreSQL schema using Alembic migrations.
 
@@ -2425,12 +2426,15 @@ async def init_pg_schema(pool: asyncpg.Pool):
     hasn't been created yet).
     """
     from api.services.db_migrations import run_alembic_migrations
+
     try:
         ok = await run_alembic_migrations()
         if ok:
             return
     except Exception as e:
-        logger.warning("Alembic migration failed, falling back to raw SQL", error=str(e))
+        logger.warning(
+            "Alembic migration failed, falling back to raw SQL", error=str(e)
+        )
 
     async with pool.acquire() as conn:
         try:
@@ -2449,6 +2453,7 @@ def init_sqlite_schema():
     import asyncio
 
     from api.services.db_migrations import run_alembic_migrations
+
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -2460,7 +2465,9 @@ def init_sqlite_schema():
             if ok:
                 return
     except Exception as e:
-        logger.warning("Alembic migration failed, falling back to raw SQL", error=str(e))
+        logger.warning(
+            "Alembic migration failed, falling back to raw SQL", error=str(e)
+        )
 
     from api.services.db_pool import _get_sqlite_conn
     from api.services.db_sqlite_transform import postgres_to_sqlite
@@ -2477,5 +2484,3 @@ def init_sqlite_schema():
     conn.commit()
     conn.close()
     logger.info("SQLite schema initialized from translated SCHEMA_SQL (fallback)")
-
-

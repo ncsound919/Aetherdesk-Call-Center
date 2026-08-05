@@ -19,22 +19,98 @@ logger = structlog.get_logger()
 
 
 _EMOTION_KEYWORDS = {
-    "happy": ["great", "awesome", "thank", "perfect", "wonderful", "love", "fantastic", "excellent", "amazing", "delighted",
-              "very happy", "so glad", "really appreciate", "made my day", "couldn't be happier", "absolutely love"],
-    "angry": ["furious", "angry", "unacceptable", "terrible", "horrible", "awful", "frustrated", "livid", "outraged", "infuriated",
-              "so angry", "really upset", "completely unacceptable", "fed up", "sick of", "pissed off"],
-    "sad": ["unfortunately", "sorry", "disappointed", "regret", "sad", "unhappy", "miss", "depressed", "heartbroken", "miserable",
-            "so sorry", "very disappointed", "feel bad", "quite sad", "really regrettable"],
-    "anxious": ["nervous", "worried", "concerned", "anxious", "scared", "afraid", "uncertain", "stressed", "panicked", "uneasy",
-                "quite worried", "very concerned", "really nervous", "freaking out"],
-    "neutral": ["okay", "fine", "sure", "alright", "yes", "no", "maybe", "possible", "understand", "see",
-                "let me", "can you", "would like", "need help"],
+    "happy": [
+        "great",
+        "awesome",
+        "thank",
+        "perfect",
+        "wonderful",
+        "love",
+        "fantastic",
+        "excellent",
+        "amazing",
+        "delighted",
+        "very happy",
+        "so glad",
+        "really appreciate",
+        "made my day",
+        "couldn't be happier",
+        "absolutely love",
+    ],
+    "angry": [
+        "furious",
+        "angry",
+        "unacceptable",
+        "terrible",
+        "horrible",
+        "awful",
+        "frustrated",
+        "livid",
+        "outraged",
+        "infuriated",
+        "so angry",
+        "really upset",
+        "completely unacceptable",
+        "fed up",
+        "sick of",
+        "pissed off",
+    ],
+    "sad": [
+        "unfortunately",
+        "sorry",
+        "disappointed",
+        "regret",
+        "sad",
+        "unhappy",
+        "miss",
+        "depressed",
+        "heartbroken",
+        "miserable",
+        "so sorry",
+        "very disappointed",
+        "feel bad",
+        "quite sad",
+        "really regrettable",
+    ],
+    "anxious": [
+        "nervous",
+        "worried",
+        "concerned",
+        "anxious",
+        "scared",
+        "afraid",
+        "uncertain",
+        "stressed",
+        "panicked",
+        "uneasy",
+        "quite worried",
+        "very concerned",
+        "really nervous",
+        "freaking out",
+    ],
+    "neutral": [
+        "okay",
+        "fine",
+        "sure",
+        "alright",
+        "yes",
+        "no",
+        "maybe",
+        "possible",
+        "understand",
+        "see",
+        "let me",
+        "can you",
+        "would like",
+        "need help",
+    ],
 }
 
 _BIGRAM_TRIGRAM_PATTERNS = [
     re.compile(r"\b" + word.replace(" ", r"\s+") + r"\b", re.IGNORECASE)
     for word_list in _EMOTION_KEYWORDS.values()
-    for word in word_list if " " in word
+    for word in word_list
+    if " " in word
 ]
 
 
@@ -49,16 +125,22 @@ class SpeakerDiarizer:
         speaker_labels = _detect_speaker_labels(lines)
 
         if not speaker_labels:
-            sentences = [s.strip() for s in re.split(r"[.?!]\s*", transcript) if len(s.strip()) > 5]
+            sentences = [
+                s.strip()
+                for s in re.split(r"[.?!]\s*", transcript)
+                if len(s.strip()) > 5
+            ]
             for i, sentence in enumerate(sentences):
                 speaker = f"speaker_{i % num_speakers}"
-                segments.append({
-                    "speaker": speaker,
-                    "text": sentence,
-                    "start_ms": i * 5000,
-                    "end_ms": (i + 1) * 5000,
-                    "confidence": round(random.uniform(0.75, 0.99), 4),
-                })
+                segments.append(
+                    {
+                        "speaker": speaker,
+                        "text": sentence,
+                        "start_ms": i * 5000,
+                        "end_ms": (i + 1) * 5000,
+                        "confidence": round(random.uniform(0.75, 0.99), 4),
+                    }
+                )
         else:
             current_speaker = None
             current_text = []
@@ -73,46 +155,77 @@ class SpeakerDiarizer:
                 if detected:
                     if current_speaker and current_text:
                         text = " ".join(current_text)
-                        segments.append({
-                            "speaker": current_speaker,
-                            "text": text,
-                            "start_ms": current_start,
-                            "end_ms": current_start + len(text) * ms_per_char,
-                            "confidence": 0.85,
-                        })
+                        segments.append(
+                            {
+                                "speaker": current_speaker,
+                                "text": text,
+                                "start_ms": current_start,
+                                "end_ms": current_start + len(text) * ms_per_char,
+                                "confidence": 0.85,
+                            }
+                        )
                     current_speaker = detected
-                    current_text = [re.sub(r"^(Agent|Customer|Speaker\s*\d+)[:\s]\s*", "", line, flags=re.IGNORECASE)]
-                    current_start = (sum(len(s["text"]) for s in segments) + len(current_text[0])) * ms_per_char
+                    current_text = [
+                        re.sub(
+                            r"^(Agent|Customer|Speaker\s*\d+)[:\s]\s*",
+                            "",
+                            line,
+                            flags=re.IGNORECASE,
+                        )
+                    ]
+                    current_start = (
+                        sum(len(s["text"]) for s in segments) + len(current_text[0])
+                    ) * ms_per_char
                 else:
                     current_text.append(line)
 
             if current_speaker and current_text:
                 text = " ".join(current_text)
-                segments.append({
-                    "speaker": current_speaker,
-                    "text": text,
-                    "start_ms": current_start,
-                    "end_ms": current_start + len(text) * ms_per_char,
-                    "confidence": 0.85,
-                })
+                segments.append(
+                    {
+                        "speaker": current_speaker,
+                        "text": text,
+                        "start_ms": current_start,
+                        "end_ms": current_start + len(text) * ms_per_char,
+                        "confidence": 0.85,
+                    }
+                )
 
         return segments
 
 
 class ProsodyExtractor:
     @staticmethod
-    def extract_prosody(text: str, audio_features: dict[str, Any] | None = None) -> dict[str, float]:
+    def extract_prosody(
+        text: str, audio_features: dict[str, Any] | None = None
+    ) -> dict[str, float]:
         if audio_features is None:
             audio_features = {}
 
         words = text.split()
         word_count = len(words)
         if word_count == 0:
-            return {"pitch_std": 0.0, "energy_mean": 0.0, "speech_rate": 0.0, "pause_ratio": 0.0}
+            return {
+                "pitch_std": 0.0,
+                "energy_mean": 0.0,
+                "speech_rate": 0.0,
+                "pause_ratio": 0.0,
+            }
 
         sentences = [s.strip() for s in re.split(r"[.?!]\s*", text) if s.strip()]
         sentence_lengths = [len(s.split()) for s in sentences]
-        sentence_length_var = (sum((l - (sum(sentence_lengths) / len(sentence_lengths))) ** 2 for l in sentence_lengths) / len(sentence_lengths)) ** 0.5 if sentence_lengths else 0
+        sentence_length_var = (
+            (
+                sum(
+                    (sl - (sum(sentence_lengths) / len(sentence_lengths))) ** 2
+                    for sl in sentence_lengths
+                )
+                / len(sentence_lengths)
+            )
+            ** 0.5
+            if sentence_lengths
+            else 0
+        )
 
         punct_count = text.count(",") + text.count("...") + text.count(";")
         punct_density = punct_count / max(word_count, 1)
@@ -140,7 +253,13 @@ class EmotionDetector:
 
     def detect(self, text: str, prosody: dict[str, float] | None = None) -> dict:
         combined = text.lower() if text else ""
-        scores: dict[str, float] = {"happy": 0.0, "angry": 0.0, "sad": 0.0, "anxious": 0.0, "neutral": 0.1}
+        scores: dict[str, float] = {
+            "happy": 0.0,
+            "angry": 0.0,
+            "sad": 0.0,
+            "anxious": 0.0,
+            "neutral": 0.1,
+        }
 
         if combined.strip():
             for emotion, keywords in _EMOTION_KEYWORDS.items():
@@ -153,7 +272,9 @@ class EmotionDetector:
                     for emotion, keywords in _EMOTION_KEYWORDS.items():
                         for kw in keywords:
                             if " " in kw and kw in combined:
-                                scores[emotion] = min(1.0, scores.get(emotion, 0) + 0.15)
+                                scores[emotion] = min(
+                                    1.0, scores.get(emotion, 0) + 0.15
+                                )
 
         if not combined.strip():
             scores["neutral"] = random.uniform(0.4, 0.8)
@@ -216,7 +337,12 @@ class VoiceBiometricsService:
         self.prosody_extractor = ProsodyExtractor()
         self.speaker_diarizer = SpeakerDiarizer()
 
-    async def create_voice_profile(self, tenant_id: str, speaker_name: str, audio_features: dict[str, Any] | None = None) -> dict:
+    async def create_voice_profile(
+        self,
+        tenant_id: str,
+        speaker_name: str,
+        audio_features: dict[str, Any] | None = None,
+    ) -> dict:
         if audio_features is None:
             audio_features = {
                 "mfcc": [round(random.uniform(-10, 10), 4) for _ in range(13)],
@@ -234,6 +360,7 @@ class VoiceBiometricsService:
         if not profile:
             profile_id = str(uuid.uuid4())
             from datetime import UTC, datetime
+
             profile = {
                 "id": profile_id,
                 "tenant_id": tenant_id,
@@ -245,7 +372,9 @@ class VoiceBiometricsService:
         logger.info("created_voice_profile", speaker_name=speaker_name)
         return profile
 
-    async def identify_speaker(self, tenant_id: str, audio_sample: dict[str, Any]) -> list[dict]:
+    async def identify_speaker(
+        self, tenant_id: str, audio_sample: dict[str, Any]
+    ) -> list[dict]:
         profiles = await list_voice_profiles_db(tenant_id)
         if not profiles:
             return [{"speaker": "unknown", "confidence": 0.0, "match": False}]
@@ -258,19 +387,23 @@ class VoiceBiometricsService:
             if isinstance(profile_features, str):
                 profile_features = json.loads(profile_features)
 
-            similarity = VoiceBiometricsService._cosine_similarity(sample_vec, profile_features)
+            similarity = VoiceBiometricsService._cosine_similarity(
+                sample_vec, profile_features
+            )
             scored.append((similarity, profile))
 
         scored.sort(key=lambda x: x[0], reverse=True)
 
         results = []
         for sim, prof in scored[:5]:
-            results.append({
-                "speaker": prof.get("speaker_name", "unknown"),
-                "confidence": round(sim, 4),
-                "profile_id": prof.get("id"),
-                "match": sim > 0.7,
-            })
+            results.append(
+                {
+                    "speaker": prof.get("speaker_name", "unknown"),
+                    "confidence": round(sim, 4),
+                    "profile_id": prof.get("id"),
+                    "match": sim > 0.7,
+                }
+            )
 
         return results
 
@@ -288,8 +421,8 @@ class VoiceBiometricsService:
             val_a = float(vec_a[key]) if isinstance(vec_a[key], (int, float)) else 0.0
             val_b = float(vec_b[key]) if isinstance(vec_b[key], (int, float)) else 0.0
             dot_product += val_a * val_b
-            norm_a += val_a ** 2
-            norm_b += val_b ** 2
+            norm_a += val_a**2
+            norm_b += val_b**2
 
         norm = math.sqrt(norm_a) * math.sqrt(norm_b)
         if norm == 0:
@@ -315,7 +448,9 @@ class VoiceBiometricsService:
     def diarize(self, transcript: str, num_speakers: int = 2) -> list[dict]:
         return self.speaker_diarizer.diarize(transcript, num_speakers)
 
-    def extract_prosody(self, text: str, audio_features: dict[str, Any] | None = None) -> dict[str, float]:
+    def extract_prosody(
+        self, text: str, audio_features: dict[str, Any] | None = None
+    ) -> dict[str, float]:
         return self.prosody_extractor.extract_prosody(text, audio_features)
 
     async def get_emotion_trends(self, tenant_id: str, call_id: str) -> list[dict]:
@@ -323,7 +458,18 @@ class VoiceBiometricsService:
         if logs:
             return [dict(log) for log in logs]
 
-        emotions = ["neutral", "happy", "neutral", "anxious", "neutral", "angry", "neutral", "sad", "neutral", "happy"]
+        emotions = [
+            "neutral",
+            "happy",
+            "neutral",
+            "anxious",
+            "neutral",
+            "angry",
+            "neutral",
+            "sad",
+            "neutral",
+            "happy",
+        ]
         return [
             {
                 "id": str(uuid.uuid4()),
@@ -355,17 +501,24 @@ class VoiceBiometricsService:
             timestamp_ms=timestamp_ms,
         )
 
-    async def batch_process_emotions(self, tenant_id: str, call_ids: list[str]) -> list[dict]:
+    async def batch_process_emotions(
+        self, tenant_id: str, call_ids: list[str]
+    ) -> list[dict]:
         results = []
         for call_id in call_ids:
             trends = await self.get_emotion_trends(tenant_id, call_id)
             if trends:
-                dominant = max(set(t["emotion"] for t in trends), key=lambda e: sum(1 for t in trends if t["emotion"] == e))
-                results.append({
-                    "call_id": call_id,
-                    "dominant_emotion": dominant,
-                    "segments": len(trends),
-                    "emotion_counts": dict(Counter(t["emotion"] for t in trends)),
-                })
+                dominant = max(
+                    {t["emotion"] for t in trends},
+                    key=lambda e: sum(1 for t in trends if t["emotion"] == e),
+                )
+                results.append(
+                    {
+                        "call_id": call_id,
+                        "dominant_emotion": dominant,
+                        "segments": len(trends),
+                        "emotion_counts": dict(Counter(t["emotion"] for t in trends)),
+                    }
+                )
         logger.info("batch_processed_emotions", tenant_id=tenant_id, count=len(results))
         return results

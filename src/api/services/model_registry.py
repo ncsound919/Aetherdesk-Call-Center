@@ -22,9 +22,24 @@ from api.services.db_ai_platform import (
 
 logger = structlog.get_logger()
 
-MODEL_FAMILIES = ["llm", "classifier", "summarizer", "sentiment", "intent", "voice_biometric"]
+MODEL_FAMILIES = [
+    "llm",
+    "classifier",
+    "summarizer",
+    "sentiment",
+    "intent",
+    "voice_biometric",
+]
 
-LIFECYCLE_STATES = ["draft", "training", "trained", "evaluated", "approved", "production", "retired"]
+LIFECYCLE_STATES = [
+    "draft",
+    "training",
+    "trained",
+    "evaluated",
+    "approved",
+    "production",
+    "retired",
+]
 
 _ALLOWED_TRANSITIONS = {
     "draft": {"training"},
@@ -45,7 +60,9 @@ class ModelRegistryError(Exception):
 def _validate_version(version: str) -> str:
     version = version.strip()
     if not re.match(r"^\d+\.\d+\.\d+$", version):
-        raise ModelRegistryError(f"Invalid version format '{version}'. Must be X.Y.Z (e.g. 1.0.0)")
+        raise ModelRegistryError(
+            f"Invalid version format '{version}'. Must be X.Y.Z (e.g. 1.0.0)"
+        )
     return version
 
 
@@ -86,7 +103,9 @@ class ModelRegistry:
             version = _validate_version(version)
         else:
             existing = await list_models_db(tenant_id)
-            existing_versions = [m["version"] for m in existing if m.get("name") == name]
+            existing_versions = [
+                m["version"] for m in existing if m.get("name") == name
+            ]
             version = _auto_version(existing_versions)
 
         model = await create_model_db(
@@ -125,7 +144,9 @@ class ModelRegistry:
             new_state="draft",
             actor="system",
         )
-        logger.info("registered_model", name=name, version=version, model_type=model_type)
+        logger.info(
+            "registered_model", name=name, version=version, model_type=model_type
+        )
         return model
 
     @staticmethod
@@ -157,7 +178,13 @@ class ModelRegistry:
             new_state=new_state,
             actor=actor,
         )
-        logger.info("transitioned_model_state", model_id=model_id, version=version, from_state=current_state, to_state=new_state)
+        logger.info(
+            "transitioned_model_state",
+            model_id=model_id,
+            version=version,
+            from_state=current_state,
+            to_state=new_state,
+        )
         return await get_model_version_db(tenant_id, model_id, version)
 
     @staticmethod
@@ -165,14 +192,18 @@ class ModelRegistry:
         return await list_models_db(tenant_id, model_type=model_type)
 
     @staticmethod
-    async def get_model_version(tenant_id: str, model_id: str, version: str) -> dict | None:
+    async def get_model_version(
+        tenant_id: str, model_id: str, version: str
+    ) -> dict | None:
         model = await get_model_version_db(tenant_id, model_id, version)
         if model:
             return dict(model)
         return None
 
     @staticmethod
-    async def promote_model(tenant_id: str, model_id: str, version: str, environment: str = "production") -> dict | None:
+    async def promote_model(
+        tenant_id: str, model_id: str, version: str, environment: str = "production"
+    ) -> dict | None:
         current = await get_model_version_db(tenant_id, model_id, version)
         if not current:
             return None
@@ -188,12 +219,19 @@ class ModelRegistry:
                 new_state=environment,
                 actor="system",
             )
-            logger.info("promoted_model", model_id=model_id, version=version, environment=environment)
+            logger.info(
+                "promoted_model",
+                model_id=model_id,
+                version=version,
+                environment=environment,
+            )
             return dict(model)
         return None
 
     @staticmethod
-    async def rollback_model(tenant_id: str, model_id: str, version: str) -> dict | None:
+    async def rollback_model(
+        tenant_id: str, model_id: str, version: str
+    ) -> dict | None:
         current = await get_model_version_db(tenant_id, model_id, version)
         if not current:
             return None
@@ -214,8 +252,11 @@ class ModelRegistry:
         return None
 
     @staticmethod
-    async def get_active_model(tenant_id: str, model_type: str = "intent") -> dict | None:
+    async def get_active_model(
+        tenant_id: str, model_type: str = "intent"
+    ) -> dict | None:
         from api.services.db_ai_platform import get_active_model_db
+
         model = await get_active_model_db(tenant_id, model_type)
         if model:
             return dict(model)
@@ -242,7 +283,12 @@ class ModelRegistry:
             external_provider=external_provider,
         )
         if record:
-            logger.info("linked_external_job", model_id=model_id, version=version, job_id=external_job_id)
+            logger.info(
+                "linked_external_job",
+                model_id=model_id,
+                version=version,
+                job_id=external_job_id,
+            )
         return record
 
     @staticmethod
@@ -277,7 +323,9 @@ class ModelRegistry:
         return record
 
     @staticmethod
-    async def get_evaluation_metrics(tenant_id: str, model_id: str, version: str) -> list[dict]:
+    async def get_evaluation_metrics(
+        tenant_id: str, model_id: str, version: str
+    ) -> list[dict]:
         return await get_eval_metrics_db(tenant_id, model_id, version)
 
     @staticmethod
@@ -293,8 +341,16 @@ class ModelRegistry:
         if not model_a or not model_b:
             return {"error": "One or both versions not found"}
 
-        metrics_a = json.loads(model_a.get("metrics_json", "{}")) if isinstance(model_a.get("metrics_json"), str) else model_a.get("metrics_json", {})
-        metrics_b = json.loads(model_b.get("metrics_json", "{}")) if isinstance(model_b.get("metrics_json"), str) else model_b.get("metrics_json", {})
+        metrics_a = (
+            json.loads(model_a.get("metrics_json", "{}"))
+            if isinstance(model_a.get("metrics_json"), str)
+            else model_a.get("metrics_json", {})
+        )
+        metrics_b = (
+            json.loads(model_b.get("metrics_json", "{}"))
+            if isinstance(model_b.get("metrics_json"), str)
+            else model_b.get("metrics_json", {})
+        )
 
         comparison = {
             "model_id": model_id,
@@ -322,7 +378,9 @@ class ModelRegistry:
                     "a": val_a,
                     "b": val_b,
                     "delta": round(val_b - val_a, 4),
-                    "better": val_b > val_a if key in ("accuracy", "precision", "recall", "f1") else val_b < val_a,
+                    "better": val_b > val_a
+                    if key in ("accuracy", "precision", "recall", "f1")
+                    else val_b < val_a,
                 }
             else:
                 comparison["diff"][key] = {"a": val_a, "b": val_b}

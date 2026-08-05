@@ -5,12 +5,14 @@ import structlog
 
 logger = structlog.get_logger()
 
+
 class MCPClientManager:
     """
     Model Context Protocol (MCP) Client Manager.
     This service connects to external MCP servers configured by the tenant,
     fetches available tools/resources, and allows the AI agent to execute them.
     """
+
     def __init__(self):
         # In a real system, this would maintain live WebSocket or HTTP connections to MCP servers.
         self.active_connections = {}
@@ -19,7 +21,9 @@ class MCPClientManager:
         try:
             servers = json.loads(mcp_servers_json or "{}")
             if servers:
-                logger.info("mcp_servers_initialized", tenant=tenant_id, count=len(servers))
+                logger.info(
+                    "mcp_servers_initialized", tenant=tenant_id, count=len(servers)
+                )
                 self.active_connections[tenant_id] = servers
         except json.JSONDecodeError:
             logger.warning("mcp_servers_parse_error", tenant=tenant_id)
@@ -33,22 +37,28 @@ class MCPClientManager:
 
         # Mocking an MCP tool response based on connected servers
         if "internal_wiki" in servers:
-            tools.append({
-                "name": "mcp_query_wiki",
-                "description": "Query the internal enterprise wiki.",
-                "parameters": {"query": "string"}
-            })
+            tools.append(
+                {
+                    "name": "mcp_query_wiki",
+                    "description": "Query the internal enterprise wiki.",
+                    "parameters": {"query": "string"},
+                }
+            )
 
         if "billing_sys" in servers:
-            tools.append({
-                "name": "mcp_process_refund",
-                "description": "Process a refund in the enterprise billing system.",
-                "parameters": {"invoice_id": "string", "amount": "number"}
-            })
+            tools.append(
+                {
+                    "name": "mcp_process_refund",
+                    "description": "Process a refund in the enterprise billing system.",
+                    "parameters": {"invoice_id": "string", "amount": "number"},
+                }
+            )
 
         return tools
 
-    async def execute_tool(self, tenant_id: str, tool_name: str, tool_input: str) -> str:
+    async def execute_tool(
+        self, tenant_id: str, tool_name: str, tool_input: str
+    ) -> str:
         """
         Execute a tool on the remote MCP server.
         """
@@ -63,6 +73,5 @@ class MCPClientManager:
 
         return f"MCP Tool {tool_name} failed: Server not responding or tool not found."
 
+
 mcp_manager = MCPClientManager()
-
-

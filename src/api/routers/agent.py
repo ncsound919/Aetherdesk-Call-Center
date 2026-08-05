@@ -1,4 +1,3 @@
-
 import asyncio
 import json
 import threading
@@ -15,6 +14,7 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 # ── Agent Cache with TTL & Invalidation ──────────────────────────
+
 
 class AgentCache:
     """In-memory agent cache with TTL and explicit invalidation."""
@@ -113,16 +113,20 @@ class Hub:
 
 hub = Hub()
 
+
 @router.get("/peek")
 def peek_queue(request: Request, queue: str = "general", n: int = 50):
     qm = QueueManager(request.app.state.redis)
     return {"items": qm.peek(queue, n)}
 
+
 @router.post("/token")
 async def get_ws_token(agent_id: str):
     from api.services.auth import generate_websocket_token
+
     token = await generate_websocket_token(agent_id)
     return {"token": token}
+
 
 @router.post("/claim")
 async def claim_next(request: Request, queue: str, agent_id: str):
@@ -134,21 +138,32 @@ async def claim_next(request: Request, queue: str, agent_id: str):
     await hub.broadcast({"type": "queue_updated"})
     return {"ok": True, "item": item}
 
+
 @router.post("/disposition")
 async def disposition(request: Request, session_id: str, code: str, notes: str = ""):
     r = request.app.state.redis
     if not session_id.isalnum() and "_" not in session_id:
         return {"ok": False, "error": "Invalid session ID format"}
-    if not hasattr(request.app.state, 'call_sessions') or session_id not in request.app.state.call_sessions:
+    if (
+        not hasattr(request.app.state, "call_sessions")
+        or session_id not in request.app.state.call_sessions
+    ):
         if not await r.exists(f"log:{session_id}"):
             # We allow disposition if the log already exists or the session is active.
             return {"ok": False, "error": "Session not found"}
-    await r.rpush(f"log:{session_id}", json.dumps({"event":"disposition","code":code,"notes":notes,"ts":time.time()}))
+    await r.rpush(
+        f"log:{session_id}",
+        json.dumps(
+            {"event": "disposition", "code": code, "notes": notes, "ts": time.time()}
+        ),
+    )
     return {"ok": True}
+
 
 @router.websocket("/ws")
 async def ws_agent(websocket: WebSocket):
     from api.services.auth import verify_websocket_token
+
     token = websocket.query_params.get("token")
     if not token:
         await websocket.close(code=4001, reason="Missing authentication token")

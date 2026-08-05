@@ -100,7 +100,9 @@ async def get_cohort_analysis(
     cohort_period: str = Query("month"),
     metric: str = Query("retention"),
 ):
-    return await customer_analytics_service.get_cohort_analysis(tenant_id, cohort_period, metric)
+    return await customer_analytics_service.get_cohort_analysis(
+        tenant_id, cohort_period, metric
+    )
 
 
 @router.get("/analytics/churn-risk/{customer_id}")

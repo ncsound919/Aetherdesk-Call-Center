@@ -3,6 +3,7 @@
 Used by middleware/endpoints to check if a tenant has reached its plan
 limit before allowing an action (creating an agent, starting a call, etc.).
 """
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -57,4 +58,3 @@ async def check_call_limit(tenant_id: str) -> tuple[bool, dict]:
             "message": f"Concurrent call limit reached for {plan_name} plan ({current}/{max_calls}). Upgrade to add more.",
         }
     return True, {"current": current, "limit": max_calls}
-

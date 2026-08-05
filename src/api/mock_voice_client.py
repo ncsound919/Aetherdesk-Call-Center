@@ -21,9 +21,11 @@ class MockVoiceClient:
     def _cleanup_expired_calls(self):
         """Remove completed calls older than TTL from memory."""
         import time
+
         now = time.time()
         expired = [
-            ref for ref, info in list(self.active_calls.items())
+            ref
+            for ref, info in list(self.active_calls.items())
             if info.get("status") in ("completed", "failed", "canceled")
             and now - self._call_created_at.get(ref, now) > self.ACTIVE_CALL_TTL
         ]
@@ -34,9 +36,12 @@ class MockVoiceClient:
     async def create_application(self, request: dict) -> dict:
         self._cleanup_expired_calls()
         import time as _time
+
         variables = request.get("variables", {})
         to_phone = variables.get("outbound_number", "unknown")
-        caller_id = variables.get("outbound_caller_id", os.getenv("TWILIO_FROM_NUMBER", "mock"))
+        caller_id = variables.get(
+            "outbound_caller_id", os.getenv("TWILIO_FROM_NUMBER", "mock")
+        )
 
         call_ref = f"MOCK-{uuid.uuid4().hex[:8].upper()}"
         self._call_created_at[call_ref] = _time.time()
@@ -64,7 +69,11 @@ class MockVoiceClient:
         return self.active_calls.get(ref)
 
     async def health_check(self) -> dict:
-        return {"healthy": True, "provider": "mock", "detail": "Mock mode — calls are not placed"}
+        return {
+            "healthy": True,
+            "provider": "mock",
+            "detail": "Mock mode — calls are not placed",
+        }
 
     async def close(self):
         logger.info("Mock voice client closed")
@@ -103,7 +112,13 @@ class MockVoiceClient:
     async def say_text(self, app_ref: str, text: str, voice: str = "alice") -> dict:
         return {"success": True, "_mock": True}
 
-    async def gather_speech(self, app_ref: str, timeout: int = 15000, language: str = "en-US", hints: list[str] | None = None) -> dict:
+    async def gather_speech(
+        self,
+        app_ref: str,
+        timeout: int = 15000,
+        language: str = "en-US",
+        hints: list[str] | None = None,
+    ) -> dict:
         return {"success": True, "text": "(mock input)", "_mock": True}
 
     async def play_audio(self, app_ref: str, url: str) -> dict:

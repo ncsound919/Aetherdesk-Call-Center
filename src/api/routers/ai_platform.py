@@ -29,6 +29,7 @@ voice_svc = VoiceBiometricsService()
 
 # ── Training Endpoints ─────────────────────────────────────────────
 
+
 @router.post("/training/collect")
 async def collect_training_data(
     start_date: str = Query(..., description="Start date ISO"),
@@ -80,6 +81,7 @@ async def export_training_data(
 
 # ── Model Registry Endpoints ──────────────────────────────────────
 
+
 @router.post("/models")
 async def register_model(
     data: ModelRegister,
@@ -112,8 +114,15 @@ async def get_model_versions(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     from api.services.db_ai_platform import list_models_db
+
     all_models = await list_models_db(tenant_id)
-    versions = [m for m in all_models if m.get("id") == model_id or m.get("name") in [am.get("name") for am in all_models if am.get("id") == model_id]]
+    versions = [
+        m
+        for m in all_models
+        if m.get("id") == model_id
+        or m.get("name")
+        in [am.get("name") for am in all_models if am.get("id") == model_id]
+    ]
     return versions
 
 
@@ -167,12 +176,14 @@ async def compare_models(
 
 # ── Dataset Endpoints ──────────────────────────────────────────────
 
+
 @router.post("/datasets")
 async def create_dataset(
     data: DatasetCreate,
     tenant_id: str = Depends(verify_tenant_access),
 ):
     from api.services.ai_training import AITrainingService
+
     examples = await training_service.collect_training_data(
         tenant_id,
         data.source_start_date or (datetime.now(UTC).isoformat()),
@@ -195,6 +206,7 @@ async def list_datasets(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     from api.services.db_ai_platform import list_datasets_db
+
     return await list_datasets_db(tenant_id, recipe_type=recipe_type, limit=limit)
 
 
@@ -204,6 +216,7 @@ async def get_dataset(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     from api.services.db_ai_platform import get_dataset_db
+
     ds = await get_dataset_db(dataset_id)
     if not ds:
         raise HTTPException(status_code=404, detail="Dataset not found")
@@ -211,6 +224,7 @@ async def get_dataset(
 
 
 # ── Turn & Label Endpoints ────────────────────────────────────────
+
 
 @router.get("/datasets/{dataset_id}/turns")
 async def list_turns(
@@ -220,6 +234,7 @@ async def list_turns(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     from api.services.db_ai_platform import list_turns_db
+
     return await list_turns_db(dataset_id, limit=limit, offset=offset)
 
 
@@ -230,6 +245,7 @@ async def create_label(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     from api.services.db_ai_platform import create_label_db
+
     label = await create_label_db(
         tenant_id=tenant_id,
         turn_id=turn_id,
@@ -249,10 +265,12 @@ async def list_labels(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     from api.services.db_ai_platform import list_labels_db
+
     return await list_labels_db(turn_id)
 
 
 # ── External Job Endpoints ─────────────────────────────────────────
+
 
 @router.post("/training/external-jobs")
 async def submit_external_job(
@@ -287,6 +305,7 @@ async def cancel_external_job(
 
 # ── Eval Metrics Endpoints ─────────────────────────────────────────
 
+
 @router.post("/models/eval-metrics")
 async def ingest_eval_metrics(
     data: EvalMetricsIngest,
@@ -314,16 +333,19 @@ async def get_eval_metrics(
 
 # ── Model Audit Log Endpoints ──────────────────────────────────────
 
+
 @router.get("/models/{model_id}/audit-log")
 async def get_model_audit_log(
     model_id: str,
     tenant_id: str = Depends(verify_tenant_access),
 ):
     from api.services.model_registry import get_model_audit_log
+
     return await get_model_audit_log(tenant_id, model_id)
 
 
 # ── Model Family Endpoints ─────────────────────────────────────────
+
 
 @router.get("/models/family/{family}")
 async def get_model_family(
@@ -335,6 +357,7 @@ async def get_model_family(
 
 # ── External Job Links Endpoints ───────────────────────────────────
 
+
 @router.get("/models/{model_id}/external-jobs")
 async def list_model_external_jobs(
     model_id: str,
@@ -344,6 +367,7 @@ async def list_model_external_jobs(
 
 
 # ── Transition Model State Endpoint ────────────────────────────────
+
 
 @router.post("/models/{model_id}/versions/{version}/transition")
 async def transition_model_state(
@@ -363,10 +387,11 @@ async def transition_model_state(
             raise HTTPException(status_code=404, detail="Model version not found")
         return dict(result)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 # ── Voice Biometrics Endpoints ─────────────────────────────────────
+
 
 @router.post("/voice-profiles")
 async def create_voice_profile(
@@ -388,6 +413,7 @@ async def list_voice_profiles(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     from api.services.db_ai_platform import list_voice_profiles_db
+
     return await list_voice_profiles_db(tenant_id)
 
 

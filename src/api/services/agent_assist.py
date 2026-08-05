@@ -12,9 +12,21 @@ from api.services.output_validator import validator
 logger = structlog.get_logger()
 
 SUGGESTED_ACTIONS = [
-    {"action": "transfer_to_billing", "label": "Transfer to Billing", "confidence": 0.0},
-    {"action": "transfer_to_support", "label": "Transfer to Technical Support", "confidence": 0.0},
-    {"action": "escalate_to_supervisor", "label": "Escalate to Supervisor", "confidence": 0.0},
+    {
+        "action": "transfer_to_billing",
+        "label": "Transfer to Billing",
+        "confidence": 0.0,
+    },
+    {
+        "action": "transfer_to_support",
+        "label": "Transfer to Technical Support",
+        "confidence": 0.0,
+    },
+    {
+        "action": "escalate_to_supervisor",
+        "label": "Escalate to Supervisor",
+        "confidence": 0.0,
+    },
     {"action": "offer_discount", "label": "Offer 10% Discount", "confidence": 0.0},
     {"action": "schedule_callback", "label": "Schedule Callback", "confidence": 0.0},
     {"action": "send_email_summary", "label": "Send Email Summary", "confidence": 0.0},
@@ -37,18 +49,26 @@ class AgentAssistService:
     def __init__(self):
         self._call_stats: dict[str, dict] = {}
 
-    async def get_suggestions(self, call_id: str | None, transcript_segment: str | None, context: dict) -> list[dict]:
+    async def get_suggestions(
+        self, call_id: str | None, transcript_segment: str | None, context: dict
+    ) -> list[dict]:
         suggestions = []
         intents = [
-            "pharmacy_refill", "pharmacy_refill_doc", "billing_invoice",
-            "billing_refund", "order_status", "tech_support_password",
-            "generalInquiry", "agent_handoff",
+            "pharmacy_refill",
+            "pharmacy_refill_doc",
+            "billing_invoice",
+            "billing_refund",
+            "order_status",
+            "tech_support_password",
+            "generalInquiry",
+            "agent_handoff",
         ]
 
         detected_intent = "generalInquiry"
         if transcript_segment:
             try:
                 from api.services.intent_classifier import classifier
+
                 result = await classifier.classify(transcript_segment)
                 validated = validator.validate_intent_result(
                     {"intent": result.intent, "confidence": result.confidence},
@@ -71,13 +91,15 @@ class AgentAssistService:
                 logger.warning("kb_search_failed", error=str(e))
 
         for kb in kb_snippets:
-            suggestions.append({
-                "type": "knowledge_article",
-                "title": kb.get("title", "Knowledge Article"),
-                "content": kb.get("content", ""),
-                "id": kb.get("id", ""),
-                "confidence": 0.85,
-            })
+            suggestions.append(
+                {
+                    "type": "knowledge_article",
+                    "title": kb.get("title", "Knowledge Article"),
+                    "content": kb.get("content", ""),
+                    "id": kb.get("id", ""),
+                    "confidence": 0.85,
+                }
+            )
 
         actions = list(SUGGESTED_ACTIONS)
         intent_action_map = {
@@ -96,28 +118,34 @@ class AgentAssistService:
             else:
                 action["confidence"] = 0.5
 
-        suggestions.append({
-            "type": "detected_intent",
-            "intent": detected_intent,
-            "confidence": 0.85,
-        })
+        suggestions.append(
+            {
+                "type": "detected_intent",
+                "intent": detected_intent,
+                "confidence": 0.85,
+            }
+        )
 
         for action in actions:
-            suggestions.append({
-                "type": "action",
-                "action": action["action"],
-                "label": action["label"],
-                "confidence": action["confidence"],
-            })
+            suggestions.append(
+                {
+                    "type": "action",
+                    "action": action["action"],
+                    "label": action["label"],
+                    "confidence": action["confidence"],
+                }
+            )
 
         script_key = self._pick_script(detected_intent)
         if script_key:
-            suggestions.append({
-                "type": "script",
-                "key": script_key,
-                "text": SCRIPT_SNIPPETS.get(script_key, ""),
-                "confidence": 0.75,
-            })
+            suggestions.append(
+                {
+                    "type": "script",
+                    "key": script_key,
+                    "text": SCRIPT_SNIPPETS.get(script_key, ""),
+                    "confidence": 0.75,
+                }
+            )
 
         return suggestions
 
@@ -132,7 +160,9 @@ class AgentAssistService:
         }
         return mapping.get(intent)
 
-    async def get_knowledge_snippets(self, tenant_id: str, query: str, limit: int = 5) -> list[dict]:
+    async def get_knowledge_snippets(
+        self, tenant_id: str, query: str, limit: int = 5
+    ) -> list[dict]:
         try:
             results = await search_knowledge_snippets_db(tenant_id, query, limit)
             if results:
@@ -142,22 +172,31 @@ class AgentAssistService:
 
         results = []
         query_lower = query.lower()
-        for sid, snippet in list(_KB_STORE.items()):
+        for _sid, snippet in list(_KB_STORE.items()):
             if snippet.get("tenant_id") != tenant_id:
                 continue
-            if query_lower in snippet.get("title", "").lower() or query_lower in snippet.get("content", "").lower():
+            if (
+                query_lower in snippet.get("title", "").lower()
+                or query_lower in snippet.get("content", "").lower()
+            ):
                 results.append(snippet)
                 if len(results) >= limit:
                     break
         return results
 
     async def create_knowledge_snippet(
-        self, tenant_id: str, title: str, content: str,
-        tags: list[str] | None = None, category: str = "general",
+        self,
+        tenant_id: str,
+        title: str,
+        content: str,
+        tags: list[str] | None = None,
+        category: str = "general",
     ) -> dict:
         global _NEXT_ID
         try:
-            result = await create_knowledge_snippet_db(tenant_id, title, content, tags or [], category)
+            result = await create_knowledge_snippet_db(
+                tenant_id, title, content, tags or [], category
+            )
             if result:
                 return result
         except Exception as e:
@@ -187,17 +226,26 @@ class AgentAssistService:
         except Exception as e:
             logger.debug("kb_db_delete_failed, trying memory store", error=str(e))
 
-        if snippet_id in _KB_STORE and _KB_STORE[snippet_id].get("tenant_id") == tenant_id:
+        if (
+            snippet_id in _KB_STORE
+            and _KB_STORE[snippet_id].get("tenant_id") == tenant_id
+        ):
             del _KB_STORE[snippet_id]
             return True
         return False
 
-    async def get_next_best_action(self, call_context: dict, agent_performance: dict | None = None) -> dict:
+    async def get_next_best_action(
+        self, call_context: dict, agent_performance: dict | None = None
+    ) -> dict:
         intent = call_context.get("current_intent", "generalInquiry")
         sentiment = call_context.get("sentiment", "neutral")
         duration = call_context.get("call_duration_seconds", 0)
 
-        nba = {"action": "continue_monitoring", "reason": "Call in progress", "confidence": 0.5}
+        nba = {
+            "action": "continue_monitoring",
+            "reason": "Call in progress",
+            "confidence": 0.5,
+        }
 
         if sentiment == "negative" and duration > 300:
             nba = {
@@ -232,6 +280,7 @@ class AgentAssistService:
     async def get_realtime_stats(self, call_id: str) -> dict:
         if call_id not in self._call_stats:
             import random
+
             self._call_stats[call_id] = {
                 "call_id": call_id,
                 "duration_seconds": 0,
@@ -246,6 +295,7 @@ class AgentAssistService:
         stats["duration_seconds"] += 15
 
         import random
+
         sentiment_shift = random.choice(["positive", "neutral", "negative"])
         if random.random() < 0.3:
             stats["sentiment"] = sentiment_shift

@@ -41,7 +41,9 @@ def _get_enforcer():
             _enforcer = casbin.Enforcer(_model_path, _policy_path)
             logger.info("casbin_initialized", model=_model_path, policy=_policy_path)
         else:
-            logger.warning("casbin_files_not_found", model=_model_path, policy=_policy_path)
+            logger.warning(
+                "casbin_files_not_found", model=_model_path, policy=_policy_path
+            )
             if is_production:
                 raise RuntimeError(
                     "Casbin model/policy files not found. Set CASBIN_MODEL_PATH "
@@ -54,14 +56,16 @@ def _get_enforcer():
             raise RuntimeError(
                 "casbin package is not installed. RBAC cannot fail closed "
                 "safely without it in production."
-            )
+            ) from None
         _enforcer = None
     except RuntimeError:
         raise
     except Exception as e:
         logger.warning("casbin_init_failed", error=str(e))
         if is_production:
-            raise RuntimeError(f"Casbin initialization failed in production: {e}") from e
+            raise RuntimeError(
+                f"Casbin initialization failed in production: {e}"
+            ) from e
         _enforcer = None
 
     return _enforcer
@@ -87,7 +91,13 @@ def check_permission(role: str, resource: str, action: str) -> bool:
         enforcer = _get_enforcer()
     except RuntimeError as e:
         # Casbin unavailable/misconfigured in production: fail closed.
-        logger.error("casbin_unavailable_fail_closed", role=role, resource=resource, action=action, error=str(e))
+        logger.error(
+            "casbin_unavailable_fail_closed",
+            role=role,
+            resource=resource,
+            action=action,
+            error=str(e),
+        )
         return False
 
     if not enforcer:

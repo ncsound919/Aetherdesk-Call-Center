@@ -4,9 +4,8 @@ import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 
-from api.services.auth import verify_api_key
-
 from api.models.dto import HealthCheck
+from api.services.auth import verify_api_key
 from api.services.database import USE_POSTGRES, get_pg_pool
 
 logger = structlog.get_logger()
@@ -39,7 +38,11 @@ async def health_check(request: Request):
     except Exception:
         db_status = "disconnected"
 
-    overall = "healthy" if fonster_status == "healthy" and db_status == "connected" else "degraded"
+    overall = (
+        "healthy"
+        if fonster_status == "healthy" and db_status == "connected"
+        else "degraded"
+    )
 
     return HealthCheck(
         status=overall,
@@ -66,6 +69,7 @@ async def readiness_probe(request: Request):
     # Check DB
     try:
         from api.services.db_pool import get_pg_pool as db_get_pool
+
         pool = await db_get_pool()
         if pool:
             checks["database"] = "healthy"
@@ -99,7 +103,7 @@ async def readiness_probe(request: Request):
     status_code = 200 if all_healthy else 503
     return JSONResponse(
         status_code=status_code,
-        content={"status": "ready" if all_healthy else "not_ready", "checks": checks}
+        content={"status": "ready" if all_healthy else "not_ready", "checks": checks},
     )
 
 
@@ -114,6 +118,7 @@ async def liveness_probe():
 async def sla_metrics():
     """SLA metrics endpoint."""
     from api.services.observability import sla_metrics as sla
+
     return sla.get_sla_summary()
 
 
@@ -121,14 +126,19 @@ async def sla_metrics():
 async def vendor_health():
     """Vendor health check status."""
     from api.services.vendor_health import vendor_health_monitor
+
     results = await vendor_health_monitor.check_all_vendors()
-    return {"vendors": results, "degraded": vendor_health_monitor.get_degraded_vendors()}
+    return {
+        "vendors": results,
+        "degraded": vendor_health_monitor.get_degraded_vendors(),
+    }
 
 
 @router.get("/health/pool")
 async def pool_stats():
     """Database connection pool statistics."""
     from api.services.connection_pool import get_pool_stats
+
     return await get_pool_stats()
 
 
@@ -136,4 +146,5 @@ async def pool_stats():
 async def metrics_endpoint(tenant_id: str = Depends(verify_api_key)):
     """Prometheus metrics endpoint (protected by API key)."""
     from api.middleware.metrics import metrics_endpoint as metrics_handler
+
     return await metrics_handler()

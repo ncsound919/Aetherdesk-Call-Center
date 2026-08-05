@@ -15,7 +15,7 @@ class TTSService:
         self,
         engines: str = "edge",
         voice: str = "en-US-AriaNeural",
-        language: str = "en"
+        language: str = "en",
     ):
         self.engines = [e.strip() for e in engines.split(",")]
         self.current_engine = self.engines[0]
@@ -62,15 +62,22 @@ class TTSService:
             raise ValueError(f"Unknown TTS engine: {engine}")
 
     def _get_chatterbox_voice(self) -> str:
-        config_path = os.path.join(os.path.dirname(__file__), "../../../config/default_voice.json")
+        config_path = os.path.join(
+            os.path.dirname(__file__), "../../../config/default_voice.json"
+        )
         if os.path.exists(config_path):
             try:
                 import json
+
                 with open(config_path) as f:
                     config = json.load(f)
                 default_voice_id = config.get("default_voice_id")
                 if default_voice_id:
-                    profile_path = os.path.join(os.path.dirname(__file__), "../../../data/voice_clones", f"{default_voice_id}.json")
+                    profile_path = os.path.join(
+                        os.path.dirname(__file__),
+                        "../../../data/voice_clones",
+                        f"{default_voice_id}.json",
+                    )
                     if os.path.exists(profile_path):
                         with open(profile_path) as f_profile:
                             profile = json.load(f_profile)
@@ -82,33 +89,37 @@ class TTSService:
 
     async def _synthesize_chatterbox(self, text: str) -> bytes:
         import httpx
+
         url = self._get_engine_url("chatterbox")
         voice_id = self._get_chatterbox_voice()
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
-                f"{url}/tts",
-                json={"text": text, "voice": voice_id}
+                f"{url}/tts", json={"text": text, "voice": voice_id}
             )
             response.raise_for_status()
             return response.content
 
     async def _synthesize_qwen3(self, text: str) -> bytes:
         import httpx
+
         url = self._get_engine_url("qwen3")
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 f"{url}/v1/tts",
                 json={
                     "input": text,
-                    "model": os.getenv("QWEN_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"),
-                    "voice": self.voice
-                }
+                    "model": os.getenv(
+                        "QWEN_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+                    ),
+                    "voice": self.voice,
+                },
             )
             response.raise_for_status()
             return response.content
 
     async def _synthesize_edge(self, text: str) -> bytes:
         from RealtimeTTS import EdgeEngine, TextToAudioStream
+
         audio_chunks = []
 
         def on_audio_chunk(chunk):
@@ -116,6 +127,7 @@ class TTSService:
                 audio_chunks.append(chunk)
 
         loop = asyncio.get_running_loop()
+
         def run_synthesis():
             engine = EdgeEngine(voice=self.voice)
             try:
@@ -128,11 +140,12 @@ class TTSService:
         await loop.run_in_executor(None, run_synthesis)
 
         if audio_chunks:
-            return b''.join(audio_chunks)
+            return b"".join(audio_chunks)
         raise Exception("Edge TTS returned no audio")
 
     async def _synthesize_edge_tts(self, text: str) -> bytes:
         import edge_tts
+
         # Edge neural voices are Microsoft's fixed set — the chatterbox voice
         # clone id (e.g. voice_cdf27738) is not valid here.
         voice = os.getenv("TTS_VOICE") or "en-US-AriaNeural"
@@ -161,13 +174,12 @@ class TTSService:
 
     async def _stream_chatterbox(self, text: str):
         import httpx
+
         url = self._get_engine_url("chatterbox")
         voice_id = self._get_chatterbox_voice()
         async with httpx.AsyncClient(timeout=30.0) as client:
             async with client.stream(
-                "POST",
-                f"{url}/tts/stream",
-                json={"text": text, "voice": voice_id}
+                "POST", f"{url}/tts/stream", json={"text": text, "voice": voice_id}
             ) as response:
                 async for chunk in response.aiter_bytes(chunk_size=4096):
                     if chunk:
@@ -175,6 +187,7 @@ class TTSService:
 
     async def _stream_qwen3(self, text: str):
         import httpx
+
         url = self._get_engine_url("qwen3")
         async with httpx.AsyncClient(timeout=60.0) as client:
             async with client.stream(
@@ -182,8 +195,10 @@ class TTSService:
                 f"{url}/v1/tts/stream",
                 json={
                     "input": text,
-                    "model": os.getenv("QWEN_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice")
-                }
+                    "model": os.getenv(
+                        "QWEN_MODEL", "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
+                    ),
+                },
             ) as response:
                 async for chunk in response.aiter_bytes(chunk_size=4096):
                     if chunk:
@@ -191,6 +206,7 @@ class TTSService:
 
     async def _stream_edge(self, text: str):
         from RealtimeTTS import EdgeEngine, TextToAudioStream
+
         q = asyncio.Queue()
         loop = asyncio.get_running_loop()
 
@@ -234,15 +250,22 @@ def get_tts_service() -> TTSService:
     voice = os.getenv("TTS_VOICE", "en-US-AriaNeural")
 
     # Load default voice from config if exists
-    config_path = os.path.join(os.path.dirname(__file__), "../../../config/default_voice.json")
+    config_path = os.path.join(
+        os.path.dirname(__file__), "../../../config/default_voice.json"
+    )
     if os.path.exists(config_path):
         try:
             import json
+
             with open(config_path) as f:
                 config = json.load(f)
             default_voice_id = config.get("default_voice_id")
             if default_voice_id:
-                profile_path = os.path.join(os.path.dirname(__file__), "../../../data/voice_clones", f"{default_voice_id}.json")
+                profile_path = os.path.join(
+                    os.path.dirname(__file__),
+                    "../../../data/voice_clones",
+                    f"{default_voice_id}.json",
+                )
                 if os.path.exists(profile_path):
                     with open(profile_path) as f_profile:
                         profile = json.load(f_profile)
@@ -260,5 +283,3 @@ def get_tts_service() -> TTSService:
 
 
 tts_service = get_tts_service()
-
-

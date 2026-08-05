@@ -32,8 +32,12 @@ class DataLineageService:
             operation=operation,
         )
         result = await create_lineage_entry_db(
-            tenant_id, source_table, source_id,
-            target_table, target_id, operation,
+            tenant_id,
+            source_table,
+            source_id,
+            target_table,
+            target_id,
+            operation,
             metadata_json=metadata or {},
         )
         if result:
@@ -48,8 +52,15 @@ class DataLineageService:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-    async def get_lineage_for_record(self, tenant_id: str, table: str, record_id: str) -> dict:
-        logger.info("get_lineage_for_record", tenant_id=tenant_id, table=table, record_id=record_id)
+    async def get_lineage_for_record(
+        self, tenant_id: str, table: str, record_id: str
+    ) -> dict:
+        logger.info(
+            "get_lineage_for_record",
+            tenant_id=tenant_id,
+            table=table,
+            record_id=record_id,
+        )
         entries = await get_record_lineage_db(tenant_id, table, record_id)
         return {
             "success": True,
@@ -61,9 +72,13 @@ class DataLineageService:
             "timestamp": datetime.now(UTC).isoformat(),
         }
 
-    async def get_lineage_graph(self, tenant_id: str, start_date: str | None = None, end_date: str | None = None) -> dict:
+    async def get_lineage_graph(
+        self, tenant_id: str, start_date: str | None = None, end_date: str | None = None
+    ) -> dict:
         logger.info("get_lineage_graph", tenant_id=tenant_id)
-        entries = await get_lineage_graph_db(tenant_id, start_date=start_date, end_date=end_date)
+        entries = await get_lineage_graph_db(
+            tenant_id, start_date=start_date, end_date=end_date
+        )
         nodes = set()
         edges = []
         for entry in entries or []:
@@ -71,17 +86,26 @@ class DataLineageService:
             tgt_key = f"{entry.get('target_table', '')}:{entry.get('target_id', '')}"
             nodes.add(src_key)
             nodes.add(tgt_key)
-            edges.append({
-                "source": src_key,
-                "target": tgt_key,
-                "operation": entry.get("operation", ""),
-                "column": entry.get("column_name"),
-                "created_at": entry.get("created_at"),
-            })
+            edges.append(
+                {
+                    "source": src_key,
+                    "target": tgt_key,
+                    "operation": entry.get("operation", ""),
+                    "column": entry.get("column_name"),
+                    "created_at": entry.get("created_at"),
+                }
+            )
         return {
             "success": True,
             "data": {
-                "nodes": [{"id": n, "table": n.split(":")[0], "record_id": n.split(":")[1] if ":" in n else ""} for n in nodes],
+                "nodes": [
+                    {
+                        "id": n,
+                        "table": n.split(":")[0],
+                        "record_id": n.split(":")[1] if ":" in n else "",
+                    }
+                    for n in nodes
+                ],
                 "edges": edges,
                 "total_entries": len(entries or []),
             },
@@ -89,7 +113,9 @@ class DataLineageService:
         }
 
     async def get_column_lineage(self, tenant_id: str, table: str, column: str) -> dict:
-        logger.info("get_column_lineage", tenant_id=tenant_id, table=table, column=column)
+        logger.info(
+            "get_column_lineage", tenant_id=tenant_id, table=table, column=column
+        )
         entries = await get_column_lineage_db(tenant_id, table, column)
         return {
             "success": True,

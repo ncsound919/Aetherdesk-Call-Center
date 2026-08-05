@@ -1,7 +1,7 @@
-import structlog
 from datetime import UTC, datetime
 from uuid import uuid4
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from api.models.dto import LineageEntryCreate
@@ -26,7 +26,9 @@ async def get_record_lineage(
 ):
     result = await lineage_service.get_lineage_for_record(tenant_id, table, record_id)
     if not result.get("success"):
-        raise HTTPException(status_code=404, detail=result.get("error", "Lineage not found"))
+        raise HTTPException(
+            status_code=404, detail=result.get("error", "Lineage not found")
+        )
     return result
 
 
@@ -36,7 +38,9 @@ async def get_lineage_graph(
     end_date: str | None = Query(None),
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    return await lineage_service.get_lineage_graph(tenant_id, start_date=start_date, end_date=end_date)
+    return await lineage_service.get_lineage_graph(
+        tenant_id, start_date=start_date, end_date=end_date
+    )
 
 
 @router.get("/lineage/column")
@@ -57,7 +61,9 @@ async def delete_user_data(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.get("tenant_id") != tenant_id:
-        raise HTTPException(status_code=403, detail="User does not belong to this tenant")
+        raise HTTPException(
+            status_code=403, detail="User does not belong to this tenant"
+        )
 
     logger.info(
         "gdpr_delete_user_data",
@@ -81,10 +87,13 @@ async def delete_user_data(
                    verification_token = NULL, reset_token = NULL,
                    reset_token_expires = NULL, updated_at = NOW()
                    WHERE id = $3""",
-                deleted_email, encrypt_val("REDACTED"), user_id,
+                deleted_email,
+                encrypt_val("REDACTED"),
+                user_id,
             )
             row = await conn.fetchrow(
-                "SELECT phone, email FROM users WHERE id = $1", user_id,
+                "SELECT phone, email FROM users WHERE id = $1",
+                user_id,
             )
         else:
             conn.execute(
@@ -97,7 +106,8 @@ async def delete_user_data(
                 (deleted_email, encrypt_val("REDACTED"), now, user_id),
             )
             row = conn.execute(
-                "SELECT phone, email FROM users WHERE id = ?", (user_id,),
+                "SELECT phone, email FROM users WHERE id = ?",
+                (user_id,),
             ).fetchone()
 
         if row:
@@ -109,24 +119,34 @@ async def delete_user_data(
                 if phone:
                     result = await conn.execute(
                         "UPDATE call_sessions SET caller_number = 'REDACTED', caller_name = 'Deleted', pii_redacted = TRUE WHERE caller_number = $1 AND tenant_id = $2",
-                        phone, tenant_id,
+                        phone,
+                        tenant_id,
                     )
-                    summary["calls_anonymized"] += int(result.split()[-1]) if result else 0
+                    summary["calls_anonymized"] += (
+                        int(result.split()[-1]) if result else 0
+                    )
                     result2 = await conn.execute(
                         "UPDATE call_sessions SET called_number = 'REDACTED', pii_redacted = TRUE WHERE called_number = $1 AND tenant_id = $2",
-                        phone, tenant_id,
+                        phone,
+                        tenant_id,
                     )
-                    summary["calls_anonymized"] += int(result2.split()[-1]) if result2 else 0
+                    summary["calls_anonymized"] += (
+                        int(result2.split()[-1]) if result2 else 0
+                    )
 
                 await conn.execute(
                     "UPDATE leads SET email = 'REDACTED', phone = 'REDACTED', first_name = 'Deleted', last_name = 'Deleted', contact_name = 'Deleted', company_name = 'REDACTED', notes = NULL WHERE (email = $1 OR phone = $2) AND tenant_id = $3",
-                    old_email or "", phone or "", tenant_id,
+                    old_email or "",
+                    phone or "",
+                    tenant_id,
                 )
                 summary["leads_anonymized"] = 1
 
                 await conn.execute(
                     "UPDATE customer_profiles SET email = 'REDACTED', phone = 'REDACTED', name = 'Deleted User', tags_json = '[]', metadata_json = '{}' WHERE (email = $1 OR phone = $2) AND tenant_id = $3",
-                    old_email or "", phone or "", tenant_id,
+                    old_email or "",
+                    phone or "",
+                    tenant_id,
                 )
                 summary["profiles_anonymized"] = 1
             else:
@@ -155,8 +175,11 @@ async def delete_user_data(
                 summary["profiles_anonymized"] = 1
 
     await log_audit_event(
-        tenant_id, user_id, "gdpr_delete",
-        "user", user_id,
+        tenant_id,
+        user_id,
+        "gdpr_delete",
+        "user",
+        user_id,
         old_values={"email": mask_email(user.get("email"))},
         new_values={"email": "REDACTED", "status": "anonymized"},
     )
@@ -179,7 +202,9 @@ async def export_user_data(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.get("tenant_id") != tenant_id:
-        raise HTTPException(status_code=403, detail="User does not belong to this tenant")
+        raise HTTPException(
+            status_code=403, detail="User does not belong to this tenant"
+        )
 
     logger.info(
         "gdpr_export_user_data",
@@ -240,31 +265,36 @@ async def export_user_data(
             export_data["leads"] = [dict(r) for r in leads_rows]
         else:
             export_data["calls"] = [
-                dict(r) for r in conn.execute(
+                dict(r)
+                for r in conn.execute(
                     "SELECT id, agent_id, caller_number, caller_name, called_number, call_direction, call_status, call_type, start_time, end_time, duration_seconds, talk_time_seconds, sentiment_score, intent_detected, ai_summary, created_at FROM call_sessions WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1000",
                     (tenant_id,),
                 ).fetchall()
             ]
             export_data["recordings"] = [
-                dict(r) for r in conn.execute(
+                dict(r)
+                for r in conn.execute(
                     "SELECT id, call_id, agent_id, file_path, file_size_bytes, duration_seconds, format, created_at FROM recordings WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1000",
                     (tenant_id,),
                 ).fetchall()
             ]
             export_data["transcriptions"] = [
-                dict(r) for r in conn.execute(
+                dict(r)
+                for r in conn.execute(
                     "SELECT id, call_id, stt_engine, language_code, confidence_score, created_at FROM transcriptions WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1000",
                     (tenant_id,),
                 ).fetchall()
             ]
             export_data["customer_profiles"] = [
-                dict(r) for r in conn.execute(
+                dict(r)
+                for r in conn.execute(
                     "SELECT id, external_id, phone, email, name, tags_json, created_at FROM customer_profiles WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1000",
                     (tenant_id,),
                 ).fetchall()
             ]
             export_data["leads"] = [
-                dict(r) for r in conn.execute(
+                dict(r)
+                for r in conn.execute(
                     "SELECT id, company_name, contact_name, first_name, last_name, phone, email, status, score, source, created_at FROM leads WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1000",
                     (tenant_id,),
                 ).fetchall()
@@ -306,5 +336,7 @@ async def record_lineage(
         metadata=data.metadata,
     )
     if not result.get("success"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Failed to record lineage"))
+        raise HTTPException(
+            status_code=400, detail=result.get("error", "Failed to record lineage")
+        )
     return result

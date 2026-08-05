@@ -16,8 +16,13 @@ VERTICALS = {
         "icon": "Stethoscope",
         "compliance": ["HIPAA", "HITECH", "PCI-DSS"],
         "intents": [
-            "appointment_reminder", "appointment_scheduling", "prescription_refill",
-            "patient_intake", "lab_results", "insurance_verification", "billing_inquiry"
+            "appointment_reminder",
+            "appointment_scheduling",
+            "prescription_refill",
+            "patient_intake",
+            "lab_results",
+            "insurance_verification",
+            "billing_inquiry",
         ],
         "script_templates": ["TPL-HEALTHCARE"],
         "compliance_rules": {
@@ -41,8 +46,13 @@ VERTICALS = {
         "icon": "DollarSign",
         "compliance": ["FDCPA", "Regulation F", "TCPA", "FCRA", "CCPA"],
         "intents": [
-            "payment_arrangement", "dispute_handling", "validation_notice",
-            "settlement_offer", "payment_confirmation", "account_inquiry", "cease_and_desist"
+            "payment_arrangement",
+            "dispute_handling",
+            "validation_notice",
+            "settlement_offer",
+            "payment_confirmation",
+            "account_inquiry",
+            "cease_and_desist",
         ],
         "script_templates": ["TPL-DEBT"],
         "compliance_rules": {
@@ -57,7 +67,11 @@ VERTICALS = {
             "priority_intents": ["payment_arrangement"],
             "escalation_intents": ["dispute_handling", "cease_and_desist"],
         },
-        "required_integrations": ["payment_processor", "credit_bureau", "collections_system"],
+        "required_integrations": [
+            "payment_processor",
+            "credit_bureau",
+            "collections_system",
+        ],
     },
     "real_estate": {
         "id": "real_estate",
@@ -66,8 +80,13 @@ VERTICALS = {
         "icon": "Building2",
         "compliance": ["TCPA", "CAN-SPAM", "NAR_ethics"],
         "intents": [
-            "property_inquiry", "showing_scheduling", "follow_up",
-            "lead_qualification", "offer_discussion", "market_analysis", "referral"
+            "property_inquiry",
+            "showing_scheduling",
+            "follow_up",
+            "lead_qualification",
+            "offer_discussion",
+            "market_analysis",
+            "referral",
         ],
         "script_templates": ["TPL-REAL-ESTATE"],
         "compliance_rules": {
@@ -88,8 +107,13 @@ VERTICALS = {
         "icon": "ShoppingCart",
         "compliance": ["TCPA", "CAN-SPAM", "PCI-DSS"],
         "intents": [
-            "order_status", "return_initiation", "shipping_update",
-            "abandoned_cart_recovery", "product_inquiry", "refund_status", "feedback_collection"
+            "order_status",
+            "return_initiation",
+            "shipping_update",
+            "abandoned_cart_recovery",
+            "product_inquiry",
+            "refund_status",
+            "feedback_collection",
         ],
         "script_templates": ["TPL-SUPPORT"],
         "compliance_rules": {
@@ -107,7 +131,6 @@ VERTICALS = {
 
 
 class VerticalTemplatesService:
-
     def get_verticals(self):
         return [
             {
@@ -160,27 +183,46 @@ class VerticalTemplatesService:
         if USE_POSTGRES:
             pool = await get_pg_pool()
             if pool:
-                await pool.execute("""
+                await pool.execute(
+                    """
                     INSERT INTO vertical_deployments (id, tenant_id, vertical_id, status, config_json, created_at)
                     VALUES ($1, $2, $3, 'active', $4::jsonb, NOW())
-                """, deployment_id, tenant_id, vertical_id, config_json)
-                row = await pool.fetchrow("SELECT * FROM vertical_deployments WHERE id = $1", deployment_id)
+                """,
+                    deployment_id,
+                    tenant_id,
+                    vertical_id,
+                    config_json,
+                )
+                row = await pool.fetchrow(
+                    "SELECT * FROM vertical_deployments WHERE id = $1", deployment_id
+                )
                 result = dict(row) if row else None
         else:
             conn = _get_sqlite_conn()
             try:
-                now = __import__("datetime").datetime.now(__import__("datetime").UTC).isoformat()
-                conn.execute("""
+                now = (
+                    __import__("datetime")
+                    .datetime.now(__import__("datetime").UTC)
+                    .isoformat()
+                )
+                conn.execute(
+                    """
                     INSERT INTO vertical_deployments (id, tenant_id, vertical_id, status, config_json, created_at)
                     VALUES (?, ?, ?, 'active', ?, ?)
-                """, (deployment_id, tenant_id, vertical_id, config_json, now))
+                """,
+                    (deployment_id, tenant_id, vertical_id, config_json, now),
+                )
                 conn.commit()
-                row = conn.execute("SELECT * FROM vertical_deployments WHERE id = ?", (deployment_id,)).fetchone()
+                row = conn.execute(
+                    "SELECT * FROM vertical_deployments WHERE id = ?", (deployment_id,)
+                ).fetchone()
                 result = dict(row) if row else None
             finally:
                 conn.close()
 
-        logger.info("vertical_template_applied", tenant_id=tenant_id, vertical_id=vertical_id)
+        logger.info(
+            "vertical_template_applied", tenant_id=tenant_id, vertical_id=vertical_id
+        )
         return result
 
 

@@ -27,7 +27,9 @@ async def apply_vertical(
     vertical_id: str,
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    result = await vertical_templates_service.apply_vertical_template(tenant_id, vertical_id)
+    result = await vertical_templates_service.apply_vertical_template(
+        tenant_id, vertical_id
+    )
     if not result:
         raise HTTPException(status_code=404, detail="Vertical not found")
     logger.info("vertical_applied", tenant_id=tenant_id, vertical_id=vertical_id)

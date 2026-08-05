@@ -12,8 +12,12 @@ import structlog
 
 from api.services.actions import Actions
 from api.services.langfuse_client import get_langfuse, score_call
-from api.services.llm_client import DEEPSEEK_API_KEY, DEEPSEEK_BASE_URL, DEEPSEEK_MODEL
-from api.services.llm_client import llm_client, parse_json_content
+from api.services.llm_client import (
+    DEEPSEEK_API_KEY,
+    DEEPSEEK_BASE_URL,
+    DEEPSEEK_MODEL,
+    parse_json_content,
+)
 from api.services.security_guard import detect_prompt_injection, redact_pii
 
 AGENTOPS_API_KEY = os.getenv("AGENTOPS_API_KEY")
@@ -70,18 +74,20 @@ def sanitize_user_input(text: str, max_length: int = 2000) -> str:
     is_injection, confidence = detect_prompt_injection(text)
 
     if is_injection:
-        logger.warning("prompt_injection_detected", input_preview=text[:100], confidence=confidence)
+        logger.warning(
+            "prompt_injection_detected", input_preview=text[:100], confidence=confidence
+        )
         return "[Customer asked a question]"
     return text
 
 
 # --- LangChain Agent -----------------------------------------------------------
 
+
 def create_langchain_agent(actions: Actions, tenant_id: str, system_prompt: str):
     """Build a LangGraph ReAct agent with tool-calling and memory."""
     from langgraph.graph import END, StateGraph
     from langgraph.prebuilt import ToolNode
-
 
     class AgentState(dict):
         pass
@@ -89,9 +95,11 @@ def create_langchain_agent(actions: Actions, tenant_id: str, system_prompt: str)
     async def call_model(state: AgentState):
         messages = state.get("messages", [])
         if model is None:
-            raise RuntimeError("LangChain model not initialised — set orchestrator.model")
+            raise RuntimeError(
+                "LangChain model not initialised — set orchestrator.model"
+            )
         response = await model.ainvoke(messages)
-        return {"messages": [response] }
+        return {"messages": [response]}
 
     def should_continue(state: AgentState):
         messages = state.get("messages", [])
@@ -110,7 +118,9 @@ def create_langchain_agent(actions: Actions, tenant_id: str, system_prompt: str)
     if tool_node:
         graph.add_node("tools", tool_node)
         graph.add_edge("tools", "agent")
-        graph.add_conditional_edges("agent", should_continue, {"tools": "tools", "end": END})
+        graph.add_conditional_edges(
+            "agent", should_continue, {"tools": "tools", "end": END}
+        )
     else:
         graph.add_conditional_edges("agent", should_continue, {"end": END})
     graph.set_entry_point("agent")
@@ -123,12 +133,16 @@ def _build_langchain_tools(actions: Actions, tenant_id: str):
     from langchain_core.tools import tool
 
     @tool
-    async def lookup_invoice(invoice_id: str, actions_instance: Actions = actions, tenant_id: str = tenant_id) -> str:
+    async def lookup_invoice(
+        invoice_id: str, actions_instance: Actions = actions, tenant_id: str = tenant_id
+    ) -> str:
         """Look up the status and amount of an invoice."""
         return await _tool_lookup_invoice(invoice_id, tenant_id, actions_instance)
 
     @tool
-    async def get_order_status(order_id: str, actions_instance: Actions = actions, tenant_id: str = tenant_id) -> str:
+    async def get_order_status(
+        order_id: str, actions_instance: Actions = actions, tenant_id: str = tenant_id
+    ) -> str:
         """Get the current status and expected delivery of an order."""
         return await _tool_get_order_status(order_id, tenant_id, actions_instance)
 
@@ -138,7 +152,9 @@ def _build_langchain_tools(actions: Actions, tenant_id: str):
         return await _tool_search_knowledge_base(query, tenant_id)
 
     @tool
-    async def handoff_to_human(reason: str, actions_instance: Actions = actions, tenant_id: str = tenant_id) -> str:
+    async def handoff_to_human(
+        reason: str, actions_instance: Actions = actions, tenant_id: str = tenant_id
+    ) -> str:
         """Transfer the conversation to a human agent."""
         return await _tool_handoff_to_human(reason, tenant_id, actions_instance)
 
@@ -147,21 +163,36 @@ def _build_langchain_tools(actions: Actions, tenant_id: str):
         """Escalate the issue to a supervisor."""
         return await _tool_escalate_to_supervisor(reason)
 
-    return [lookup_invoice, get_order_status, search_knowledge_base, handoff_to_human, escalate_to_supervisor]
+    return [
+        lookup_invoice,
+        get_order_status,
+        search_knowledge_base,
+        handoff_to_human,
+        escalate_to_supervisor,
+    ]
 
 
 # --- Standalone tool functions (used by langchain tools & tests) ----------------
 
-async def _tool_lookup_invoice(invoice_id: str, tenant_id: str, actions: Actions) -> str:
-    res = await actions.run("lookup_invoice", {"invoice_id": invoice_id}, tenant_id=tenant_id)
+
+async def _tool_lookup_invoice(
+    invoice_id: str, tenant_id: str, actions: Actions
+) -> str:
+    res = await actions.run(
+        "lookup_invoice", {"invoice_id": invoice_id}, tenant_id=tenant_id
+    )
     if res.get("success"):
         data = res.get("data", {})
         return f"Invoice {invoice_id} found. Status: {data.get('status', 'Unknown')}, Amount: {data.get('amount', '$0.00')}, Due: {data.get('due_date', 'Unknown')}"
     return f"Could not find invoice {invoice_id}"
 
 
-async def _tool_get_order_status(order_id: str, tenant_id: str, actions: Actions) -> str:
-    res = await actions.run("get_order_status", {"order_id": order_id}, tenant_id=tenant_id)
+async def _tool_get_order_status(
+    order_id: str, tenant_id: str, actions: Actions
+) -> str:
+    res = await actions.run(
+        "get_order_status", {"order_id": order_id}, tenant_id=tenant_id
+    )
     if res.get("success"):
         data = res.get("data", {})
         return f"Order {order_id} found. Status: {data.get('status', 'Unknown')}, Expected Delivery: {data.get('expected_delivery', 'Unknown')}"
@@ -170,6 +201,7 @@ async def _tool_get_order_status(order_id: str, tenant_id: str, actions: Actions
 
 async def _tool_search_knowledge_base(query: str, tenant_id: str) -> str:
     from api.services.rag import rag_service
+
     results = await rag_service.query(query, k=2)
     if not results:
         return "No information found."
@@ -177,7 +209,9 @@ async def _tool_search_knowledge_base(query: str, tenant_id: str) -> str:
 
 
 async def _tool_handoff_to_human(reason: str, tenant_id: str, actions: Actions) -> str:
-    await actions.run("handoff", {"queue": "general", "reason": reason}, tenant_id=tenant_id)
+    await actions.run(
+        "handoff", {"queue": "general", "reason": reason}, tenant_id=tenant_id
+    )
     return "Handoff initiated."
 
 
@@ -186,17 +220,27 @@ async def _tool_escalate_to_supervisor(reason: str) -> str:
 
 
 # Public wrappers matching the test expectations
-async def lookup_invoice(invoice_id: str, tenant_id: str, actions_instance: Actions) -> str:
+async def lookup_invoice(
+    invoice_id: str, tenant_id: str, actions_instance: Actions
+) -> str:
     return await _tool_lookup_invoice(invoice_id, tenant_id, actions_instance)
 
-async def get_order_status(order_id: str, tenant_id: str, actions_instance: Actions) -> str:
+
+async def get_order_status(
+    order_id: str, tenant_id: str, actions_instance: Actions
+) -> str:
     return await _tool_get_order_status(order_id, tenant_id, actions_instance)
+
 
 async def search_knowledge_base(query: str, tenant_id: str) -> str:
     return await _tool_search_knowledge_base(query, tenant_id)
 
-async def handoff_to_human(reason: str, tenant_id: str, actions_instance: Actions) -> str:
+
+async def handoff_to_human(
+    reason: str, tenant_id: str, actions_instance: Actions
+) -> str:
     return await _tool_handoff_to_human(reason, tenant_id, actions_instance)
+
 
 async def escalate_to_supervisor(reason: str) -> str:
     return await _tool_escalate_to_supervisor(reason)
@@ -204,7 +248,9 @@ async def escalate_to_supervisor(reason: str) -> str:
 
 # Base ReAct Agent
 class ReActAgent:
-    def __init__(self, name: str, system_prompt: str, tools: list[str], actions: Actions):
+    def __init__(
+        self, name: str, system_prompt: str, tools: list[str], actions: Actions
+    ):
         self.name = name
         self.system_prompt = system_prompt
         self.tools = tools
@@ -212,7 +258,9 @@ class ReActAgent:
         self.model = OLLAMA_MODEL
         self.host = OLLAMA_HOST
 
-    async def _execute_tool(self, tool_name: str, tool_input: str, tenant_id: str) -> str:
+    async def _execute_tool(
+        self, tool_name: str, tool_input: str, tenant_id: str
+    ) -> str:
         _ensure_agentops()
         tool_event = agentops.ToolEvent(name=tool_name, params={"input": tool_input})
 
@@ -220,14 +268,18 @@ class ReActAgent:
             return f"Tool {tool_name} not permitted for agent {self.name}."
 
         if tool_name == "lookup_invoice":
-            res = await self.actions.run("lookup_invoice", {"invoice_id": tool_input}, tenant_id=tenant_id)
+            res = await self.actions.run(
+                "lookup_invoice", {"invoice_id": tool_input}, tenant_id=tenant_id
+            )
             agentops.record(tool_event)
             if res.get("success"):
                 data = res.get("data", {})
                 return f"Invoice {tool_input} found. Status: {data.get('status', 'Unknown')}, Amount: {data.get('amount', '$0.00')}, Due: {data.get('due_date', 'Unknown')}"
             return f"Could not find invoice {tool_input}"
         elif tool_name == "get_order_status":
-            res = await self.actions.run("get_order_status", {"order_id": tool_input}, tenant_id=tenant_id)
+            res = await self.actions.run(
+                "get_order_status", {"order_id": tool_input}, tenant_id=tenant_id
+            )
             agentops.record(tool_event)
             if res.get("success"):
                 data = res.get("data", {})
@@ -235,13 +287,18 @@ class ReActAgent:
             return f"Could not find order {tool_input}"
         elif tool_name == "search_knowledge_base":
             from api.services.rag import rag_service
+
             results = await rag_service.query(tool_input, k=2)
             agentops.record(tool_event)
             if not results:
                 return "No information found."
             return "\n".join([f"- {r['content']}" for r in results])
         elif tool_name == "handoff_to_human":
-            await self.actions.run("handoff", {"queue": "general", "reason": tool_input}, tenant_id=tenant_id)
+            await self.actions.run(
+                "handoff",
+                {"queue": "general", "reason": tool_input},
+                tenant_id=tenant_id,
+            )
             agentops.record(tool_event)
             return "Handoff initiated."
         elif tool_name == "escalate_to_supervisor":
@@ -249,6 +306,7 @@ class ReActAgent:
             return "Escalated back to supervisor."
         elif tool_name.startswith("mcp_"):
             from api.services.mcp_client import mcp_manager
+
             result = await mcp_manager.execute_tool(tenant_id, tool_name, tool_input)
             agentops.record(tool_event)  # Log completion
             return result
@@ -256,7 +314,9 @@ class ReActAgent:
             agentops.record(tool_event)  # Log completion
             return f"Unknown tool: {tool_name}"
 
-    async def step(self, history: list[dict[str, str]], user_input: str, tenant_id: str) -> AgentResponse:
+    async def step(
+        self, history: list[dict[str, str]], user_input: str, tenant_id: str
+    ) -> AgentResponse:
         start_ts = time.time()
         _ensure_agentops()
 
@@ -284,17 +344,24 @@ class ReActAgent:
 
             async with db_context() as conn:
                 if USE_POSTGRES:
-                    profile = await conn.fetchrow("SELECT * FROM agent_profiles WHERE name = $1", self.name)
+                    profile = await conn.fetchrow(
+                        "SELECT * FROM agent_profiles WHERE name = $1", self.name
+                    )
                 else:
                     cursor = conn.cursor()
-                    cursor.execute("SELECT * FROM agent_profiles WHERE name = ?", (self.name,))
+                    cursor.execute(
+                        "SELECT * FROM agent_profiles WHERE name = ?", (self.name,)
+                    )
                     profile = cursor.fetchone()
             params = json.loads(profile["parameters"] or "{}") if profile else {}
             require_approval = params.get("require_approval_on", [])
 
             # Long-term Memory Injection (Optimization: Mem0 concept)
             from api.services.memory_service import memory_service
-            customer_id = history[0].get("customer_id", "unknown") if history else "unknown"
+
+            customer_id = (
+                history[0].get("customer_id", "unknown") if history else "unknown"
+            )
             memories = await memory_service.get_memories(tenant_id, customer_id)
 
             system_content = self.system_prompt
@@ -315,7 +382,7 @@ class ReActAgent:
             needs_agent = False
             action_taken = None
 
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=60.0):
                 for attempt in range(2):  # Self-healing retry loop
                     try:
                         # Langfuse generation span
@@ -324,11 +391,14 @@ class ReActAgent:
                             generation = lf.generation(
                                 name="llm_chat",
                                 model=self.model,
-                                input={"messages": messages[-3:]},  # last 3 messages for context
+                                input={
+                                    "messages": messages[-3:]
+                                },  # last 3 messages for context
                                 metadata={"attempt": attempt, "tenant_id": tenant_id},
                             )
 
                         from api.services.llm_client import llm_client as _lc
+
                         result = await _lc.chat(
                             messages,
                             temperature=0.1,
@@ -349,9 +419,18 @@ class ReActAgent:
                             parsed = parse_json_content(ai_msg)
                         except ValueError:
                             # SELF-HEALING: Prompt the model to fix its JSON
-                            logger.warning("self_healing_triggered", reason="json_decode_error", raw=ai_msg[:200])
+                            logger.warning(
+                                "self_healing_triggered",
+                                reason="json_decode_error",
+                                raw=ai_msg[:200],
+                            )
                             messages.append({"role": "assistant", "content": ai_msg})
-                            messages.append({"role": "user", "content": "Your previous response was not valid JSON. Please respond with ONLY JSON."})
+                            messages.append(
+                                {
+                                    "role": "user",
+                                    "content": "Your previous response was not valid JSON. Please respond with ONLY JSON.",
+                                }
+                            )
                             continue
 
                         if "response" in parsed:
@@ -376,7 +455,7 @@ class ReActAgent:
                                 needs_agent=needs_agent,
                                 action_taken=action_taken,
                                 sentiment="neutral",
-                                latency_ms=latency
+                                latency_ms=latency,
                             )
 
                         if "tool" in parsed:
@@ -388,35 +467,68 @@ class ReActAgent:
                                 logger.info("supervision_required", action=tool_name)
                                 # Create approval request in DB
                                 from api.services.database import USE_POSTGRES
+
                                 approval_id = f"APP-{uuid.uuid4().hex[:6].upper()}"
                                 async with db_context() as conn:
                                     if USE_POSTGRES:
                                         await conn.execute(
                                             "INSERT INTO action_approvals (id, tenant_id, session_id, agent_id, action, params) VALUES ($1, $2, $3, $4, $5, $6)",
-                                            approval_id, tenant_id, "SESS-LIVE", self.name, tool_name, tool_input
+                                            approval_id,
+                                            tenant_id,
+                                            "SESS-LIVE",
+                                            self.name,
+                                            tool_name,
+                                            tool_input,
                                         )
                                     else:
                                         cursor = conn.cursor()
                                         cursor.execute(
                                             "INSERT INTO action_approvals (id, tenant_id, session_id, agent_id, action, params) VALUES (?, ?, ?, ?, ?, ?)",
-                                            (approval_id, tenant_id, "SESS-LIVE", self.name, tool_name, tool_input)
+                                            (
+                                                approval_id,
+                                                tenant_id,
+                                                "SESS-LIVE",
+                                                self.name,
+                                                tool_name,
+                                                tool_input,
+                                            ),
                                         )
                                         conn.commit()
-                                return AgentResponse(text=f"I need supervisor approval to perform '{tool_name}'. Please wait.", sources=[], needs_agent=False, action_taken="pending_approval")
+                                return AgentResponse(
+                                    text=f"I need supervisor approval to perform '{tool_name}'. Please wait.",
+                                    sources=[],
+                                    needs_agent=False,
+                                    action_taken="pending_approval",
+                                )
 
                             action_taken = tool_name
-                            tool_result = await self._execute_tool(tool_name, tool_input, tenant_id)
+                            tool_result = await self._execute_tool(
+                                tool_name, tool_input, tenant_id
+                            )
                             # Push real-time alert if handoff is happening
-                            if tool_name in ("handoff_to_human", "escalate_to_supervisor"):
+                            if tool_name in (
+                                "handoff_to_human",
+                                "escalate_to_supervisor",
+                            ):
                                 from api.routers.campaign import (
                                     push_escalation_alert,
                                 )
-                                _safe_create_task(push_escalation_alert(
-                                    call_sid="LIVE", reason=f"Agent requested {tool_name}: {tool_input}", agent_name=self.name
-                                ))
+
+                                _safe_create_task(
+                                    push_escalation_alert(
+                                        call_sid="LIVE",
+                                        reason=f"Agent requested {tool_name}: {tool_input}",
+                                        agent_name=self.name,
+                                    )
+                                )
 
                             messages.append({"role": "assistant", "content": ai_msg})
-                            messages.append({"role": "user", "content": f"Tool '{tool_name}' returned: {tool_result}"})
+                            messages.append(
+                                {
+                                    "role": "user",
+                                    "content": f"Tool '{tool_name}' returned: {tool_result}",
+                                }
+                            )
                             continue
 
                     except Exception as e:
@@ -425,17 +537,35 @@ class ReActAgent:
                             continue
                         # Push escalation for crash recovery
                         from api.routers.campaign import push_escalation_alert
-                        _safe_create_task(push_escalation_alert(
-                            call_sid="LIVE", reason=f"Agent crash: {str(e)[:100]}", agent_name=self.name
-                        ))
-                        return AgentResponse(text="I'm having trouble processing that right now.", sources=[], needs_agent=True)
+
+                        _safe_create_task(
+                            push_escalation_alert(
+                                call_sid="LIVE",
+                                reason=f"Agent crash: {str(e)[:100]}",
+                                agent_name=self.name,
+                            )
+                        )
+                        return AgentResponse(
+                            text="I'm having trouble processing that right now.",
+                            sources=[],
+                            needs_agent=True,
+                        )
 
             # Max steps exhausted - push alert
             from api.routers.campaign import push_escalation_alert
-            _safe_create_task(push_escalation_alert(
-                call_sid="LIVE", reason="Agent max reasoning steps exhausted", agent_name=self.name
-            ))
-            return AgentResponse(text="I need to transfer you to an agent as this is taking too long.", sources=[], needs_agent=True)
+
+            _safe_create_task(
+                push_escalation_alert(
+                    call_sid="LIVE",
+                    reason="Agent max reasoning steps exhausted",
+                    agent_name=self.name,
+                )
+            )
+            return AgentResponse(
+                text="I need to transfer you to an agent as this is taking too long.",
+                sources=[],
+                needs_agent=True,
+            )
         finally:
             if ao_session:
                 try:
@@ -443,7 +573,9 @@ class ReActAgent:
                 except Exception:
                     pass
 
-    async def record_session(self, session_id: str, history: list[dict], tenant_id: str):
+    async def record_session(
+        self, session_id: str, history: list[dict], tenant_id: str
+    ):
         # Quality Assurance & Benchmarking
         import uuid
 
@@ -453,17 +585,20 @@ class ReActAgent:
             if USE_POSTGRES:
                 settings_row = await conn.fetchrow(
                     "SELECT redact_pii FROM tenant_settings WHERE tenant_id = $1",
-                    tenant_id
+                    tenant_id,
                 )
             else:
                 cursor = conn.cursor()
-                cursor.execute("SELECT redact_pii FROM tenant_settings WHERE tenant_id = ?", (tenant_id,))
+                cursor.execute(
+                    "SELECT redact_pii FROM tenant_settings WHERE tenant_id = ?",
+                    (tenant_id,),
+                )
                 settings_row = cursor.fetchone()
             redact = bool(settings_row["redact_pii"]) if settings_row else True
 
             transcript_lines = []
             for m in history:
-                text = m['text']
+                text = m["text"]
                 if redact:
                     # Advanced NLP PII Redaction via Presidio
                     text = redact_pii(text)
@@ -478,20 +613,28 @@ class ReActAgent:
             if USE_POSTGRES:
                 await conn.execute(
                     "INSERT INTO session_recordings (id, tenant_id, session_id, transcript, qa_score, qa_feedback) VALUES ($1, $2, $3, $4, $5, $6)",
-                    rec_id, tenant_id, session_id, transcript, score, feedback
+                    rec_id,
+                    tenant_id,
+                    session_id,
+                    transcript,
+                    score,
+                    feedback,
                 )
             else:
                 cursor = conn.cursor()
                 cursor.execute(
                     "INSERT INTO session_recordings (id, tenant_id, session_id, transcript, qa_score, qa_feedback) VALUES (?, ?, ?, ?, ?, ?)",
-                    (rec_id, tenant_id, session_id, transcript, score, feedback)
+                    (rec_id, tenant_id, session_id, transcript, score, feedback),
                 )
                 conn.commit()
 
         # Optimization: Persist long-term facts (Mem0 concept)
         from api.services.memory_service import memory_service
+
         # In production, we'd pass a real customer_id here
-        _safe_create_task(memory_service.add_memories(tenant_id, "CUST-DEFAULT", transcript))
+        _safe_create_task(
+            memory_service.add_memories(tenant_id, "CUST-DEFAULT", transcript)
+        )
 
 
 class TenantAgent(ReActAgent):
@@ -512,29 +655,51 @@ class TenantAgent(ReActAgent):
 
         async with db_context() as conn:
             if USE_POSTGRES:
-                row = await conn.fetchrow("SELECT * FROM agent_profiles WHERE id = $1 AND tenant_id = $2", self.profile_id, self.tenant_id)
+                row = await conn.fetchrow(
+                    "SELECT * FROM agent_profiles WHERE id = $1 AND tenant_id = $2",
+                    self.profile_id,
+                    self.tenant_id,
+                )
             else:
                 cursor = conn.cursor()
-                cursor.execute("SELECT * FROM agent_profiles WHERE id = ? AND tenant_id = ?", (self.profile_id, self.tenant_id))
+                cursor.execute(
+                    "SELECT * FROM agent_profiles WHERE id = ? AND tenant_id = ?",
+                    (self.profile_id, self.tenant_id),
+                )
                 row = cursor.fetchone()
 
             if not row:
-                raise ValueError(f"Profile {self.profile_id} not found for tenant {self.tenant_id}")
+                raise ValueError(
+                    f"Profile {self.profile_id} not found for tenant {self.tenant_id}"
+                )
 
             params = json.loads(row["parameters"] or "{}")
-            agent_tools = params.get("tools", ["search_knowledge_base", "handoff_to_human"])
+            agent_tools = params.get(
+                "tools", ["search_knowledge_base", "handoff_to_human"]
+            )
 
             if USE_POSTGRES:
-                settings_row = await conn.fetchrow("SELECT mcp_servers FROM tenant_settings WHERE tenant_id = $1", self.tenant_id)
+                settings_row = await conn.fetchrow(
+                    "SELECT mcp_servers FROM tenant_settings WHERE tenant_id = $1",
+                    self.tenant_id,
+                )
             else:
                 cursor = conn.cursor()
-                cursor.execute("SELECT mcp_servers FROM tenant_settings WHERE tenant_id = ?", (self.tenant_id,))
+                cursor.execute(
+                    "SELECT mcp_servers FROM tenant_settings WHERE tenant_id = ?",
+                    (self.tenant_id,),
+                )
                 settings_row = cursor.fetchone()
 
         if settings_row and settings_row["mcp_servers"]:
             try:
                 from api.services.mcp_client import mcp_manager
-                _safe_create_task(mcp_manager.initialize_tenant_servers(self.tenant_id, settings_row["mcp_servers"]))
+
+                _safe_create_task(
+                    mcp_manager.initialize_tenant_servers(
+                        self.tenant_id, settings_row["mcp_servers"]
+                    )
+                )
                 mcp_tools = mcp_manager.get_available_tools(self.tenant_id)
                 for t in mcp_tools:
                     agent_tools.append(t["name"])
@@ -613,7 +778,9 @@ class Orchestrator:
             logger.info("langchain_not_available", fallback="llm_client")
             self.langchain_initialized = False
 
-    async def get_agent_graph(self, tenant_id: str, profile_id: str, system_prompt: str):
+    async def get_agent_graph(
+        self, tenant_id: str, profile_id: str, system_prompt: str
+    ):
         """Return a cached LangGraph agent, evicting after 5 min TTL."""
         key = f"{tenant_id}:{profile_id}"
         now = time.time()
@@ -655,13 +822,23 @@ class Orchestrator:
             if stale_keys:
                 logger.info("agent_cache_cleanup", evicted=len(stale_keys))
 
-    async def route_to_agent(self, history: list[dict[str, str]], user_input: str) -> str:
+    async def route_to_agent(
+        self, history: list[dict[str, str]], user_input: str
+    ) -> str:
         """Supervisor routing logic to determine the correct department."""
         messages = [
-            {"role": "system", "content": "You are a supervisor. Route the customer to 'billing', 'ops', or 'human'. Respond ONLY with JSON like {'thought': '...', 'route_to': '...'}"},
+            {
+                "role": "system",
+                "content": "You are a supervisor. Route the customer to 'billing', 'ops', or 'human'. Respond ONLY with JSON like {'thought': '...', 'route_to': '...'}",
+            },
         ]
         for msg in history:
-            messages.append({"role": "user" if msg["from"] == "customer" else "assistant", "content": msg["text"]})
+            messages.append(
+                {
+                    "role": "user" if msg["from"] == "customer" else "assistant",
+                    "content": msg["text"],
+                }
+            )
         messages.append({"role": "user", "content": user_input})
 
         try:
@@ -673,8 +850,8 @@ class Orchestrator:
                         "messages": messages,
                         "temperature": 0.0,
                         "format": "json",
-                        "stream": False
-                    }
+                        "stream": False,
+                    },
                 )
                 response.raise_for_status()
                 content = response.json().get("message", {}).get("content", "{}")
@@ -689,7 +866,14 @@ class Orchestrator:
             logger.error("supervisor_routing_error", error=str(e))
             return "human"
 
-    async def step(self, session_state: dict[str, Any], history: list[dict[str, str]], user_input: str, tenant_id: str, profile_id: str = "PROF-001") -> AgentResponse:
+    async def step(
+        self,
+        session_state: dict[str, Any],
+        history: list[dict[str, str]],
+        user_input: str,
+        tenant_id: str,
+        profile_id: str = "PROF-001",
+    ) -> AgentResponse:
         user_input = sanitize_user_input(user_input)
 
         lf = get_langfuse()
@@ -697,7 +881,11 @@ class Orchestrator:
         if lf:
             span = lf.span(
                 name="orchestrator_step",
-                input={"user_input": user_input[:200], "tenant_id": tenant_id, "profile_id": profile_id},
+                input={
+                    "user_input": user_input[:200],
+                    "tenant_id": tenant_id,
+                    "profile_id": profile_id,
+                },
                 metadata={"session_state_keys": list(session_state.keys())},
             )
 
@@ -710,20 +898,27 @@ class Orchestrator:
                 if USE_POSTGRES:
                     result = await conn.fetchval(
                         "SELECT id FROM rentals WHERE profile_id = $1 AND status = 'active'",
-                        profile_id
+                        profile_id,
                     )
                     if result:
                         rental = {"id": result}
                 else:
                     cursor = conn.cursor()
-                    cursor.execute("SELECT id FROM rentals WHERE profile_id = ? AND status = 'active'", (profile_id,))
+                    cursor.execute(
+                        "SELECT id FROM rentals WHERE profile_id = ? AND status = 'active'",
+                        (profile_id,),
+                    )
                     row = cursor.fetchone()
                     if row:
                         rental = {"id": row["id"]}
 
             if not rental:
                 logger.warning("no_active_rental", tenant=tenant_id, profile=profile_id)
-                return AgentResponse(text="This AI Agent is currently offline (No active rental).", sources=[], needs_agent=True)
+                return AgentResponse(
+                    text="This AI Agent is currently offline (No active rental).",
+                    sources=[],
+                    needs_agent=True,
+                )
 
             agent = await self.get_agent(tenant_id, profile_id)
             response = await agent.step(history, user_input, tenant_id=tenant_id)
@@ -741,7 +936,11 @@ class Orchestrator:
             if span:
                 try:
                     span.update(
-                        output={"response_text": response.text[:200], "needs_agent": response.needs_agent, "action_taken": response.action_taken},
+                        output={
+                            "response_text": response.text[:200],
+                            "needs_agent": response.needs_agent,
+                            "action_taken": response.action_taken,
+                        },
                     )
                 except Exception:
                     pass
@@ -753,6 +952,8 @@ class Orchestrator:
                     span.update(level="ERROR", status_message=str(e))
                 except Exception:
                     pass
-            return AgentResponse(text="I'm sorry, I'm having trouble connecting to my brain right now.", sources=[], needs_agent=True)
-
-
+            return AgentResponse(
+                text="I'm sorry, I'm having trouble connecting to my brain right now.",
+                sources=[],
+                needs_agent=True,
+            )

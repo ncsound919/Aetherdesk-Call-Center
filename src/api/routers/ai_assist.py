@@ -21,7 +21,9 @@ async def validate_output(
 ):
     schema = validator.get_validation_schema(data.schema_name)
     if not schema:
-        raise HTTPException(status_code=404, detail=f"Schema '{data.schema_name}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Schema '{data.schema_name}' not found"
+        )
     result = validator.validate_json_output(data.output, schema)
     return result
 
@@ -32,9 +34,14 @@ async def validate_intent(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     allowed = [
-        "pharmacy_refill", "pharmacy_refill_doc", "billing_invoice",
-        "billing_refund", "order_status", "tech_support_password",
-        "generalInquiry", "agent_handoff",
+        "pharmacy_refill",
+        "pharmacy_refill_doc",
+        "billing_invoice",
+        "billing_refund",
+        "order_status",
+        "tech_support_password",
+        "generalInquiry",
+        "agent_handoff",
     ]
     result = data.get("result", {})
     allowed_intents = data.get("allowed_intents", allowed)
@@ -80,7 +87,9 @@ async def get_suggestions(
     context = data.context or {}
     context["tenant_id"] = tenant_id
     results = await agent_assist_service.get_suggestions(
-        data.call_id, data.transcript_segment, context,
+        data.call_id,
+        data.transcript_segment,
+        context,
     )
     return {"suggestions": results}
 
@@ -101,7 +110,11 @@ async def create_knowledge(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     result = await agent_assist_service.create_knowledge_snippet(
-        tenant_id, data.title, data.content, data.tags, data.category,
+        tenant_id,
+        data.title,
+        data.content,
+        data.tags,
+        data.category,
     )
     return result
 

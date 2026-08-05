@@ -34,6 +34,7 @@ def get_clickhouse():
         return None
     try:
         import clickhouse_connect
+
         host = os.getenv("CLICKHOUSE_HOST", "localhost")
         port = int(os.getenv("CLICKHOUSE_PORT", "8123"))
         username = os.getenv("CLICKHOUSE_USER", "default")
@@ -53,7 +54,9 @@ def get_clickhouse():
         logger.info(f"ClickHouse connected: {host}:{port}/{database}")
         return _client
     except ImportError:
-        logger.warning("clickhouse-connect not installed — pip install clickhouse-connect")
+        logger.warning(
+            "clickhouse-connect not installed — pip install clickhouse-connect"
+        )
         return None
     except Exception as exc:
         logger.warning(f"ClickHouse connection failed: {exc}")
@@ -136,10 +139,20 @@ def record_call_event(
             "call_events",
             [event],
             column_names=[
-                "call_id", "tenant_id", "agent_id", "direction",
-                "caller", "called", "started_at", "ended_at",
-                "duration_seconds", "intent", "status",
-                "satisfaction_score", "tokens_used", "cost_cents",
+                "call_id",
+                "tenant_id",
+                "agent_id",
+                "direction",
+                "caller",
+                "called",
+                "started_at",
+                "ended_at",
+                "duration_seconds",
+                "intent",
+                "status",
+                "satisfaction_score",
+                "tokens_used",
+                "cost_cents",
                 "metadata",
             ],
         )

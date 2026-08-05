@@ -56,6 +56,7 @@ def is_lago_enabled() -> bool:
 # Event metering
 # ---------------------------------------------------------------------------
 
+
 def track_call_usage(
     tenant_id: str,
     call_sid: str,
@@ -69,17 +70,24 @@ def track_call_usage(
 
     client = _get_client()
     try:
-        client.events().create({
-            "event_code": "call_completed",
-            "customer_id": tenant_id,
-            "properties": {
-                "call_sid": call_sid,
-                "duration_seconds": duration_seconds,
-                "call_type": call_type,
-                **(metadata or {}),
-            },
-        })
-        logger.info("lago_usage_tracked", tenant_id=tenant_id, call_sid=call_sid, duration=duration_seconds)
+        client.events().create(
+            {
+                "event_code": "call_completed",
+                "customer_id": tenant_id,
+                "properties": {
+                    "call_sid": call_sid,
+                    "duration_seconds": duration_seconds,
+                    "call_type": call_type,
+                    **(metadata or {}),
+                },
+            }
+        )
+        logger.info(
+            "lago_usage_tracked",
+            tenant_id=tenant_id,
+            call_sid=call_sid,
+            duration=duration_seconds,
+        )
         return {"recorded": True, "tenant_id": tenant_id}
     except Exception as e:
         logger.error("lago_usage_track_failed", error=str(e))
@@ -98,15 +106,17 @@ def track_ai_usage(
 
     client = _get_client()
     try:
-        client.events().create({
-            "event_code": "ai_usage",
-            "customer_id": tenant_id,
-            "properties": {
-                "session_id": session_id,
-                "tokens_used": tokens_used,
-                "model": model,
-            },
-        })
+        client.events().create(
+            {
+                "event_code": "ai_usage",
+                "customer_id": tenant_id,
+                "properties": {
+                    "session_id": session_id,
+                    "tokens_used": tokens_used,
+                    "model": model,
+                },
+            }
+        )
         return {"recorded": True}
     except Exception as e:
         logger.error("lago_ai_usage_track_failed", error=str(e))
@@ -117,7 +127,10 @@ def track_ai_usage(
 # Subscription / plan management
 # ---------------------------------------------------------------------------
 
-def get_customer_usage(tenant_id: str, period_start: str, period_end: str) -> dict[str, Any]:
+
+def get_customer_usage(
+    tenant_id: str, period_start: str, period_end: str
+) -> dict[str, Any]:
     """Get usage summary for a tenant in a billing period."""
     if not is_lago_enabled():
         return {

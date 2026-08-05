@@ -26,6 +26,7 @@ logger = structlog.get_logger()
 
 try:
     from cryptography.fernet import Fernet
+
     _FERNET_AVAILABLE = True
 except ImportError:
     _FERNET_AVAILABLE = False
@@ -33,9 +34,13 @@ except ImportError:
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 if not ENCRYPTION_KEY:
     if os.getenv("APP_ENV", "development") == "production":
-        raise RuntimeError("ENCRYPTION_KEY environment variable must be set for production.")
+        raise RuntimeError(
+            "ENCRYPTION_KEY environment variable must be set for production."
+        )
     else:
-        logger.warning("ENCRYPTION_KEY not set for development. Encryption will be disabled.")
+        logger.warning(
+            "ENCRYPTION_KEY not set for development. Encryption will be disabled."
+        )
 
 _fernet = None
 if _FERNET_AVAILABLE and ENCRYPTION_KEY:
@@ -59,6 +64,7 @@ def decrypt_val(val: str) -> str:
 
 
 # ── Async Context Manager ──────────────────────────────────────────
+
 
 @asynccontextmanager
 async def db_context():
@@ -146,5 +152,3 @@ def _get_sqlite_conn():
     conn.row_factory = _dict_factory
     _enable_wal_mode(conn)
     return conn
-
-

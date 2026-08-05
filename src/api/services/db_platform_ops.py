@@ -12,6 +12,7 @@ logger = structlog.get_logger()
 
 # ── Tenant Branding ────────────────────────────────────────────────
 
+
 async def get_tenant_branding_db(tenant_id: str):
     if USE_POSTGRES:
         pool = await get_pg_pool()
@@ -53,7 +54,7 @@ async def set_tenant_branding_db(tenant_id: str, config: dict):
                 params.append(tenant_id)
                 await pool.execute(
                     f"UPDATE tenant_branding SET {', '.join(set_parts)} WHERE tenant_id = ${idx}",
-                    *params
+                    *params,
                 )
         else:
             conn = _get_sqlite_conn()
@@ -69,7 +70,7 @@ async def set_tenant_branding_db(tenant_id: str, config: dict):
                 params.append(tenant_id)
                 conn.execute(
                     f"UPDATE tenant_branding SET {', '.join(set_parts)} WHERE tenant_id = ?",
-                    params
+                    params,
                 )
                 conn.commit()
             finally:
@@ -85,17 +86,39 @@ async def set_tenant_branding_db(tenant_id: str, config: dict):
         if USE_POSTGRES:
             pool = await get_pg_pool()
             if pool:
-                await pool.execute("""
+                await pool.execute(
+                    """
                     INSERT INTO tenant_branding (id, tenant_id, company_name, logo_url, primary_color, secondary_color, favicon_url, created_at, updated_at)
                     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW())
-                """, brand_id, tenant_id, company_name, logo_url, primary_color, secondary_color, favicon_url)
+                """,
+                    brand_id,
+                    tenant_id,
+                    company_name,
+                    logo_url,
+                    primary_color,
+                    secondary_color,
+                    favicon_url,
+                )
         else:
             conn = _get_sqlite_conn()
             try:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO tenant_branding (id, tenant_id, company_name, logo_url, primary_color, secondary_color, favicon_url, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (brand_id, tenant_id, company_name, logo_url, primary_color, secondary_color, favicon_url, now, now))
+                """,
+                    (
+                        brand_id,
+                        tenant_id,
+                        company_name,
+                        logo_url,
+                        primary_color,
+                        secondary_color,
+                        favicon_url,
+                        now,
+                        now,
+                    ),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -132,13 +155,14 @@ async def list_white_label_tenants_db():
 
 # ── Custom Domains ─────────────────────────────────────────────────
 
+
 async def get_custom_domain_db(tenant_id: str):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
             row = await pool.fetchrow(
                 "SELECT * FROM custom_domains WHERE tenant_id = $1 ORDER BY created_at DESC LIMIT 1",
-                tenant_id
+                tenant_id,
             )
             return dict(row) if row else None
     else:
@@ -146,7 +170,7 @@ async def get_custom_domain_db(tenant_id: str):
         try:
             row = conn.execute(
                 "SELECT * FROM custom_domains WHERE tenant_id = ? ORDER BY created_at DESC LIMIT 1",
-                (tenant_id,)
+                (tenant_id,),
             ).fetchone()
             return dict(row) if row else None
         finally:
@@ -155,24 +179,35 @@ async def get_custom_domain_db(tenant_id: str):
     return None
 
 
-async def set_custom_domain_db(tenant_id: str, domain: str, ssl_status: str = "pending"):
+async def set_custom_domain_db(
+    tenant_id: str, domain: str, ssl_status: str = "pending"
+):
     domain_id = str(uuid.uuid4())
     now = datetime.now(UTC).isoformat()
 
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO custom_domains (id, tenant_id, domain, ssl_status, verified, created_at)
                 VALUES ($1, $2, $3, $4, FALSE, NOW())
-            """, domain_id, tenant_id, domain, ssl_status)
+            """,
+                domain_id,
+                tenant_id,
+                domain,
+                ssl_status,
+            )
     else:
         conn = _get_sqlite_conn()
         try:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO custom_domains (id, tenant_id, domain, ssl_status, verified, created_at)
                 VALUES (?, ?, ?, ?, 0, ?)
-            """, (domain_id, tenant_id, domain, ssl_status, now))
+            """,
+                (domain_id, tenant_id, domain, ssl_status, now),
+            )
             conn.commit()
         finally:
             conn.close()
@@ -186,19 +221,23 @@ async def verify_domain_db(domain_id: str):
         if pool:
             await pool.execute(
                 "UPDATE custom_domains SET verified = TRUE, ssl_status = 'active' WHERE id = $1",
-                domain_id
+                domain_id,
             )
-            row = await pool.fetchrow("SELECT * FROM custom_domains WHERE id = $1", domain_id)
+            row = await pool.fetchrow(
+                "SELECT * FROM custom_domains WHERE id = $1", domain_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
             conn.execute(
                 "UPDATE custom_domains SET verified = 1, ssl_status = 'active' WHERE id = ?",
-                (domain_id,)
+                (domain_id,),
             )
             conn.commit()
-            row = conn.execute("SELECT * FROM custom_domains WHERE id = ?", (domain_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM custom_domains WHERE id = ?", (domain_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -207,6 +246,7 @@ async def verify_domain_db(domain_id: str):
 
 
 # ── Onboarding Progress ────────────────────────────────────────────
+
 
 async def get_onboarding_progress_db(tenant_id: str):
     if USE_POSTGRES:
@@ -236,17 +276,24 @@ async def create_onboarding_progress_db(tenant_id: str):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO onboarding_progress (id, tenant_id, steps_completed_json, current_step, completed, created_at, updated_at)
                 VALUES ($1, $2, '[]', 'welcome', FALSE, NOW(), NOW())
-            """, prog_id, tenant_id)
+            """,
+                prog_id,
+                tenant_id,
+            )
     else:
         conn = _get_sqlite_conn()
         try:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO onboarding_progress (id, tenant_id, steps_completed_json, current_step, completed, created_at, updated_at)
                 VALUES (?, ?, '[]', 'welcome', 0, ?, ?)
-            """, (prog_id, tenant_id, now, now))
+            """,
+                (prog_id, tenant_id, now, now),
+            )
             conn.commit()
         finally:
             conn.close()
@@ -272,19 +319,34 @@ async def complete_onboarding_step_db(tenant_id: str, step: str):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 UPDATE onboarding_progress
                 SET steps_completed_json = $1::jsonb, current_step = $2, completed = $3, updated_at = NOW()
                 WHERE tenant_id = $4
-            """, json.dumps(steps), current_step, completed, tenant_id)
+            """,
+                json.dumps(steps),
+                current_step,
+                completed,
+                tenant_id,
+            )
     else:
         conn = _get_sqlite_conn()
         try:
-            conn.execute("""
+            conn.execute(
+                """
                 UPDATE onboarding_progress
                 SET steps_completed_json = ?, current_step = ?, completed = ?, updated_at = ?
                 WHERE tenant_id = ?
-            """, (json.dumps(steps), current_step, 1 if completed else 0, now, tenant_id))
+            """,
+                (
+                    json.dumps(steps),
+                    current_step,
+                    1 if completed else 0,
+                    now,
+                    tenant_id,
+                ),
+            )
             conn.commit()
         finally:
             conn.close()
@@ -294,13 +356,15 @@ async def complete_onboarding_step_db(tenant_id: str, step: str):
 
 # ── Tenant Config (for self-serve provisioning) ────────────────────
 
+
 async def get_tenant_config_value_db(tenant_id: str, key: str):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
             row = await pool.fetchrow(
                 "SELECT value FROM tenant_config WHERE tenant_id = $1 AND key = $2",
-                tenant_id, key
+                tenant_id,
+                key,
             )
             return row["value"] if row else None
     else:
@@ -308,7 +372,7 @@ async def get_tenant_config_value_db(tenant_id: str, key: str):
         try:
             row = conn.execute(
                 "SELECT value FROM tenant_config WHERE tenant_id = ? AND key = ?",
-                (tenant_id, key)
+                (tenant_id, key),
             ).fetchone()
             return row["value"] if row else None
         finally:
@@ -321,18 +385,26 @@ async def set_tenant_config_value_db(tenant_id: str, key: str, value: str):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO tenant_config (tenant_id, key, value)
                 VALUES ($1, $2, $3)
                 ON CONFLICT (tenant_id, key) DO UPDATE SET value = $3
-            """, tenant_id, key, value)
+            """,
+                tenant_id,
+                key,
+                value,
+            )
     else:
         conn = _get_sqlite_conn()
         try:
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT OR REPLACE INTO tenant_config (tenant_id, key, value)
                 VALUES (?, ?, ?)
-            """, (tenant_id, key, value))
+            """,
+                (tenant_id, key, value),
+            )
             conn.commit()
         finally:
             conn.close()

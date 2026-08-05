@@ -7,7 +7,10 @@ import structlog
 logger = structlog.get_logger()
 
 # In-memory store for development (production would use DB)
-_mfa_store: dict[str, dict] = {}  # user_id -> {secret, backup_codes, enabled, created_at}
+_mfa_store: dict[
+    str, dict
+] = {}  # user_id -> {secret, backup_codes, enabled, created_at}
+
 
 class MFAService:
     def __init__(self):
@@ -29,13 +32,19 @@ class MFAService:
         # Store (in production, save to DB)
         _mfa_store[user_id] = {
             "secret": secret,
-            "backup_codes_hashed": [hashlib.sha256(c.encode()).hexdigest() for c in backup_codes],
+            "backup_codes_hashed": [
+                hashlib.sha256(c.encode()).hexdigest() for c in backup_codes
+            ],
             "enabled": False,
-            "created_at": time.time()
+            "created_at": time.time(),
         }
         # Build otpauth URL
         otpauth_url = f"otpauth://totp/{self.issuer_name}:{user_email}?secret={secret}&issuer={self.issuer_name}"
-        return {"secret": secret, "otpauth_url": otpauth_url, "backup_codes": backup_codes}
+        return {
+            "secret": secret,
+            "otpauth_url": otpauth_url,
+            "backup_codes": backup_codes,
+        }
 
     async def verify_totp(self, user_id: str, code: str) -> bool:
         """Verify a TOTP code. Uses time-based validation (±30s window)."""
@@ -80,5 +89,6 @@ class MFAService:
         if store:
             return {"enabled": store["enabled"], "enrolled": True}
         return {"enabled": False, "enrolled": False}
+
 
 mfa_service = MFAService()

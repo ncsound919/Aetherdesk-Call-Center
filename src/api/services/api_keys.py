@@ -41,13 +41,20 @@ class APIKeyService:
     def __init__(self):
         self._rate_limits: dict[str, list[float]] = {}
 
-    async def create_key(self, tenant_id: str, name: str, scopes: list[str] | None = None,
-                         expires_in_days: int = 365) -> dict:
+    async def create_key(
+        self,
+        tenant_id: str,
+        name: str,
+        scopes: list[str] | None = None,
+        expires_in_days: int = 365,
+    ) -> dict:
         full_key, prefix, key_hash = _generate_key()
         scopes = scopes or ["all"]
         expires_at = (datetime.now(UTC) + timedelta(days=expires_in_days)).isoformat()
 
-        record = await create_api_key_db(tenant_id, name, prefix, key_hash, scopes, expires_at)
+        record = await create_api_key_db(
+            tenant_id, name, prefix, key_hash, scopes, expires_at
+        )
         if not record:
             raise RuntimeError("Failed to create API key")
 
@@ -88,6 +95,7 @@ class APIKeyService:
         scopes = record.get("scopes_json", [])
         if isinstance(scopes, str):
             import json
+
             scopes = json.loads(scopes)
         if isinstance(scopes, dict):
             scopes = scopes.get("scopes", [])
@@ -108,18 +116,23 @@ class APIKeyService:
             scopes = r.get("scopes_json", [])
             if isinstance(scopes, str):
                 import json
+
                 scopes = json.loads(scopes)
-            masked.append({
-                "id": r["id"],
-                "name": r["name"],
-                "key_prefix": r["key_prefix"],
-                "masked_key": r["key_prefix"] + "****" + (r["key_hash"][-4:] if r.get("key_hash") else "****"),
-                "scopes": scopes,
-                "created_at": r.get("created_at"),
-                "last_used_at": r.get("last_used_at"),
-                "expires_at": r.get("expires_at"),
-                "is_active": bool(r.get("is_active")),
-            })
+            masked.append(
+                {
+                    "id": r["id"],
+                    "name": r["name"],
+                    "key_prefix": r["key_prefix"],
+                    "masked_key": r["key_prefix"]
+                    + "****"
+                    + (r["key_hash"][-4:] if r.get("key_hash") else "****"),
+                    "scopes": scopes,
+                    "created_at": r.get("created_at"),
+                    "last_used_at": r.get("last_used_at"),
+                    "expires_at": r.get("expires_at"),
+                    "is_active": bool(r.get("is_active")),
+                }
+            )
         return masked
 
     async def rotate_key(self, tenant_id: str, key_id: str) -> dict | None:
@@ -132,10 +145,14 @@ class APIKeyService:
         return await self.create_key(
             tenant_id,
             record["name"] + " (rotated)",
-            json.loads(record["scopes_json"]) if isinstance(record.get("scopes_json"), str) else record.get("scopes_json", ["all"]),
+            json.loads(record["scopes_json"])
+            if isinstance(record.get("scopes_json"), str)
+            else record.get("scopes_json", ["all"]),
         )
 
-    async def get_key_usage(self, tenant_id: str, key_id: str, period: str = "7d") -> dict:
+    async def get_key_usage(
+        self, tenant_id: str, key_id: str, period: str = "7d"
+    ) -> dict:
         record = await get_api_key_by_id_db(tenant_id, key_id)
         if not record:
             return None

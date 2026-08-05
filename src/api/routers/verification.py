@@ -1,17 +1,17 @@
 """Verification router for BlockLabor-Aetherdesk integration.
 Handles Business Identity Verification and Ghost-Job Audit calls.
 """
-import os
+
 import logging
+import os
 import uuid
 from datetime import UTC, datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from api.models.dto import CallCreate, CallResponse
-from api.services.auth import verify_tenant_access
 from api.services.database import (
     create_call_session,
     log_audit_event,
@@ -49,7 +49,9 @@ async def _trigger_outbound_call(
     tenant_id: str,
     called_number: str,
     script: str,
-    verification_type: Literal["business_identity", "ghost_job_audit", "application_sla"],
+    verification_type: Literal[
+        "business_identity", "ghost_job_audit", "application_sla"
+    ],
     target_id: str,
 ) -> CallResponse:
     """Internal helper to trigger an outbound verification call via Twilio."""
@@ -81,14 +83,16 @@ async def _trigger_outbound_call(
     # Place outbound call via Twilio with verification-specific TwiML
     try:
         from dotenv import load_dotenv
+
         load_dotenv(override=True)
         twilio_sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
         twilio_token = os.environ.get("TWILIO_AUTH_TOKEN", "")
         twilio_from = os.environ.get("TWILIO_FROM_NUMBER", "")
         if twilio_sid and twilio_token and twilio_from:
             from twilio.rest import Client as TwilioRest
+
             tc = TwilioRest(twilio_sid, twilio_token)
-            twiml = f'<Response><Say>{script}</Say></Response>'
+            twiml = f"<Response><Say>{script}</Say></Response>"
             tc.calls.create(
                 to=call_dto.caller_number,
                 from_=twilio_from,
@@ -101,7 +105,7 @@ async def _trigger_outbound_call(
     # Log audit event
     await log_audit_event(
         tenant_id=tenant_id,
-        event_type=f"verification_call_initiated",
+        event_type="verification_call_initiated",
         event_data={
             "verification_type": verification_type,
             "target_id": target_id,

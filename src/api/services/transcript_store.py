@@ -12,7 +12,12 @@ logger = structlog.get_logger()
 class TranscriptStore:
     """Bounded in-memory cache of call transcripts with stale cleanup."""
 
-    def __init__(self, max_calls: int = 1000, max_transcripts_per_call: int = 200, stale_ttl: int = 3600):
+    def __init__(
+        self,
+        max_calls: int = 1000,
+        max_transcripts_per_call: int = 200,
+        stale_ttl: int = 3600,
+    ):
         self._transcripts: LRUCache = LRUCache(maxsize=max_calls)
         self._last_activity: LRUCache = LRUCache(maxsize=max_calls)
         self._max_per_call = max_transcripts_per_call
@@ -24,7 +29,7 @@ class TranscriptStore:
         transcripts = self._transcripts[call_sid]
         transcripts.append(entry)
         if len(transcripts) > self._max_per_call:
-            del transcripts[:len(transcripts) - self._max_per_call]
+            del transcripts[: len(transcripts) - self._max_per_call]
 
     def get_transcripts(self, call_sid: str) -> list:
         return list(self._transcripts.get(call_sid, []))
@@ -44,9 +49,11 @@ class TranscriptStore:
         while True:
             await asyncio.sleep(600)
             now = time.time()
-            stale = [sid for sid, ts in list(self._last_activity.items()) if now - ts > self._stale_ttl]
+            stale = [
+                sid
+                for sid, ts in list(self._last_activity.items())
+                if now - ts > self._stale_ttl
+            ]
             for sid in stale:
                 self.cleanup(sid)
                 logger.info("stale_transcript_purged", call_sid=sid)
-
-

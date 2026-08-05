@@ -101,13 +101,17 @@ BACKOFF_BASE = 2.0
 
 
 def _sign_payload(payload: str, secret: str) -> str:
-    return hmac.new(
-        secret.encode(), payload.encode(), hashlib.sha256
-    ).hexdigest()
+    return hmac.new(secret.encode(), payload.encode(), hashlib.sha256).hexdigest()
 
 
-async def _deliver_webhook(url: str, payload: dict, secret: str | None,
-                           log_id: str, tenant_id: str, webhook_id: str) -> bool:
+async def _deliver_webhook(
+    url: str,
+    payload: dict,
+    secret: str | None,
+    log_id: str,
+    tenant_id: str,
+    webhook_id: str,
+) -> bool:
     payload_str = json.dumps(payload, default=str)
     headers = {
         "Content-Type": "application/json",
@@ -129,7 +133,8 @@ async def _deliver_webhook(url: str, payload: dict, secret: str | None,
             response_body = resp.text[:2000]
             if 200 <= resp.status_code < 300:
                 await update_webhook_delivery_log_db(
-                    log_id, "delivered",
+                    log_id,
+                    "delivered",
                     response_status=response_status,
                     response_body=response_body,
                 )
@@ -143,7 +148,8 @@ async def _deliver_webhook(url: str, payload: dict, secret: str | None,
         response_status = 0
 
     await update_webhook_delivery_log_db(
-        log_id, status="failed" if error_message else "failed",
+        log_id,
+        status="failed" if error_message else "failed",
         response_status=response_status,
         response_body=response_body,
         error_message=error_message,
@@ -166,8 +172,9 @@ class WebhookEngine:
             self._worker_task.cancel()
             self._worker_task = None
 
-    async def register_webhook(self, tenant_id: str, url: str, events: list[str],
-                               secret: str | None = None) -> dict:
+    async def register_webhook(
+        self, tenant_id: str, url: str, events: list[str], secret: str | None = None
+    ) -> dict:
         if not secret:
             secret = uuid.uuid4().hex
         return await register_webhook_db(tenant_id, url, events, secret)
@@ -203,8 +210,9 @@ class WebhookEngine:
         for wh in webhooks:
             await self._dispatch_queue.put((wh, event_payload))
 
-    async def get_delivery_logs(self, tenant_id: str, webhook_id: str,
-                                limit: int = 50) -> list[dict]:
+    async def get_delivery_logs(
+        self, tenant_id: str, webhook_id: str, limit: int = 50
+    ) -> list[dict]:
         return await get_webhook_delivery_logs_db(tenant_id, webhook_id, limit)
 
     async def retry_delivery(self, tenant_id: str, log_id: str) -> bool:
@@ -212,7 +220,9 @@ class WebhookEngine:
         if not log_entry:
             return False
 
-        webhook = await get_webhook_by_id_db(log_entry["tenant_id"], log_entry["webhook_id"])
+        webhook = await get_webhook_by_id_db(
+            log_entry["tenant_id"], log_entry["webhook_id"]
+        )
         if not webhook:
             return False
 
@@ -223,14 +233,18 @@ class WebhookEngine:
             payload = request_body
 
         await update_webhook_delivery_log_db(
-            log_id, "retrying",
+            log_id,
+            "retrying",
             retry_count=(log_entry.get("retry_count", 0) or 0) + 1,
         )
 
         success = await _deliver_webhook(
-            webhook["url"], payload,
+            webhook["url"],
+            payload,
             webhook.get("secret"),
-            log_id, log_entry["tenant_id"], webhook["id"],
+            log_id,
+            log_entry["tenant_id"],
+            webhook["id"],
         )
         return success
 
@@ -246,8 +260,10 @@ class WebhookEngine:
 
     async def _deliver_with_retry(self, webhook: dict, payload: dict):
         log_entry = await create_webhook_delivery_log_db(
-            webhook["tenant_id"], webhook["id"],
-            payload["event_type"], json.dumps(payload, default=str),
+            webhook["tenant_id"],
+            webhook["id"],
+            payload["event_type"],
+            json.dumps(payload, default=str),
         )
         if not log_entry:
             return
@@ -255,29 +271,36 @@ class WebhookEngine:
 
         for attempt in range(MAX_RETRIES):
             success = await _deliver_webhook(
-                webhook["url"], payload,
+                webhook["url"],
+                payload,
                 webhook.get("secret"),
-                log_id, webhook["tenant_id"], webhook["id"],
+                log_id,
+                webhook["tenant_id"],
+                webhook["id"],
             )
             if success:
                 return
 
             if attempt < MAX_RETRIES - 1:
-                backoff = BACKOFF_BASE ** attempt
+                backoff = BACKOFF_BASE**attempt
                 await asyncio.sleep(backoff)
                 await update_webhook_delivery_log_db(
-                    log_id, "retrying",
+                    log_id,
+                    "retrying",
                     retry_count=attempt + 1,
                 )
 
         await update_webhook_delivery_log_db(
-            log_id, "dead_letter",
+            log_id,
+            "dead_letter",
             error_message="Max retries exceeded",
             retry_count=MAX_RETRIES,
         )
-        logger.warning("webhook_dead_letter",
-                       webhook_id=webhook["id"],
-                       event_type=payload.get("event_type"))
+        logger.warning(
+            "webhook_dead_letter",
+            webhook_id=webhook["id"],
+            event_type=payload.get("event_type"),
+        )
 
 
 webhook_engine = WebhookEngine()

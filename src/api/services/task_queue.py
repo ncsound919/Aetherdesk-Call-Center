@@ -42,8 +42,7 @@ class AsyncTaskQueue:
 
     async def start(self, num_workers: int = 3):
         self._workers = [
-            asyncio.create_task(self._worker(i))
-            for i in range(num_workers)
+            asyncio.create_task(self._worker(i)) for i in range(num_workers)
         ]
         logger.info("async_task_queue_started", workers=num_workers)
 
@@ -54,10 +53,7 @@ class AsyncTaskQueue:
         logger.info("async_task_queue_stopped")
 
     async def submit(
-        self,
-        task_type: str,
-        payload: dict[str, Any],
-        callback: Callable | None = None
+        self, task_type: str, payload: dict[str, Any], callback: Callable | None = None
     ) -> str:
         task_id = str(uuid.uuid4())[:8]
         task = BackgroundTask(
@@ -65,7 +61,7 @@ class AsyncTaskQueue:
             task_type=task_type,
             payload=payload,
             status=TaskStatus.PENDING,
-            created_at=time.time()
+            created_at=time.time(),
         )
         self._tasks[task_id] = task
 
@@ -108,12 +104,14 @@ class AsyncTaskQueue:
                         try:
                             await callback(result)
                         except Exception as e:
-                            logger.error("callback_error", task_id=task_id, error=str(e))
+                            logger.error(
+                                "callback_error", task_id=task_id, error=str(e)
+                            )
 
                     logger.info(
                         "task_completed",
                         task_id=task_id,
-                        duration_ms=int((task.completed_at - task.started_at) * 1000)
+                        duration_ms=int((task.completed_at - task.started_at) * 1000),
                     )
 
                 except Exception as e:
@@ -132,19 +130,21 @@ class AsyncTaskQueue:
     async def _execute_task(self, task: BackgroundTask) -> Any:
         if task.task_type == "rag_query":
             from api.services.rag import rag_service
+
             return await rag_service.query(
-                task.payload["query"],
-                task.payload.get("k", 3)
+                task.payload["query"], task.payload.get("k", 3)
             )
         elif task.task_type == "intent_classify":
             from api.services.intent_classifier import classifier
+
             return await classifier.classify(task.payload["transcript"])
         elif task.task_type == "agent_response":
             from api.services.agent import agent_service
+
             return await agent_service.answer(
                 task.payload["question"],
                 task.payload.get("context", []),
-                task.payload.get("history")
+                task.payload.get("history"),
             )
         else:
             raise ValueError(f"Unknown task type: {task.task_type}")
@@ -154,15 +154,21 @@ class AsyncTaskQueue:
 
     def get_status(self) -> dict[str, Any]:
         return {
-            "pending": sum(1 for t in self._tasks.values() if t.status == TaskStatus.PENDING),
-            "running": sum(1 for t in self._tasks.values() if t.status == TaskStatus.RUNNING),
-            "completed": sum(1 for t in self._tasks.values() if t.status == TaskStatus.COMPLETED),
-            "failed": sum(1 for t in self._tasks.values() if t.status == TaskStatus.FAILED),
+            "pending": sum(
+                1 for t in self._tasks.values() if t.status == TaskStatus.PENDING
+            ),
+            "running": sum(
+                1 for t in self._tasks.values() if t.status == TaskStatus.RUNNING
+            ),
+            "completed": sum(
+                1 for t in self._tasks.values() if t.status == TaskStatus.COMPLETED
+            ),
+            "failed": sum(
+                1 for t in self._tasks.values() if t.status == TaskStatus.FAILED
+            ),
             "total": len(self._tasks),
-            "concurrent": self._running
+            "concurrent": self._running,
         }
 
 
 task_queue = AsyncTaskQueue(max_concurrent=10)
-
-

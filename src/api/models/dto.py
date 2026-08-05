@@ -36,11 +36,19 @@ class TenantResponse(BaseModel):
 
 
 class AgentCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=255, description="Agent display name")
+    name: str = Field(
+        ..., min_length=1, max_length=255, description="Agent display name"
+    )
     display_name: str | None = Field(None, description="Public-facing name")
-    agent_type: str = Field(default="ai", pattern=r"^(ai|human|hybrid)$", description="Agent type")
-    skills: list[str] = Field(default_factory=list, description="Agent skills for routing")
-    config: dict[str, Any] = Field(default_factory=dict, description="AI model and behavior config")
+    agent_type: str = Field(
+        default="ai", pattern=r"^(ai|human|hybrid)$", description="Agent type"
+    )
+    skills: list[str] = Field(
+        default_factory=list, description="Agent skills for routing"
+    )
+    config: dict[str, Any] = Field(
+        default_factory=dict, description="AI model and behavior config"
+    )
 
     @field_validator("skills", mode="before")
     @classmethod
@@ -56,7 +64,11 @@ class AgentCreate(BaseModel):
                 "name": "Sales Agent",
                 "agent_type": "ai",
                 "skills": ["sales", "support"],
-                "config": {"model": "llama-3.1-70b", "temperature": 0.7, "voice": "professional-male"},
+                "config": {
+                    "model": "llama-3.1-70b",
+                    "temperature": 0.7,
+                    "voice": "professional-male",
+                },
             }
         }
     )
@@ -78,7 +90,11 @@ class AgentResponse(BaseModel):
 
 
 class AgentStatusUpdate(BaseModel):
-    status: str = Field(..., pattern=r"^(offline|online|available|busy|on_call|paused|training)$", description="New status")
+    status: str = Field(
+        ...,
+        pattern=r"^(offline|online|available|busy|on_call|paused|training)$",
+        description="New status",
+    )
     session_ref: str | None = Field(None, description="Fonoster session reference")
 
 
@@ -86,14 +102,22 @@ class CallCreate(BaseModel):
     agent_id: str | None = Field(None, description="Target agent ID")
     caller_number: str = Field(..., description="Caller phone number")
     called_number: str | None = Field(None, description="Called number")
-    call_direction: str = Field(default="inbound", pattern=r"^(inbound|outbound)$", description="Call direction")
+    call_direction: str = Field(
+        default="inbound", pattern=r"^(inbound|outbound)$", description="Call direction"
+    )
     intent: str | None = Field(None, description="Detected caller intent")
 
 
 class CallAction(BaseModel):
-    action: str = Field(..., pattern=r"^(answer|hangup|mute|unmute|hold|unhold|transfer|record|gather|say|play|dtmf)$", description="Action to perform")
+    action: str = Field(
+        ...,
+        pattern=r"^(answer|hangup|mute|unmute|hold|unhold|transfer|record|gather|say|play|dtmf)$",
+        description="Action to perform",
+    )
     target: str | None = Field(None, description="Target for transfer or dial")
-    data: dict[str, Any] | None = Field(None, description="Additional data for the action")
+    data: dict[str, Any] | None = Field(
+        None, description="Additional data for the action"
+    )
 
 
 class CallResponse(BaseModel):
@@ -219,7 +243,9 @@ class WAFRuleUpdate(BaseModel):
 class DataClassifyRequest(BaseModel):
     table: str
     column: str
-    sensitivity: str = Field(..., pattern=r"^(public|internal|confidential|restricted)$")
+    sensitivity: str = Field(
+        ..., pattern=r"^(public|internal|confidential|restricted)$"
+    )
     description: str | None = None
 
 
@@ -400,6 +426,7 @@ class ChatMessageCreate(BaseModel):
 
 # ── Enterprise Polish DTOs ────────────────────────────────────────
 
+
 class FailoverTestResult(BaseModel):
     id: str
     primary: str
@@ -500,6 +527,7 @@ class CallbackResponse(BaseModel):
 
 # ── WFM Metrics DTOs ─────────────────────────────────────────────
 
+
 class AHTTrackRequest(BaseModel):
     call_id: str
     agent_id: str
@@ -541,6 +569,7 @@ class CoachingCreateRequest(BaseModel):
 
 # ── Business Continuity DTOs ─────────────────────────────────────
 
+
 class FailoverTestRequest(BaseModel):
     service: str
 
@@ -564,6 +593,7 @@ class BackupChannelCreateRequest(BaseModel):
 
 
 # ── Platform Ops DTOs ─────────────────────────────────────────────
+
 
 class BrandingConfig(BaseModel):
     company_name: str | None = None
@@ -644,10 +674,13 @@ class SignupResponse(BaseModel):
 
 # ── AI Platform DTOs ───────────────────────────────────────────────
 
+
 class TrainingJobCreate(BaseModel):
     name: str
     model_base: str = "llama-3.1-8b"
-    hyperparams: dict[str, Any] = Field(default_factory=lambda: {"epochs": 3, "learning_rate": 2e-4, "batch_size": 8})
+    hyperparams: dict[str, Any] = Field(
+        default_factory=lambda: {"epochs": 3, "learning_rate": 2e-4, "batch_size": 8}
+    )
 
 
 class ModelRegister(BaseModel):
@@ -697,6 +730,7 @@ class EvalMetricsIngest(BaseModel):
 
 
 # ── CDP DTOs ─────────────────────────────────────────────────────
+
 
 class CustomerUnifyRequest(BaseModel):
     phone: str | None = None
@@ -795,6 +829,7 @@ class AggregateMetricsResponse(BaseModel):
 
 # ── Vertical Templates DTOs ──────────────────────────────────────
 
+
 class VerticalTemplateResponse(BaseModel):
     id: str
     name: str
@@ -833,6 +868,7 @@ class VerticalScriptsResponse(BaseModel):
 
 
 # ── Developer Platform DTOs ─────────────────────────────────────
+
 
 class APIKeyCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=255)

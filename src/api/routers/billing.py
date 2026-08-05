@@ -27,6 +27,7 @@ from api.services.stripe_service import (
 
 router = APIRouter(prefix="/billing", tags=["billing"])
 
+
 class CheckoutRequest(BaseModel):
     plan: str
     success_url: str = "/billing/success"
@@ -202,10 +203,17 @@ async def stripe_webhook(
                 # New signup (from signup_overlay365 or the general checkout):
                 # provision a tenant + API key from the checkout metadata so the
                 # account actually exists after payment.
-                tenant_email = metadata.get("email") or session.get("customer_details", {}).get("email") or f"user+{customer_id}@overlay365.com"
+                tenant_email = (
+                    metadata.get("email")
+                    or session.get("customer_details", {}).get("email")
+                    or f"user+{customer_id}@overlay365.com"
+                )
                 company_name = metadata.get("company_name") or "New Overlay365 Customer"
                 tenant_name = company_name
-                slug = re.sub(r"[^a-z0-9]+", "-", company_name.lower()).strip("-")[:60] or f"tenant-{customer_id[-8:]}"
+                slug = (
+                    re.sub(r"[^a-z0-9]+", "-", company_name.lower()).strip("-")[:60]
+                    or f"tenant-{customer_id[-8:]}"
+                )
                 try:
                     new_tenant = await create_tenant(
                         name=tenant_name,
@@ -213,7 +221,10 @@ async def stripe_webhook(
                         slug=slug,
                         phone=metadata.get("phone") or None,
                         plan_id=metadata.get("plan") or "PLAN-STARTER",
-                        settings={"source": "overlay365_signup", "tier": metadata.get("tier") or "starter"},
+                        settings={
+                            "source": "overlay365_signup",
+                            "tier": metadata.get("tier") or "starter",
+                        },
                         gdpr_consent=True,
                     )
                     if new_tenant:
@@ -223,7 +234,11 @@ async def stripe_webhook(
                             stripe_subscription_id=subscription_id,
                             plan_id=metadata.get("plan"),
                         )
-                        logger.info("tenant_provisioned_from_checkout", tenant_id=new_tenant["id"], source="overlay365")
+                        logger.info(
+                            "tenant_provisioned_from_checkout",
+                            tenant_id=new_tenant["id"],
+                            source="overlay365",
+                        )
                         tenant = new_tenant
                 except Exception as e:
                     logger.error("tenant_provision_failed", error=str(e))

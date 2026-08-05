@@ -21,8 +21,12 @@ class WFMMetricsService:
     async def track_aht(self, call_id, agent_id, duration_seconds, tenant_id=None):
         return await create_aht_db(tenant_id, agent_id, call_id, duration_seconds)
 
-    async def track_fcr(self, call_id, customer_id, resolved, tenant_id=None, follow_up_call_id=None):
-        return await create_fcr_db(tenant_id, customer_id, call_id, resolved, follow_up_call_id)
+    async def track_fcr(
+        self, call_id, customer_id, resolved, tenant_id=None, follow_up_call_id=None
+    ):
+        return await create_fcr_db(
+            tenant_id, customer_id, call_id, resolved, follow_up_call_id
+        )
 
     async def track_csat(self, call_id, customer_id, rating, tenant_id=None):
         return await create_csat_db(tenant_id, customer_id, call_id, rating)

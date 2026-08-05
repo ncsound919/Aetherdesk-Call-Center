@@ -9,6 +9,7 @@ from api.middleware.metrics import track_asr_latency
 
 logger = structlog.get_logger()
 
+
 class ASRService:
     def __init__(self, model_size: str = "base", device: str = "auto"):
         self.model_size = model_size
@@ -26,14 +27,12 @@ class ASRService:
             self._model = WhisperModel(
                 self.model_size,
                 device=self.device,
-                compute_type="float16" if self.device == "cuda" else "int8"
+                compute_type="float16" if self.device == "cuda" else "int8",
             )
         except Exception:
             # Fallback for devices that don't support float16
             self._model = WhisperModel(
-                self.model_size,
-                device="cpu",
-                compute_type="int8"
+                self.model_size, device="cpu", compute_type="int8"
             )
 
     async def transcribe(self, audio_data: bytes, language: str = "en") -> str:
@@ -48,7 +47,9 @@ class ASRService:
             loop = asyncio.get_running_loop()
             segments, info = await loop.run_in_executor(
                 None,
-                lambda: self._model.transcribe(audio_float32, language=language, beam_size=5)
+                lambda: self._model.transcribe(
+                    audio_float32, language=language, beam_size=5
+                ),
             )
 
             text = " ".join([segment.text for segment in segments])
@@ -75,7 +76,9 @@ class ASRService:
         try:
             segments, _ = await loop.run_in_executor(
                 None,
-                lambda: self._model.transcribe(audio_float32, language="en", beam_size=1)
+                lambda: self._model.transcribe(
+                    audio_float32, language="en", beam_size=1
+                ),
             )
             text = " ".join([s.text for s in segments])
             return text.strip() if text.strip() else None
@@ -87,5 +90,3 @@ class ASRService:
 
 
 asr_service = ASRService(model_size="base", device="auto")
-
-

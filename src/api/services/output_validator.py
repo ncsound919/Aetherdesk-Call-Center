@@ -77,7 +77,14 @@ class OutputValidator:
         }
 
     def fix_common_json_errors(self, text: str) -> str:
-        fixed = text.strip().strip("```json").strip("```").strip()
+        fixed = text.strip()
+        if fixed.startswith("```"):
+            fixed = fixed[3:]
+            if fixed.startswith("json"):
+                fixed = fixed[4:]
+        if fixed.endswith("```"):
+            fixed = fixed[:-3]
+        fixed = fixed.strip()
 
         for pattern, replacement in COMMON_JSON_ERRORS:
             fixed = re.sub(pattern, replacement, fixed)
@@ -117,28 +124,42 @@ class OutputValidator:
             value = data[field]
 
             if field_type == "string" and not isinstance(value, str):
-                errors.append(f"Field '{field}' should be string, got {type(value).__name__}")
+                errors.append(
+                    f"Field '{field}' should be string, got {type(value).__name__}"
+                )
             elif field_type == "number" and not isinstance(value, (int, float)):
-                errors.append(f"Field '{field}' should be number, got {type(value).__name__}")
+                errors.append(
+                    f"Field '{field}' should be number, got {type(value).__name__}"
+                )
             elif field_type == "object" and not isinstance(value, dict):
-                errors.append(f"Field '{field}' should be object, got {type(value).__name__}")
+                errors.append(
+                    f"Field '{field}' should be object, got {type(value).__name__}"
+                )
 
             if "minimum" in field_schema and isinstance(value, (int, float)):
                 if value < field_schema["minimum"]:
-                    errors.append(f"Field '{field}' below minimum ({field_schema['minimum']})")
+                    errors.append(
+                        f"Field '{field}' below minimum ({field_schema['minimum']})"
+                    )
             if "maximum" in field_schema and isinstance(value, (int, float)):
                 if value > field_schema["maximum"]:
-                    errors.append(f"Field '{field}' above maximum ({field_schema['maximum']})")
+                    errors.append(
+                        f"Field '{field}' above maximum ({field_schema['maximum']})"
+                    )
 
             if "enum" in field_schema and isinstance(value, str):
                 if value not in field_schema["enum"]:
-                    errors.append(f"Field '{field}' value '{value}' not in allowed values: {field_schema['enum']}")
+                    errors.append(
+                        f"Field '{field}' value '{value}' not in allowed values: {field_schema['enum']}"
+                    )
 
         for key in data:
             if key not in properties:
                 continue
             field_schema = properties[key]
-            if "type" in field_schema and not self._type_check(data[key], field_schema["type"]):
+            if "type" in field_schema and not self._type_check(
+                data[key], field_schema["type"]
+            ):
                 errors.append(f"Field '{key}' type mismatch")
 
         return errors

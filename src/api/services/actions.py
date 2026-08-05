@@ -33,17 +33,26 @@ class Actions:
                 async with httpx.AsyncClient(
                     timeout=5.0,
                     follow_redirects=True,
-                    limits=httpx.Limits(max_redirects=5)
+                    limits=httpx.Limits(max_redirects=5),
                 ) as client:
                     # Verify final destination after redirects
-                    response = await client.post(url, json={
-                        "event": "agent_action",
-                        "action": action,
-                        "data": data,
-                        "tenant_id": tenant_id,
-                        "is_escalation": data.get("is_escalation", False)
-                    }, headers={"X-Forwarded-For": "127.0.0.1"})
-                    logger.info("webhook_triggered", url=url, action=action, status=response.status_code)
+                    response = await client.post(
+                        url,
+                        json={
+                            "event": "agent_action",
+                            "action": action,
+                            "data": data,
+                            "tenant_id": tenant_id,
+                            "is_escalation": data.get("is_escalation", False),
+                        },
+                        headers={"X-Forwarded-For": "127.0.0.1"},
+                    )
+                    logger.info(
+                        "webhook_triggered",
+                        url=url,
+                        action=action,
+                        status=response.status_code,
+                    )
             except Exception as e:
                 logger.error("webhook_failed", url=url, error=str(e))
 
@@ -70,7 +79,7 @@ class Actions:
                     hostname,
                     parsed.port or 80,
                     socket.AF_UNSPEC,  # Support both IPv4 and IPv6
-                    socket.SOCK_STREAM
+                    socket.SOCK_STREAM,
                 )
             except socket.gaierror:
                 return False
@@ -92,9 +101,9 @@ class Actions:
                 ipaddress.ip_network("192.168.0.0/16"),
                 ipaddress.ip_network("127.0.0.0/8"),
                 ipaddress.ip_network("169.254.0.0/16"),  # Link-local
-                ipaddress.ip_network("fc00::/7"),          # IPv6 unique local
-                ipaddress.ip_network("::1/128"),           # IPv6 loopback
-                ipaddress.ip_network("fe80::/10"),         # IPv6 link-local
+                ipaddress.ip_network("fc00::/7"),  # IPv6 unique local
+                ipaddress.ip_network("::1/128"),  # IPv6 loopback
+                ipaddress.ip_network("fe80::/10"),  # IPv6 link-local
             ]
 
             for family, _, _, _, sockaddr in addrinfos:
@@ -121,14 +130,12 @@ class Actions:
 
             # 5. DNS rebinding protection: resolve again after a delay and compare
             import asyncio
+
             await asyncio.sleep(0.1)  # Small delay to catch fast-changing DNS
 
             try:
                 addrinfos2 = socket.getaddrinfo(
-                    hostname,
-                    parsed.port or 80,
-                    socket.AF_UNSPEC,
-                    socket.SOCK_STREAM
+                    hostname, parsed.port or 80, socket.AF_UNSPEC, socket.SOCK_STREAM
                 )
             except socket.gaierror:
                 return False
@@ -145,7 +152,9 @@ class Actions:
         except Exception:
             return False
 
-    async def run(self, action: str, fields: dict, tenant_id: str = "TENANT-001") -> dict:
+    async def run(
+        self, action: str, fields: dict, tenant_id: str = "TENANT-001"
+    ) -> dict:
         result = {"success": False}
 
         if action == "handoff":
@@ -154,16 +163,22 @@ class Actions:
             proto = fields.get("protocol_id", "unknown")
             is_escalation = fields.get("is_escalation", False)
             preview = self._preview(fields)
-            self.qm.enqueue(queue, {
-                "session_id": sid,
-                "protocol_id": proto,
-                "preview": preview,
-                "queue": queue,
-                "is_escalation": is_escalation
-            })
+            self.qm.enqueue(
+                queue,
+                {
+                    "session_id": sid,
+                    "protocol_id": proto,
+                    "preview": preview,
+                    "queue": queue,
+                    "is_escalation": is_escalation,
+                },
+            )
             try:
                 from api.routers.agent import hub
-                await hub.broadcast({"type": "queue_updated", "is_escalation": is_escalation})
+
+                await hub.broadcast(
+                    {"type": "queue_updated", "is_escalation": is_escalation}
+                )
             except Exception as e:
                 logger.error("broadcast_error", error=str(e))
             result = {"success": True}
@@ -179,7 +194,7 @@ class Actions:
                         data = {
                             "status": status,
                             "amount": float(amount_str),
-                            "due_date": row["due_date"]
+                            "due_date": row["due_date"],
                         }
                         result = {"success": True, "data": data}
                 except Exception as e:
@@ -200,12 +215,16 @@ class Actions:
 
         # Optimization: Trigger automation for all successful actions
         if result["success"]:
-            asyncio.create_task(self._trigger_webhook(tenant_id, action, result.get("data", fields)))
+            asyncio.create_task(
+                self._trigger_webhook(tenant_id, action, result.get("data", fields))
+            )
 
         return result
 
     def _preview(self, fields: dict) -> str:
-        keys = [k for k in ("customer_id","invoice_id","order_id","zip","rx_number") if k in fields]
+        keys = [
+            k
+            for k in ("customer_id", "invoice_id", "order_id", "zip", "rx_number")
+            if k in fields
+        ]
         return ", ".join(f"{k}:{fields[k]}" for k in keys) or "New customer"
-
-

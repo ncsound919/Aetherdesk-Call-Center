@@ -12,27 +12,56 @@ logger = structlog.get_logger()
 
 # ── Shifts ────────────────────────────────────────────────────────
 
-async def create_shift_db(tenant_id, agent_id, start_time, end_time, shift_type="regular", notes=None):
+
+async def create_shift_db(
+    tenant_id, agent_id, start_time, end_time, shift_type="regular", notes=None
+):
     shift_id = str(uuid.uuid4())
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO wfm_shifts (id, tenant_id, agent_id, start_time, end_time, shift_type, status, notes, created_at, updated_at)
                 VALUES ($1, $2, $3, $4, $5, $6, 'scheduled', $7, NOW(), NOW())
-            """, shift_id, tenant_id, agent_id, start_time, end_time, shift_type, notes)
-            row = await pool.fetchrow("SELECT * FROM wfm_shifts WHERE id = $1", shift_id)
+            """,
+                shift_id,
+                tenant_id,
+                agent_id,
+                start_time,
+                end_time,
+                shift_type,
+                notes,
+            )
+            row = await pool.fetchrow(
+                "SELECT * FROM wfm_shifts WHERE id = $1", shift_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
             now = datetime.now(UTC).isoformat()
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO wfm_shifts (id, tenant_id, agent_id, start_time, end_time, shift_type, status, notes, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, 'scheduled', ?, ?, ?)
-            """, (shift_id, tenant_id, agent_id, start_time, end_time, shift_type, notes, now, now))
+            """,
+                (
+                    shift_id,
+                    tenant_id,
+                    agent_id,
+                    start_time,
+                    end_time,
+                    shift_type,
+                    notes,
+                    now,
+                    now,
+                ),
+            )
             conn.commit()
-            row = conn.execute("SELECT * FROM wfm_shifts WHERE id = ?", (shift_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM wfm_shifts WHERE id = ?", (shift_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -99,10 +128,12 @@ async def update_shift_db(shift_id, tenant_id, **kwargs):
             set_parts.append("updated_at = NOW()")
             params.extend([shift_id, tenant_id])
             await pool.execute(
-                f"UPDATE wfm_shifts SET {', '.join(set_parts)} WHERE id = ${idx} AND tenant_id = ${idx+1}",
-                *params
+                f"UPDATE wfm_shifts SET {', '.join(set_parts)} WHERE id = ${idx} AND tenant_id = ${idx + 1}",
+                *params,
             )
-            row = await pool.fetchrow("SELECT * FROM wfm_shifts WHERE id = $1", shift_id)
+            row = await pool.fetchrow(
+                "SELECT * FROM wfm_shifts WHERE id = $1", shift_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
@@ -118,10 +149,12 @@ async def update_shift_db(shift_id, tenant_id, **kwargs):
             params.extend([shift_id, tenant_id])
             conn.execute(
                 f"UPDATE wfm_shifts SET {', '.join(set_parts)} WHERE id = ? AND tenant_id = ?",
-                params
+                params,
             )
             conn.commit()
-            row = conn.execute("SELECT * FROM wfm_shifts WHERE id = ?", (shift_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM wfm_shifts WHERE id = ?", (shift_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -131,13 +164,20 @@ async def delete_shift_db(shift_id, tenant_id):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            result = await pool.execute("DELETE FROM wfm_shifts WHERE id = $1 AND tenant_id = $2", shift_id, tenant_id)
+            result = await pool.execute(
+                "DELETE FROM wfm_shifts WHERE id = $1 AND tenant_id = $2",
+                shift_id,
+                tenant_id,
+            )
             return "DELETE" in result
     else:
         conn = _get_sqlite_conn()
         try:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM wfm_shifts WHERE id = ? AND tenant_id = ?", (shift_id, tenant_id))
+            cursor.execute(
+                "DELETE FROM wfm_shifts WHERE id = ? AND tenant_id = ?",
+                (shift_id, tenant_id),
+            )
             conn.commit()
             return cursor.rowcount > 0
         finally:
@@ -147,27 +187,54 @@ async def delete_shift_db(shift_id, tenant_id):
 
 # ── Schedules ─────────────────────────────────────────────────────
 
-async def create_schedule_db(tenant_id, date, forecasted_volume, forecasted_agents, notes=None):
+
+async def create_schedule_db(
+    tenant_id, date, forecasted_volume, forecasted_agents, notes=None
+):
     sched_id = str(uuid.uuid4())
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO wfm_schedules (id, tenant_id, date, forecasted_volume, forecasted_agents, notes, created_at, updated_at)
                 VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-            """, sched_id, tenant_id, date, forecasted_volume, forecasted_agents, notes)
-            row = await pool.fetchrow("SELECT * FROM wfm_schedules WHERE id = $1", sched_id)
+            """,
+                sched_id,
+                tenant_id,
+                date,
+                forecasted_volume,
+                forecasted_agents,
+                notes,
+            )
+            row = await pool.fetchrow(
+                "SELECT * FROM wfm_schedules WHERE id = $1", sched_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
             now = datetime.now(UTC).isoformat()
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO wfm_schedules (id, tenant_id, date, forecasted_volume, forecasted_agents, notes, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (sched_id, tenant_id, date, forecasted_volume, forecasted_agents, notes, now, now))
+            """,
+                (
+                    sched_id,
+                    tenant_id,
+                    date,
+                    forecasted_volume,
+                    forecasted_agents,
+                    notes,
+                    now,
+                    now,
+                ),
+            )
             conn.commit()
-            row = conn.execute("SELECT * FROM wfm_schedules WHERE id = ?", (sched_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM wfm_schedules WHERE id = ?", (sched_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -177,37 +244,59 @@ async def get_schedule_db(tenant_id, date):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            row = await pool.fetchrow("SELECT * FROM wfm_schedules WHERE tenant_id = $1 AND date = $2", tenant_id, date)
+            row = await pool.fetchrow(
+                "SELECT * FROM wfm_schedules WHERE tenant_id = $1 AND date = $2",
+                tenant_id,
+                date,
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
-            row = conn.execute("SELECT * FROM wfm_schedules WHERE tenant_id = ? AND date = ?", (tenant_id, date)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM wfm_schedules WHERE tenant_id = ? AND date = ?",
+                (tenant_id, date),
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
 
 
-async def update_schedule_adherence_db(schedule_id, actual_volume, actual_agents, adherence_pct):
+async def update_schedule_adherence_db(
+    schedule_id, actual_volume, actual_agents, adherence_pct
+):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 UPDATE wfm_schedules SET actual_volume = $1, actual_agents = $2, adherence_pct = $3, updated_at = NOW()
                 WHERE id = $4
-            """, actual_volume, actual_agents, adherence_pct, schedule_id)
-            row = await pool.fetchrow("SELECT * FROM wfm_schedules WHERE id = $1", schedule_id)
+            """,
+                actual_volume,
+                actual_agents,
+                adherence_pct,
+                schedule_id,
+            )
+            row = await pool.fetchrow(
+                "SELECT * FROM wfm_schedules WHERE id = $1", schedule_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
             now = datetime.now(UTC).isoformat()
-            conn.execute("""
+            conn.execute(
+                """
                 UPDATE wfm_schedules SET actual_volume = ?, actual_agents = ?, adherence_pct = ?, updated_at = ?
                 WHERE id = ?
-            """, (actual_volume, actual_agents, adherence_pct, now, schedule_id))
+            """,
+                (actual_volume, actual_agents, adherence_pct, now, schedule_id),
+            )
             conn.commit()
-            row = conn.execute("SELECT * FROM wfm_schedules WHERE id = ?", (schedule_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM wfm_schedules WHERE id = ?", (schedule_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -251,28 +340,45 @@ async def list_schedules_db(tenant_id, date_from=None, date_to=None):
 
 # ── QA Rubrics ────────────────────────────────────────────────────
 
+
 async def create_qa_rubric_db(tenant_id, name, criteria, description=None):
     rubric_id = str(uuid.uuid4())
-    criteria_json = json.dumps(criteria) if isinstance(criteria, list) else json.dumps([])
+    criteria_json = (
+        json.dumps(criteria) if isinstance(criteria, list) else json.dumps([])
+    )
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO qa_rubrics (id, tenant_id, name, description, criteria, created_at)
                 VALUES ($1, $2, $3, $4, $5::jsonb, NOW())
-            """, rubric_id, tenant_id, name, description, criteria_json)
-            row = await pool.fetchrow("SELECT * FROM qa_rubrics WHERE id = $1", rubric_id)
+            """,
+                rubric_id,
+                tenant_id,
+                name,
+                description,
+                criteria_json,
+            )
+            row = await pool.fetchrow(
+                "SELECT * FROM qa_rubrics WHERE id = $1", rubric_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
             now = datetime.now(UTC).isoformat()
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO qa_rubrics (id, tenant_id, name, description, criteria, created_at)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """, (rubric_id, tenant_id, name, description, criteria_json, now))
+            """,
+                (rubric_id, tenant_id, name, description, criteria_json, now),
+            )
             conn.commit()
-            row = conn.execute("SELECT * FROM qa_rubrics WHERE id = ?", (rubric_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM qa_rubrics WHERE id = ?", (rubric_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -282,12 +388,18 @@ async def list_qa_rubrics_db(tenant_id):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            rows = await pool.fetch("SELECT * FROM qa_rubrics WHERE tenant_id = $1 AND is_active = TRUE ORDER BY created_at DESC", tenant_id)
+            rows = await pool.fetch(
+                "SELECT * FROM qa_rubrics WHERE tenant_id = $1 AND is_active = TRUE ORDER BY created_at DESC",
+                tenant_id,
+            )
             return [dict(r) for r in rows]
     else:
         conn = _get_sqlite_conn()
         try:
-            rows = conn.execute("SELECT * FROM qa_rubrics WHERE tenant_id = ? AND is_active = 1 ORDER BY created_at DESC", (tenant_id,)).fetchall()
+            rows = conn.execute(
+                "SELECT * FROM qa_rubrics WHERE tenant_id = ? AND is_active = 1 ORDER BY created_at DESC",
+                (tenant_id,),
+            ).fetchall()
             return [dict(r) for r in rows]
         finally:
             conn.close()
@@ -295,9 +407,22 @@ async def list_qa_rubrics_db(tenant_id):
 
 # ── QA Scores ─────────────────────────────────────────────────────
 
-async def create_qa_score_db(tenant_id, call_id, agent_id, reviewer_id, rubric_id, scores_per_criterion, notes=None):
+
+async def create_qa_score_db(
+    tenant_id,
+    call_id,
+    agent_id,
+    reviewer_id,
+    rubric_id,
+    scores_per_criterion,
+    notes=None,
+):
     score_id = str(uuid.uuid4())
-    scores_json = json.dumps(scores_per_criterion) if isinstance(scores_per_criterion, dict) else json.dumps({})
+    scores_json = (
+        json.dumps(scores_per_criterion)
+        if isinstance(scores_per_criterion, dict)
+        else json.dumps({})
+    )
 
     # Calculate total_score and max_score from the rubric criteria
     total_score = 0.0
@@ -308,11 +433,15 @@ async def create_qa_score_db(tenant_id, call_id, agent_id, reviewer_id, rubric_i
         if USE_POSTGRES:
             pool = await get_pg_pool()
             if pool:
-                rubric = await pool.fetchrow("SELECT criteria FROM qa_rubrics WHERE id = $1", rubric_id)
+                rubric = await pool.fetchrow(
+                    "SELECT criteria FROM qa_rubrics WHERE id = $1", rubric_id
+                )
         else:
             conn = _get_sqlite_conn()
             try:
-                rubric = conn.execute("SELECT criteria FROM qa_rubrics WHERE id = ?", (rubric_id,)).fetchone()
+                rubric = conn.execute(
+                    "SELECT criteria FROM qa_rubrics WHERE id = ?", (rubric_id,)
+                ).fetchone()
             finally:
                 conn.close()
 
@@ -337,28 +466,59 @@ async def create_qa_score_db(tenant_id, call_id, agent_id, reviewer_id, rubric_i
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO qa_scores (id, tenant_id, call_id, agent_id, reviewer_id, rubric_id, total_score, max_score, scores_per_criterion, notes, reviewed_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, NOW())
-            """, score_id, tenant_id, call_id, agent_id, reviewer_id, rubric_id, total_score, max_score, scores_json, notes)
+            """,
+                score_id,
+                tenant_id,
+                call_id,
+                agent_id,
+                reviewer_id,
+                rubric_id,
+                total_score,
+                max_score,
+                scores_json,
+                notes,
+            )
             row = await pool.fetchrow("SELECT * FROM qa_scores WHERE id = $1", score_id)
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
             now = datetime.now(UTC).isoformat()
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO qa_scores (id, tenant_id, call_id, agent_id, reviewer_id, rubric_id, total_score, max_score, scores_per_criterion, notes, reviewed_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (score_id, tenant_id, call_id, agent_id, reviewer_id, rubric_id, total_score, max_score, scores_json, notes, now))
+            """,
+                (
+                    score_id,
+                    tenant_id,
+                    call_id,
+                    agent_id,
+                    reviewer_id,
+                    rubric_id,
+                    total_score,
+                    max_score,
+                    scores_json,
+                    notes,
+                    now,
+                ),
+            )
             conn.commit()
-            row = conn.execute("SELECT * FROM qa_scores WHERE id = ?", (score_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM qa_scores WHERE id = ?", (score_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
 
 
-async def list_qa_scores_db(tenant_id, agent_id=None, date_from=None, date_to=None, limit=100):
+async def list_qa_scores_db(
+    tenant_id, agent_id=None, date_from=None, date_to=None, limit=100
+):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
@@ -402,51 +562,84 @@ async def list_qa_scores_db(tenant_id, agent_id=None, date_from=None, date_to=No
 
 
 async def get_agent_qa_summary_db(agent_id):
-    result = {"avg_score": 0.0, "total_reviewed": 0, "trend": 0.0, "criteria_breakdown": {}}
+    result = {
+        "avg_score": 0.0,
+        "total_reviewed": 0,
+        "trend": 0.0,
+        "criteria_breakdown": {},
+    }
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            row = await pool.fetchrow("""
+            row = await pool.fetchrow(
+                """
                 SELECT COUNT(*) as total, COALESCE(AVG(total_score), 0) as avg_score
                 FROM qa_scores WHERE agent_id = $1
-            """, agent_id)
+            """,
+                agent_id,
+            )
             if row:
                 result["total_reviewed"] = row["total"]
                 result["avg_score"] = float(row["avg_score"])
 
             # Trend: compare last 30 vs previous 30
-            recent = await pool.fetchval("""
+            recent = await pool.fetchval(
+                """
                 SELECT COALESCE(AVG(total_score), 0) FROM qa_scores
                 WHERE agent_id = $1 AND reviewed_at >= NOW() - INTERVAL '30 days'
-            """, agent_id)
-            prev = await pool.fetchval("""
+            """,
+                agent_id,
+            )
+            prev = await pool.fetchval(
+                """
                 SELECT COALESCE(AVG(total_score), 0) FROM qa_scores
                 WHERE agent_id = $1 AND reviewed_at >= NOW() - INTERVAL '60 days' AND reviewed_at < NOW() - INTERVAL '30 days'
-            """, agent_id)
+            """,
+                agent_id,
+            )
             result["trend"] = float(recent or 0) - float(prev or 0)
 
             # Criteria breakdown from most recent score
-            last = await pool.fetchrow("""
+            last = await pool.fetchrow(
+                """
                 SELECT scores_per_criterion FROM qa_scores WHERE agent_id = $1 ORDER BY reviewed_at DESC LIMIT 1
-            """, agent_id)
+            """,
+                agent_id,
+            )
             if last and last["scores_per_criterion"]:
                 result["criteria_breakdown"] = last["scores_per_criterion"]
     else:
         conn = _get_sqlite_conn()
         try:
-            row = conn.execute("SELECT COUNT(*) as total, COALESCE(AVG(total_score), 0) as avg_score FROM qa_scores WHERE agent_id = ?", (agent_id,)).fetchone()
+            row = conn.execute(
+                "SELECT COUNT(*) as total, COALESCE(AVG(total_score), 0) as avg_score FROM qa_scores WHERE agent_id = ?",
+                (agent_id,),
+            ).fetchone()
             if row:
                 result["total_reviewed"] = row["total"]
                 result["avg_score"] = float(row["avg_score"])
 
-            recent = conn.execute("SELECT COALESCE(AVG(total_score), 0) as avg FROM qa_scores WHERE agent_id = ? AND reviewed_at >= datetime('now', '-30 days')", (agent_id,)).fetchone()
-            prev = conn.execute("SELECT COALESCE(AVG(total_score), 0) as avg FROM qa_scores WHERE agent_id = ? AND reviewed_at >= datetime('now', '-60 days') AND reviewed_at < datetime('now', '-30 days')", (agent_id,)).fetchone()
-            result["trend"] = float((recent or {}).get("avg", 0) or 0) - float((prev or {}).get("avg", 0) or 0)
+            recent = conn.execute(
+                "SELECT COALESCE(AVG(total_score), 0) as avg FROM qa_scores WHERE agent_id = ? AND reviewed_at >= datetime('now', '-30 days')",
+                (agent_id,),
+            ).fetchone()
+            prev = conn.execute(
+                "SELECT COALESCE(AVG(total_score), 0) as avg FROM qa_scores WHERE agent_id = ? AND reviewed_at >= datetime('now', '-60 days') AND reviewed_at < datetime('now', '-30 days')",
+                (agent_id,),
+            ).fetchone()
+            result["trend"] = float((recent or {}).get("avg", 0) or 0) - float(
+                (prev or {}).get("avg", 0) or 0
+            )
 
-            last = conn.execute("SELECT scores_per_criterion FROM qa_scores WHERE agent_id = ? ORDER BY reviewed_at DESC LIMIT 1", (agent_id,)).fetchone()
+            last = conn.execute(
+                "SELECT scores_per_criterion FROM qa_scores WHERE agent_id = ? ORDER BY reviewed_at DESC LIMIT 1",
+                (agent_id,),
+            ).fetchone()
             if last and last["scores_per_criterion"]:
                 try:
-                    result["criteria_breakdown"] = json.loads(last["scores_per_criterion"])
+                    result["criteria_breakdown"] = json.loads(
+                        last["scores_per_criterion"]
+                    )
                 except (json.JSONDecodeError, TypeError):
                     result["criteria_breakdown"] = last["scores_per_criterion"]
         finally:
@@ -456,29 +649,36 @@ async def get_agent_qa_summary_db(agent_id):
 
 # ── History Helpers ───────────────────────────────────────────────
 
+
 async def get_call_volume_history_db(tenant_id, days=90):
     """Returns [{date, hour, count}] for the last N days of call volume."""
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            rows = await pool.fetch("""
+            rows = await pool.fetch(
+                f"""
                 SELECT DATE(start_time) as date, EXTRACT(HOUR FROM start_time) as hour, COUNT(*) as count
                 FROM call_sessions
-                WHERE tenant_id = $1 AND start_time >= NOW() - INTERVAL '%s days'
+                WHERE tenant_id = $1 AND start_time >= NOW() - INTERVAL '{days} days'
                 GROUP BY DATE(start_time), EXTRACT(HOUR FROM start_time)
                 ORDER BY date, hour
-            """ % days, tenant_id)
+            """,
+                tenant_id,
+            )
             return [dict(r) for r in rows]
     else:
         conn = _get_sqlite_conn()
         try:
-            rows = conn.execute("""
+            rows = conn.execute(
+                """
                 SELECT DATE(start_time) as date, CAST(strftime('%%H', start_time) AS INTEGER) as hour, COUNT(*) as count
                 FROM call_sessions
                 WHERE tenant_id = ? AND start_time >= datetime('now', ?)
                 GROUP BY DATE(start_time), strftime('%%H', start_time)
                 ORDER BY date, hour
-            """, (tenant_id, f"-{days} days")).fetchall()
+            """,
+                (tenant_id, f"-{days} days"),
+            ).fetchall()
             return [dict(r) for r in rows]
         finally:
             conn.close()
@@ -489,22 +689,30 @@ async def get_agent_status_history_db(tenant_id, agent_id, date):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            rows = await pool.fetch("""
+            rows = await pool.fetch(
+                """
                 SELECT activity_type, status_before, status_after, created_at, duration_seconds
                 FROM agent_activity
                 WHERE tenant_id = $1 AND agent_id = $2 AND DATE(created_at) = $3
                 ORDER BY created_at ASC
-            """, tenant_id, agent_id, date)
+            """,
+                tenant_id,
+                agent_id,
+                date,
+            )
             return [dict(r) for r in rows]
     else:
         conn = _get_sqlite_conn()
         try:
-            rows = conn.execute("""
+            rows = conn.execute(
+                """
                 SELECT activity_type, status_before, status_after, created_at, duration_seconds
                 FROM agent_activity
                 WHERE tenant_id = ? AND agent_id = ? AND DATE(created_at) = ?
                 ORDER BY created_at ASC
-            """, (tenant_id, agent_id, date)).fetchall()
+            """,
+                (tenant_id, agent_id, date),
+            ).fetchall()
             return [dict(r) for r in rows]
         finally:
             conn.close()

@@ -55,10 +55,14 @@ def _ensure_dev_keys():
         encryption_algorithm=serialization.NoEncryption(),
     ).decode()
 
-    _public_key = key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    _public_key = (
+        key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
 
     logger.info("Auto-generated dev RSA key pair for JWT")
 
@@ -110,13 +114,12 @@ def create_access_token(
 ) -> str:
     """Create a JWT access token signed with RS256."""
     import uuid
+
     to_encode = data.copy()
     expire = datetime.now(UTC) + (expires_delta or timedelta(hours=24))
-    to_encode.update({
-        "exp": expire,
-        "iat": datetime.now(UTC),
-        "jti": str(uuid.uuid4())
-    })
+    to_encode.update(
+        {"exp": expire, "iat": datetime.now(UTC), "jti": str(uuid.uuid4())}
+    )
     return jwt.encode(to_encode, get_private_key(), algorithm=_algorithm)
 
 
@@ -154,14 +157,16 @@ def generate_dev_key_pair() -> dict:
         encryption_algorithm=serialization.NoEncryption(),
     ).decode()
 
-    public_pem = key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode()
+    public_pem = (
+        key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
 
     return {
         "private_key": private_pem,
         "public_key": public_pem,
     }
-
-

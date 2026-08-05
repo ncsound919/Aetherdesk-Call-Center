@@ -18,7 +18,7 @@ class RAGService:
         self,
         kb_dir: str = KB_DIR,
         chroma_dir: str = CHROMA_DIR,
-        embedding_model: str = EMBEDDING_MODEL
+        embedding_model: str = EMBEDDING_MODEL,
     ):
         self.kb_dir = kb_dir
         self.chroma_dir = chroma_dir
@@ -26,7 +26,9 @@ class RAGService:
         self._vectorstore: Chroma | None = None
         self._embeddings = None
         self._lock = asyncio.Lock()
-        self._query_cache: dict[str, list[dict[str, Any]]] = {} # Optimization: Cache recent results
+        self._query_cache: dict[
+            str, list[dict[str, Any]]
+        ] = {}  # Optimization: Cache recent results
 
     def _get_embeddings(self):
         if self._embeddings is None:
@@ -42,7 +44,7 @@ class RAGService:
         if os.path.exists(self.chroma_dir) and os.listdir(self.chroma_dir):
             self._vectorstore = Chroma(
                 persist_directory=self.chroma_dir,
-                embedding_function=self._get_embeddings()
+                embedding_function=self._get_embeddings(),
             )
         else:
             self._rebuild_index()
@@ -54,13 +56,13 @@ class RAGService:
         if os.path.exists(self.kb_dir):
             for filename in os.listdir(self.kb_dir):
                 filepath = os.path.join(self.kb_dir, filename)
-                if filename.endswith('.txt'):
-                    loader = TextLoader(filepath, encoding='utf-8')
+                if filename.endswith(".txt"):
+                    loader = TextLoader(filepath, encoding="utf-8")
                     documents.extend(loader.load())
-                elif filename.endswith('.csv'):
+                elif filename.endswith(".csv"):
                     loader = CSVLoader(filepath)
                     documents.extend(loader.load())
-                elif filename.endswith('.json'):
+                elif filename.endswith(".json"):
                     loader = JSONLoader(filepath)
                     documents.extend(loader.load())
 
@@ -68,28 +70,25 @@ class RAGService:
             documents = [
                 Document(
                     page_content="Billing FAQ: Invoice questions can be answered by providing your invoice ID. Refunds typically process within 5-7 business days.",
-                    metadata={"source": "default", "category": "billing"}
+                    metadata={"source": "default", "category": "billing"},
                 ),
                 Document(
                     page_content="Pharmacy FAQ: Prescription refills require your prescription number. Doctor callbacks are available for medication questions.",
-                    metadata={"source": "default", "category": "pharmacy"}
+                    metadata={"source": "default", "category": "pharmacy"},
                 ),
                 Document(
                     page_content="Order Status: To check order status, provide your order ID and the shipping ZIP code.",
-                    metadata={"source": "default", "category": "orders"}
+                    metadata={"source": "default", "category": "orders"},
                 ),
             ]
 
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50
-        )
+        splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=50)
         chunks = splitter.split_documents(documents)
 
         self._vectorstore = Chroma.from_documents(
             documents=chunks,
             embedding_function=self._get_embeddings(),
-            persist_directory=self.chroma_dir
+            persist_directory=self.chroma_dir,
         )
 
     async def query(self, query_text: str, k: int = 4) -> list[dict[str, Any]]:
@@ -103,16 +102,11 @@ class RAGService:
 
         loop = asyncio.get_running_loop()
         docs = await loop.run_in_executor(
-            None,
-            lambda: self._vectorstore.similarity_search(query_text, k=k)
+            None, lambda: self._vectorstore.similarity_search(query_text, k=k)
         )
 
         results = [
-            {
-                "content": doc.page_content,
-                "metadata": doc.metadata
-            }
-            for doc in docs
+            {"content": doc.page_content, "metadata": doc.metadata} for doc in docs
         ]
 
         # Simple cache eviction (max 100 entries)
@@ -122,31 +116,27 @@ class RAGService:
 
         return results
 
-    async def query_with_score(self, query_text: str, k: int = 4) -> list[dict[str, Any]]:
+    async def query_with_score(
+        self, query_text: str, k: int = 4
+    ) -> list[dict[str, Any]]:
         if self._vectorstore is None:
             await self.initialize()
 
         loop = asyncio.get_running_loop()
         docs_and_scores = await loop.run_in_executor(
             None,
-            lambda: self._vectorstore.similarity_search_with_score(query_text, k=k)
+            lambda: self._vectorstore.similarity_search_with_score(query_text, k=k),
         )
 
         return [
-            {
-                "content": doc.page_content,
-                "metadata": doc.metadata,
-                "score": score
-            }
+            {"content": doc.page_content, "metadata": doc.metadata, "score": score}
             for doc, score in docs_and_scores
         ]
 
     def rebuild_index(self):
         self._vectorstore = None
-        self._query_cache = {} # Optimization: Clear cache on rebuild
+        self._query_cache = {}  # Optimization: Clear cache on rebuild
         self._load_or_create_index()
 
 
 rag_service = RAGService()
-
-

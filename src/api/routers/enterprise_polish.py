@@ -11,6 +11,7 @@ router = APIRouter(prefix="/enterprise", tags=["enterprise"])
 
 # ── Failover Testing ──────────────────────────────────────────────
 
+
 @router.post("/failover/test")
 async def run_failover_test(
     tenant_id: str = Depends(verify_tenant_access),
@@ -42,6 +43,7 @@ async def get_failover_config(
 
 # ── Conversation Quality ──────────────────────────────────────────
 
+
 @router.post("/conversation-quality/score")
 async def score_conversation(
     transcript: str,
@@ -57,7 +59,9 @@ async def get_quality_scores(
     period: str = Query("30d"),
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    return await conversation_quality_service.get_quality_scores(tenant_id, agent_id, period)
+    return await conversation_quality_service.get_quality_scores(
+        tenant_id, agent_id, period
+    )
 
 
 @router.get("/conversation-quality/trends")
@@ -74,10 +78,13 @@ async def get_coaching_opportunities(
     period: str = Query("30d"),
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    return await conversation_quality_service.identify_coaching_opportunities(agent_id, period)
+    return await conversation_quality_service.identify_coaching_opportunities(
+        agent_id, period
+    )
 
 
 # ── API Versioning ────────────────────────────────────────────────
+
 
 @router.get("/api-versions")
 async def list_api_versions(
@@ -125,6 +132,7 @@ async def get_api_usage_stats(
 
 # ── Customer Self-Service Portal ──────────────────────────────────
 
+
 @router.get("/customer-portal/{customer_id}")
 async def get_customer_portal(
     customer_id: str,
@@ -140,7 +148,9 @@ async def submit_complaint(
     description: str = Query(...),
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    return await self_service_portal_service.submit_complaint(customer_id, subject, description)
+    return await self_service_portal_service.submit_complaint(
+        customer_id, subject, description
+    )
 
 
 @router.post("/customer-portal/callback")
@@ -150,7 +160,9 @@ async def schedule_callback(
     reason: str = Query(...),
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    return await self_service_portal_service.schedule_call_back(customer_id, preferred_time, reason)
+    return await self_service_portal_service.schedule_call_back(
+        customer_id, preferred_time, reason
+    )
 
 
 @router.put("/customer-portal/{customer_id}/preferences")
@@ -159,4 +171,6 @@ async def update_customer_preferences(
     preferences: dict,
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    return await self_service_portal_service.update_preferences(customer_id, preferences)
+    return await self_service_portal_service.update_preferences(
+        customer_id, preferences
+    )

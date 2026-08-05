@@ -25,12 +25,20 @@ async def record_metric(
     mos = data.mos
     if mos <= 0:
         mos = calculate_mos(data.latency_ms, data.jitter_ms, data.packet_loss_pct)
-    scoring = score_call_quality(mos, data.jitter_ms, data.packet_loss_pct, data.latency_ms)
+    scoring = score_call_quality(
+        mos, data.jitter_ms, data.packet_loss_pct, data.latency_ms
+    )
 
     result = await create_quality_metric_db(
-        tenant_id, data.call_id, data.agent_id,
-        mos, data.jitter_ms, data.packet_loss_pct,
-        data.latency_ms, data.rtt_samples, data.codec,
+        tenant_id,
+        data.call_id,
+        data.agent_id,
+        mos,
+        data.jitter_ms,
+        data.packet_loss_pct,
+        data.latency_ms,
+        data.rtt_samples,
+        data.codec,
         scoring["quality_rating"],
     )
     if not result:
@@ -49,8 +57,12 @@ async def list_metrics(
     end_date: str | None = Query(None),
 ):
     return await list_quality_metrics_db(
-        tenant_id, limit=limit, offset=offset,
-        min_mos=min_mos, start_date=start_date, end_date=end_date,
+        tenant_id,
+        limit=limit,
+        offset=offset,
+        min_mos=min_mos,
+        start_date=start_date,
+        end_date=end_date,
     )
 
 
@@ -60,7 +72,9 @@ async def get_summary(
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
 ):
-    return await get_quality_summary_db(tenant_id, start_date=start_date, end_date=end_date)
+    return await get_quality_summary_db(
+        tenant_id, start_date=start_date, end_date=end_date
+    )
 
 
 @router.get("/trends")
@@ -70,7 +84,9 @@ async def get_trends(
     end_date: str | None = Query(None),
     granularity: str = Query("hour", pattern=r"^(hour|day)$"),
 ):
-    return await get_quality_trends_db(tenant_id, start_date=start_date, end_date=end_date, granularity=granularity)
+    return await get_quality_trends_db(
+        tenant_id, start_date=start_date, end_date=end_date, granularity=granularity
+    )
 
 
 @router.get("/calls/{call_id}")

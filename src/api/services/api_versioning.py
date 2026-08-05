@@ -1,4 +1,3 @@
-
 import structlog
 
 logger = structlog.get_logger()
@@ -39,15 +38,30 @@ _versions = [
 ]
 
 _usage_stats: dict[str, dict] = {
-    "v1": {"total_requests": 12450, "active_tenants": 3, "last_request_at": "2025-03-15T10:00:00Z"},
-    "v2": {"total_requests": 89200, "active_tenants": 18, "last_request_at": "2025-06-20T14:30:00Z"},
-    "v3": {"total_requests": 456000, "active_tenants": 156, "last_request_at": "2025-06-24T08:15:00Z"},
-    "v4": {"total_requests": 12300, "active_tenants": 45, "last_request_at": "2025-06-24T08:20:00Z"},
+    "v1": {
+        "total_requests": 12450,
+        "active_tenants": 3,
+        "last_request_at": "2025-03-15T10:00:00Z",
+    },
+    "v2": {
+        "total_requests": 89200,
+        "active_tenants": 18,
+        "last_request_at": "2025-06-20T14:30:00Z",
+    },
+    "v3": {
+        "total_requests": 456000,
+        "active_tenants": 156,
+        "last_request_at": "2025-06-24T08:15:00Z",
+    },
+    "v4": {
+        "total_requests": 12300,
+        "active_tenants": 45,
+        "last_request_at": "2025-06-24T08:20:00Z",
+    },
 }
 
 
 class APIVersioningService:
-
     async def get_api_versions(self) -> list[dict]:
         return list(_versions)
 
@@ -56,8 +70,15 @@ class APIVersioningService:
             if v["version"] == version:
                 v["status"] = "deprecated"
                 v["sunset_date"] = sunset_date
-                logger.info("Version deprecated", version=version, sunset_date=sunset_date)
-                return {"success": True, "version": version, "status": "deprecated", "sunset_date": sunset_date}
+                logger.info(
+                    "Version deprecated", version=version, sunset_date=sunset_date
+                )
+                return {
+                    "success": True,
+                    "version": version,
+                    "status": "deprecated",
+                    "sunset_date": sunset_date,
+                }
         return {"success": False, "error": f"Version {version} not found"}
 
     async def get_migration_guide(self, old_version: str, new_version: str) -> dict:
@@ -69,7 +90,9 @@ class APIVersioningService:
             "to_version": new_version,
             "from_status": old["status"] if old else "unknown",
             "to_status": new["status"] if new else "unknown",
-            "migration_notes": new["migration_notes"] if new else "No migration guide available.",
+            "migration_notes": new["migration_notes"]
+            if new
+            else "No migration guide available.",
             "breaking_changes": _get_breaking_changes(old_version, new_version),
         }
 
@@ -85,9 +108,19 @@ class APIVersioningService:
         if not v:
             return {"valid": False, "version": version, "error": "Unknown version"}
         if v["status"] == "sunset":
-            return {"valid": False, "version": version, "status": "sunset", "error": "This version has been sunset"}
+            return {
+                "valid": False,
+                "version": version,
+                "status": "sunset",
+                "error": "This version has been sunset",
+            }
         if v["status"] == "deprecated":
-            return {"valid": True, "version": version, "status": "deprecated", "warning": "This version is deprecated"}
+            return {
+                "valid": True,
+                "version": version,
+                "status": "deprecated",
+                "warning": "This version is deprecated",
+            }
         return {"valid": True, "version": version, "status": "active"}
 
     async def get_usage_stats(self, version: str | None = None) -> dict:
@@ -98,12 +131,25 @@ class APIVersioningService:
 
 def _get_breaking_changes(old_version: str, new_version: str) -> list[str]:
     changes = {
-        ("v1", "v2"): ["Webhook payload format changed", "Authentication now requires Bearer token"],
-        ("v1", "v3"): ["Complete API redesign", "All endpoints moved to /api/v3/", "New authentication flow"],
-        ("v2", "v3"): ["Response format changed for call objects", "New required fields in agent creation"],
+        ("v1", "v2"): [
+            "Webhook payload format changed",
+            "Authentication now requires Bearer token",
+        ],
+        ("v1", "v3"): [
+            "Complete API redesign",
+            "All endpoints moved to /api/v3/",
+            "New authentication flow",
+        ],
+        ("v2", "v3"): [
+            "Response format changed for call objects",
+            "New required fields in agent creation",
+        ],
         ("v3", "v4"): ["Some deprecated endpoints removed", "Rate limiting introduced"],
     }
-    return changes.get((old_version, new_version), ["No breaking changes documented for this migration path"])
+    return changes.get(
+        (old_version, new_version),
+        ["No breaking changes documented for this migration path"],
+    )
 
 
 api_versioning_service = APIVersioningService()

@@ -31,10 +31,17 @@ async def create_tenant_endpoint(
 
     # Create in database
     db_tenant = await create_tenant_db(
-        name=tenant.name, slug=slug, email=tenant.email,
-        phone=tenant.phone, plan_id=tenant.plan_id,
-        settings={"maxConcurrentCalls": 10, "recordingRetention": 365,
-                  "language": "en-US", "timezone": "America/New_York"},
+        name=tenant.name,
+        slug=slug,
+        email=tenant.email,
+        phone=tenant.phone,
+        plan_id=tenant.plan_id,
+        settings={
+            "maxConcurrentCalls": 10,
+            "recordingRetention": 365,
+            "language": "en-US",
+            "timezone": "America/New_York",
+        },
         gdpr_consent=tenant.gdpr_consent,
     )
     actual_tenant_id = db_tenant["id"] if db_tenant else str(uuid.uuid4())
@@ -43,23 +50,32 @@ async def create_tenant_endpoint(
     fonster_client = getattr(request.app.state, "fonster_client", None)
     if fonster_client:
         try:
-            await fonster_client.create_application({
-                "name": f"{tenant.name} Voice App",
-                "type": "EXTERNAL",
-                "endpoint": "tcp://aetherdesk-voice:50061",
-                "speechToText": {
-                    "productRef": "stt.deepgram",
-                    "config": {"model": "nova-2", "languageCode": "en-US", "enablePunctuations": True}
-                },
-                "textToSpeech": {
-                    "productRef": "tts.chatterbox",
-                    "config": {"voice": "default", "emotion": "neutral"}
-                },
-                "intelligence": {
-                    "productRef": "llm.groq",
-                    "config": {"model": "llama-3.1-70b-versatile", "temperature": 0.7}
-                },
-            })
+            await fonster_client.create_application(
+                {
+                    "name": f"{tenant.name} Voice App",
+                    "type": "EXTERNAL",
+                    "endpoint": "tcp://aetherdesk-voice:50061",
+                    "speechToText": {
+                        "productRef": "stt.deepgram",
+                        "config": {
+                            "model": "nova-2",
+                            "languageCode": "en-US",
+                            "enablePunctuations": True,
+                        },
+                    },
+                    "textToSpeech": {
+                        "productRef": "tts.chatterbox",
+                        "config": {"voice": "default", "emotion": "neutral"},
+                    },
+                    "intelligence": {
+                        "productRef": "llm.groq",
+                        "config": {
+                            "model": "llama-3.1-70b-versatile",
+                            "temperature": 0.7,
+                        },
+                    },
+                }
+            )
         except Exception as e:
             logger.warning(f"Fonster app creation failed (non-fatal): {e}")
 
@@ -69,7 +85,9 @@ async def create_tenant_endpoint(
         pool = await get_pg_pool()
         if pool:
             try:
-                plan = await pool.fetchrow("SELECT name FROM plans WHERE id = $1", db_tenant["plan_id"])
+                plan = await pool.fetchrow(
+                    "SELECT name FROM plans WHERE id = $1", db_tenant["plan_id"]
+                )
                 if plan:
                     plan_name = plan["name"]
             except Exception:

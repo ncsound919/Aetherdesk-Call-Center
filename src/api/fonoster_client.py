@@ -13,7 +13,9 @@ class FonosterHTTPClient:
     Voice processing (SIP/RTP) stays in Node.js; Python handles orchestration.
     """
 
-    def __init__(self, base_url: str = None, api_key: str = None, api_secret: str = None):
+    def __init__(
+        self, base_url: str = None, api_key: str = None, api_secret: str = None
+    ):
         self.base_url = base_url or "http://aetherdesk-fonoster:50062"
         self.api_key = api_key
         self.api_secret = api_secret
@@ -42,7 +44,9 @@ class FonosterHTTPClient:
             logger.info(f"Fonoster app created: {data.get('ref', 'unknown')}")
             return data
         except httpx.HTTPStatusError as e:
-            logger.error(f"Fonoster create app error {e.response.status_code}: {e.response.text}")
+            logger.error(
+                f"Fonoster create app error {e.response.status_code}: {e.response.text}"
+            )
             # Fallback mock for dev without Fonoster running
             return {
                 "ref": f"app-{uuid.uuid4().hex[:8]}",
@@ -130,11 +134,11 @@ class FonosterHTTPClient:
         """Start or stop recording a call."""
         return await self.send_command(application_ref, f"record {action}")
 
-    async def say_text(self, application_ref: str, text: str, voice: str = "alice") -> dict:
+    async def say_text(
+        self, application_ref: str, text: str, voice: str = "alice"
+    ) -> dict:
         """Speak text to the caller via TTS."""
-        return await self.send_command(
-            application_ref, "say", text=text, voice=voice
-        )
+        return await self.send_command(application_ref, "say", text=text, voice=voice)
 
     async def gather_speech(
         self,
@@ -163,7 +167,9 @@ class FonosterHTTPClient:
 
     # ── Events / Webhooks ─────────────────────────────────────────
 
-    async def register_webhook(self, application_ref: str, url: str, events: list[str]) -> dict:
+    async def register_webhook(
+        self, application_ref: str, url: str, events: list[str]
+    ) -> dict:
         """Register a webhook URL for call events."""
         try:
             resp = await self.client.post(

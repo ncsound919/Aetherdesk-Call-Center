@@ -5,7 +5,11 @@ from pathlib import Path
 
 # Resolve log directory relative to the project root (not CWD) so that
 # the path is predictable regardless of where the process is started.
-_LOG_DIR = Path(os.getenv("APP_LOG_DIR", str(Path(__file__).resolve().parent.parent.parent / "logs")))
+_LOG_DIR = Path(
+    os.getenv(
+        "APP_LOG_DIR", str(Path(__file__).resolve().parent.parent.parent / "logs")
+    )
+)
 _LOG_DIR.mkdir(parents=True, exist_ok=True)
 
 _LOG_FILE = _LOG_DIR / "app.log"

@@ -39,9 +39,21 @@ PHI_PATHS = {
 
 # Fields in request/response bodies that contain PHI
 PHI_FIELDS = {
-    "caller_number", "caller_name", "called_number", "phone", "email",
-    "name", "address", "date_of_birth", "ssn", "medical_record_number",
-    "patient_id", "prescription", "diagnosis", "transcript", "full_text",
+    "caller_number",
+    "caller_name",
+    "called_number",
+    "phone",
+    "email",
+    "name",
+    "address",
+    "date_of_birth",
+    "ssn",
+    "medical_record_number",
+    "patient_id",
+    "prescription",
+    "diagnosis",
+    "transcript",
+    "full_text",
     "ingress_number",
 }
 
@@ -57,7 +69,9 @@ def _redact_phi(data: dict) -> dict:
         elif isinstance(value, dict):
             redacted[key] = _redact_phi(value)
         elif isinstance(value, list):
-            redacted[key] = [_redact_phi(item) if isinstance(item, dict) else item for item in value]
+            redacted[key] = [
+                _redact_phi(item) if isinstance(item, dict) else item for item in value
+            ]
         else:
             redacted[key] = value
     return redacted
@@ -112,7 +126,9 @@ class AuditMiddleware(BaseHTTPMiddleware):
         response_body = None
         if is_phi and response.status_code < 400:
             try:
-                response_body = json.loads(response.body.decode()) if response.body else None
+                response_body = (
+                    json.loads(response.body.decode()) if response.body else None
+                )
                 if response_body:
                     response_body = _redact_phi(response_body)
             except Exception:
@@ -137,8 +153,10 @@ class AuditMiddleware(BaseHTTPMiddleware):
                     import asyncio
 
                     from api.services.database import get_pg_pool
+
                     pool = await get_pg_pool()
                     if pool:
+
                         async def _log_async():
                             try:
                                 await pool.execute(
@@ -146,33 +164,53 @@ class AuditMiddleware(BaseHTTPMiddleware):
                                        (tenant_id, user_id, action, resource_type, resource_id,
                                         old_values, new_values, ip_address)
                                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
-                                    tenant_id, user_id, action, resource_type, request_id,
-                                    "{}", json.dumps(new_values),
-                                    request.client.host if request.client else "0.0.0.0"  # nosec B104 — fallback IP for audit log
+                                    tenant_id,
+                                    user_id,
+                                    action,
+                                    resource_type,
+                                    request_id,
+                                    "{}",
+                                    json.dumps(new_values),
+                                    request.client.host
+                                    if request.client
+                                    else "0.0.0.0",  # nosec B104 — fallback IP for audit log
                                 )
                             except Exception as log_err:
-                                logger.error("async_audit_log_failed", error=str(log_err))
+                                logger.error(
+                                    "async_audit_log_failed", error=str(log_err)
+                                )
+
                         task = asyncio.create_task(_log_async())
                         # Store reference to prevent GC of pending task
-                        if not hasattr(request.app.state, '_background_tasks'):
+                        if not hasattr(request.app.state, "_background_tasks"):
                             request.app.state._background_tasks = set()
                         request.app.state._background_tasks.add(task)
-                        task.add_done_callback(request.app.state._background_tasks.discard)
+                        task.add_done_callback(
+                            request.app.state._background_tasks.discard
+                        )
                 else:
                     # Synchronous logging for SQLite
                     import datetime as dt
 
                     from api.services.database import _get_sqlite_conn
+
                     conn = _get_sqlite_conn()
                     conn.execute(
                         """INSERT INTO audit_log
                            (tenant_id, user_id, action, resource_type, resource_id,
                             old_values, new_values, ip_address, created_at)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                        (tenant_id, user_id, action, resource_type, str(request_id),
-                         "{}", json.dumps(new_values),
-                         request.client.host if request.client else "0.0.0.0",  # nosec B104 — fallback IP for audit log
-                         dt.datetime.now(dt.UTC).isoformat())
+                        (
+                            tenant_id,
+                            user_id,
+                            action,
+                            resource_type,
+                            str(request_id),
+                            "{}",
+                            json.dumps(new_values),
+                            request.client.host if request.client else "0.0.0.0",  # nosec B104 — fallback IP for audit log
+                            dt.datetime.now(dt.UTC).isoformat(),
+                        ),
                     )
                     conn.commit()
                     conn.close()

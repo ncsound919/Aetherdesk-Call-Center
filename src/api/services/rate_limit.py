@@ -12,7 +12,12 @@ WINDOW_SECONDS = 60
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    def __init__(self, app=None, max_connections: int = MAX_CONNECTIONS, window: int = WINDOW_SECONDS):
+    def __init__(
+        self,
+        app=None,
+        max_connections: int = MAX_CONNECTIONS,
+        window: int = WINDOW_SECONDS,
+    ):
         super().__init__(app)
         self.max_connections = max_connections
         self.window = window
@@ -27,6 +32,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return None
         try:
             import redis.asyncio as aioredis
+
             self._redis = aioredis.from_url(redis_url, decode_responses=True)
             return self._redis
         except Exception:
@@ -64,13 +70,16 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     def _clean_old_requests(self, key: str):
         now = time.time()
         self.requests[key] = [
-            ts for ts in self.requests.get(key, [])
-            if now - ts < self.window
+            ts for ts in self.requests.get(key, []) if now - ts < self.window
         ]
         if not self.requests[key]:
             self.requests.pop(key, None)
         if len(self.requests) > 10000:
-            stale_keys = [k for k, v in self.requests.items() if not v or all(now - ts >= self.window for ts in v)]
+            stale_keys = [
+                k
+                for k, v in self.requests.items()
+                if not v or all(now - ts >= self.window for ts in v)
+            ]
             for k in stale_keys:
                 self.requests.pop(k, None)
 
@@ -81,7 +90,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return request.client.host if request.client else "unknown"
 
     async def dispatch(self, request: Request, call_next):
-        if any(skip in request.url.path for skip in ["/static/", "/docs", "/redoc", "/metrics", "/health"]):
+        if any(
+            skip in request.url.path
+            for skip in ["/static/", "/docs", "/redoc", "/metrics", "/health"]
+        ):
             return await call_next(request)
 
         client_ip = self._get_client_ip(request)
@@ -139,18 +151,14 @@ class VoiceConnectionTracker:
 
     def _cleanup(self):
         now = time.time()
-        expired = [
-            cid for cid, ts in self.active_calls.items()
-            if now - ts > 3600
-        ]
+        expired = [cid for cid, ts in self.active_calls.items() if now - ts > 3600]
         for cid in expired:
             del self.active_calls[cid]
 
 
 rate_limiter = RateLimitMiddleware()
 
+
 def reset_rate_limiter():
     """Clear all tracked requests (used in testing)."""
     rate_limiter.requests.clear()
-
-

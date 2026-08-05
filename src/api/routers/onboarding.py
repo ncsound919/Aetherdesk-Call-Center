@@ -27,7 +27,7 @@ class ScriptSaveRequest(BaseModel):
 @router.post("/business-info")
 async def save_business_info(
     info: BusinessInfoRequest,
-    credentials=None  # Will be JWT auth
+    credentials=None,  # Will be JWT auth
 ):
     """Step 1: Save business info and create tenant."""
     from api.services.db_tenants import (
@@ -48,7 +48,7 @@ async def save_business_info(
         email=user.get("email", ""),
         slug=info.company_name.lower().replace(" ", "-").replace("'", "")[:50],
         phone=info.phone_number,
-        settings={"industry": info.industry, "timezone": info.timezone}
+        settings={"industry": info.industry, "timezone": info.timezone},
     )
 
     # Update onboarding step
@@ -69,7 +69,7 @@ async def import_leads(
     user_id = "USER-ADMIN-001"
 
     # Validate file type
-    if not file.filename.endswith(('.csv', '.xlsx', '.xls')):
+    if not file.filename.endswith((".csv", ".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="File must be CSV or Excel")
 
     # Read file content
@@ -78,7 +78,7 @@ async def import_leads(
         raise HTTPException(status_code=400, detail="File too large (max 10MB)")
 
     # Parse CSV
-    text = content.decode('utf-8')
+    text = content.decode("utf-8")
     reader = csv.DictReader(io.StringIO(text))
     rows = list(reader)
 
@@ -106,12 +106,17 @@ async def import_leads(
 
     await update_user_onboarding_db(user_id, step=2)
 
-    logger.info("onboarding_leads_imported", user_id=user_id, count=len(leads), errors=len(errors))
+    logger.info(
+        "onboarding_leads_imported",
+        user_id=user_id,
+        count=len(leads),
+        errors=len(errors),
+    )
     return {
         "message": f"Imported {len(leads)} leads",
         "total": len(leads),
         "errors": errors,
-        "preview": leads[:5]
+        "preview": leads[:5],
     }
 
 
@@ -131,7 +136,7 @@ async def save_script(script: ScriptSaveRequest):
         tenant_id="TENANT-001",
         name=script.name,
         prompt=script.content,
-        parameters=json.dumps({"variables": script.variables})
+        parameters=json.dumps({"variables": script.variables}),
     )
 
     await update_user_onboarding_db(user_id, step=3)
@@ -164,5 +169,5 @@ async def get_onboarding_status():
 
     return {
         "completed": user.get("onboarding_completed", False),
-        "current_step": user.get("onboarding_step", 0)
+        "current_step": user.get("onboarding_step", 0),
     }

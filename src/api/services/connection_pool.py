@@ -6,6 +6,7 @@ import httpx
 
 class HTTPClientPool:
     """Connection pool for HTTP clients"""
+
     _instance = None
     _client: httpx.AsyncClient | None = None
     _lock = asyncio.Lock()
@@ -24,10 +25,10 @@ class HTTPClientPool:
                         limits=httpx.Limits(
                             max_keepalive_connections=20,
                             max_connections=100,
-                            keepalive_expiry=30.0
+                            keepalive_expiry=30.0,
                         ),
                         timeout=httpx.Timeout(60.0, connect=10.0),
-                        follow_redirects=True
+                        follow_redirects=True,
                     )
         return self._client
 
@@ -37,8 +38,10 @@ class HTTPClientPool:
             await self._client.aclose()
             self._client = None
 
+
 # Global instance
 http_pool = HTTPClientPool()
+
 
 @asynccontextmanager
 async def get_http_client():
@@ -55,15 +58,18 @@ async def get_pool_stats() -> dict:
     """Get database connection pool statistics."""
     try:
         from api.services.db_pool import get_pg_pool
+
         pool = await get_pg_pool()
-        if pool and hasattr(pool, '_pool'):
+        if pool and hasattr(pool, "_pool"):
             return {
-                "size": pool._pool.get_size() if hasattr(pool._pool, 'get_size') else -1,
-                "free": pool._pool.get_idle_size() if hasattr(pool._pool, 'get_idle_size') else -1,
+                "size": pool._pool.get_size()
+                if hasattr(pool._pool, "get_size")
+                else -1,
+                "free": pool._pool.get_idle_size()
+                if hasattr(pool._pool, "get_idle_size")
+                else -1,
                 "used": -1,  # asyncpg doesn't expose this directly
             }
     except Exception:
         pass
     return {"size": 0, "free": 0, "used": 0}
-
-

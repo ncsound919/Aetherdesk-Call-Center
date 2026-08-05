@@ -19,7 +19,6 @@ from fastapi.responses import JSONResponse
 from api.services.actions import Actions
 from api.services.asr import asr_service
 from api.services.auth import verify_api_key
-from api.services.validators import validators
 from api.services.call_session import (
     VoiceSession,
     get_or_create_session,
@@ -32,6 +31,7 @@ from api.services.database import (
 from api.services.intent_classifier import classifier
 from api.services.orchestrator import Orchestrator
 from api.services.tts import tts_service
+from api.services.validators import validators
 
 logger = structlog.get_logger()
 
@@ -44,7 +44,9 @@ router = APIRouter(prefix="/voice", tags=["voice"])
 # The event format differs from Twilio: use Fonster's session-based model.
 
 
-@router.api_route("/incoming", methods=["GET", "POST"], dependencies=[Depends(verify_api_key)])
+@router.api_route(
+    "/incoming", methods=["GET", "POST"], dependencies=[Depends(verify_api_key)]
+)
 async def handle_incoming_call(request: Request):
     """
     Handle incoming calls from Fonster Voice Server.
@@ -66,9 +68,18 @@ async def handle_incoming_call(request: Request):
     profile_id = data.get("profileId") or data.get("profile_id", "PROF-001")
 
     if tenant_id and not validators.validate_uuid(tenant_id):
-        raise HTTPException(status_code=400, detail=f"Invalid tenant_id format: expected UUID, got '{tenant_id}'")
-    if profile_id and not (validators.validate_uuid(profile_id) or (len(profile_id) <= 64 and profile_id.startswith("PROF-"))):
-        raise HTTPException(status_code=400, detail=f"Invalid profile_id format: expected UUID or PROF- prefix, got '{profile_id}'")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid tenant_id format: expected UUID, got '{tenant_id}'",
+        )
+    if profile_id and not (
+        validators.validate_uuid(profile_id)
+        or (len(profile_id) <= 64 and profile_id.startswith("PROF-"))
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid profile_id format: expected UUID or PROF- prefix, got '{profile_id}'",
+        )
 
     # Create call session in database
     call_sid = session_ref
@@ -116,7 +127,14 @@ async def classify_transcript(request: dict):
 
 async def _handle_media_start(
     websocket: WebSocket, data: dict
-) -> tuple[str | None, str | None, str | None, str | None, VoiceSession | None, Orchestrator | None]:
+) -> tuple[
+    str | None,
+    str | None,
+    str | None,
+    str | None,
+    VoiceSession | None,
+    Orchestrator | None,
+]:
     start = data.get("start", {})
     stream_sid = start.get("streamSid")
     call_sid = start.get("callSid") or str(uuid.uuid4())
@@ -133,11 +151,14 @@ async def _handle_media_start(
     )
 
     from api.routers.realtime import manager
+
     manager.register_voice_ws(call_sid, websocket, stream_sid)
 
     session_id = f"call_{call_sid}"
     session = get_or_create_session(
-        websocket.app, session_id, call_sid,
+        websocket.app,
+        session_id,
+        call_sid,
         profile_id=profile_id,
         tenant_id=tenant_id,
     )
@@ -148,12 +169,14 @@ async def _handle_media_start(
 
     greeting = "Hello. How can I help you today?"
     async for chunk in session.speak_stream(greeting):
-        await websocket.send_json({
-            "event": "media",
-            "media": {
-                "payload": base64.b64encode(chunk).decode("utf-8"),
-            },
-        })
+        await websocket.send_json(
+            {
+                "event": "media",
+                "media": {
+                    "payload": base64.b64encode(chunk).decode("utf-8"),
+                },
+            }
+        )
 
     return stream_sid, call_sid, tenant_id, session_id, session, orchestrator
 
@@ -175,7 +198,8 @@ async def _handle_media_chunk(
 
     if payload:
         session = get_or_create_session(
-            websocket.app, session_id,
+            websocket.app,
+            session_id,
             call_sid or "unknown",
             profile_id=session.profile_id if session else "PROF-001",
             tenant_id=session.tenant_id if session else tenant_id,
@@ -194,7 +218,12 @@ async def _handle_media_chunk(
                 try:
                     from api.services.queue import QueueManager
 
-                    qm = QueueManager(websocket.app.state.redis if hasattr(websocket.app, "state") and hasattr(websocket.app.state, "redis") else None)
+                    qm = QueueManager(
+                        websocket.app.state.redis
+                        if hasattr(websocket.app, "state")
+                        and hasattr(websocket.app.state, "redis")
+                        else None
+                    )
                     takeover = qm.session_get(f"takeover_{call_sid}")
                     if takeover:
                         # Human is speaking — do not run the AI.
@@ -207,20 +236,30 @@ async def _handle_media_chunk(
                         if agent_text:
                             qm.session_delete(f"call_{call_sid}")
                     if agent_text:
-                        logger.info("speaking_agent_message", call_sid=call_sid, text=agent_text[:80])
+                        logger.info(
+                            "speaking_agent_message",
+                            call_sid=call_sid,
+                            text=agent_text[:80],
+                        )
                         async for chunk in session.speak_stream(agent_text):
-                            await websocket.send_json({
-                                "event": "media",
-                                "media": {
-                                    "payload": base64.b64encode(chunk).decode("utf-8"),
-                                },
-                            })
+                            await websocket.send_json(
+                                {
+                                    "event": "media",
+                                    "media": {
+                                        "payload": base64.b64encode(chunk).decode(
+                                            "utf-8"
+                                        ),
+                                    },
+                                }
+                            )
                 except Exception as e:
                     logger.warning("takeover_check_error", error=str(e))
 
             history = session.transcript[:-1]
             response = await orchestrator.step(
-                session.agent_state, history, text,
+                session.agent_state,
+                history,
+                text,
                 tenant_id=session.tenant_id,
                 profile_id=session.profile_id,
             )
@@ -231,18 +270,22 @@ async def _handle_media_chunk(
                     sentiment=response.sentiment,
                     latency_ms=response.latency_ms,
                 ):
-                    await websocket.send_json({
-                        "event": "media",
-                        "media": {
-                            "payload": base64.b64encode(chunk).decode("utf-8"),
-                        },
-                    })
+                    await websocket.send_json(
+                        {
+                            "event": "media",
+                            "media": {
+                                "payload": base64.b64encode(chunk).decode("utf-8"),
+                            },
+                        }
+                    )
 
             if response.needs_agent:
-                await websocket.send_json({
-                    "event": "mark",
-                    "mark": {"name": "handoff"},
-                })
+                await websocket.send_json(
+                    {
+                        "event": "mark",
+                        "mark": {"name": "handoff"},
+                    }
+                )
 
 
 async def _handle_media_stop(
@@ -255,6 +298,7 @@ async def _handle_media_stop(
         remove_session(websocket.app, session_id)
     if call_sid:
         from api.routers.realtime import cleanup_call_transcripts, manager
+
         manager.unregister_voice_ws(call_sid)
         cleanup_call_transcripts(call_sid)
 
@@ -266,6 +310,7 @@ async def handle_media_stream(websocket: WebSocket):
     Handles audio chunks from Fonster/FreeSWITCH for AI processing.
     """
     from api.services.auth import verify_websocket_token
+
     token = websocket.query_params.get("token")
     if not token:
         await websocket.close(code=4001, reason="Missing authentication token")
@@ -291,14 +336,24 @@ async def handle_media_stream(websocket: WebSocket):
                 logger.info("media_stream_connected", data=data)
 
             elif event == "start":
-                _, call_sid, tenant_id, session_id, session, orchestrator = (
-                    await _handle_media_start(websocket, data)
-                )
+                (
+                    _,
+                    call_sid,
+                    tenant_id,
+                    session_id,
+                    session,
+                    orchestrator,
+                ) = await _handle_media_start(websocket, data)
 
             elif event == "media":
                 await _handle_media_chunk(
-                    websocket, data, session, session_id,
-                    call_sid, orchestrator, tenant_id,
+                    websocket,
+                    data,
+                    session,
+                    session_id,
+                    call_sid,
+                    orchestrator,
+                    tenant_id,
                 )
 
             elif event == "stop":
@@ -317,6 +372,7 @@ async def handle_media_stream(websocket: WebSocket):
 # =============================================================================
 # Transcription & Synthesis Endpoints
 # =============================================================================
+
 
 @router.post("/transcribe", dependencies=[Depends(verify_api_key)])
 async def transcribe_audio(request: Request):
@@ -357,6 +413,7 @@ async def trigger_outbound_call(request: dict):
         raise HTTPException(status_code=400, detail="Missing to_phone")
 
     from api.main import fonster_client as voice_client
+
     if not voice_client:
         raise HTTPException(status_code=503, detail="Voice client not available")
 

@@ -11,33 +11,77 @@ logger = structlog.get_logger()
 
 # ── Surveys ──────────────────────────────────────────────────────
 
-async def create_survey_db(tenant_id, call_id=None, customer_id=None, rating=5, feedback=None, channel="voice", responded=1):
+
+async def create_survey_db(
+    tenant_id,
+    call_id=None,
+    customer_id=None,
+    rating=5,
+    feedback=None,
+    channel="voice",
+    responded=1,
+):
     survey_id = str(uuid.uuid4())
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO csat_surveys (id, tenant_id, call_id, customer_id, rating, feedback, channel, responded, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-            """, survey_id, tenant_id, call_id, customer_id, rating, feedback, channel, responded)
-            row = await pool.fetchrow("SELECT * FROM csat_surveys WHERE id = $1", survey_id)
+            """,
+                survey_id,
+                tenant_id,
+                call_id,
+                customer_id,
+                rating,
+                feedback,
+                channel,
+                responded,
+            )
+            row = await pool.fetchrow(
+                "SELECT * FROM csat_surveys WHERE id = $1", survey_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
             now = datetime.now(UTC).isoformat()
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO csat_surveys (id, tenant_id, call_id, customer_id, rating, feedback, channel, responded, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (survey_id, tenant_id, call_id, customer_id, rating, feedback, channel, responded, now))
+            """,
+                (
+                    survey_id,
+                    tenant_id,
+                    call_id,
+                    customer_id,
+                    rating,
+                    feedback,
+                    channel,
+                    responded,
+                    now,
+                ),
+            )
             conn.commit()
-            row = conn.execute("SELECT * FROM csat_surveys WHERE id = ?", (survey_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM csat_surveys WHERE id = ?", (survey_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
 
 
-async def list_surveys_db(tenant_id, limit=50, offset=0, min_rating=None, channel=None, start_date=None, end_date=None):
+async def list_surveys_db(
+    tenant_id,
+    limit=50,
+    offset=0,
+    min_rating=None,
+    channel=None,
+    start_date=None,
+    end_date=None,
+):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
@@ -105,7 +149,10 @@ async def get_csat_score_db(tenant_id, start_date=None, end_date=None):
                 idx += 1
             row = await pool.fetchrow(query, *params)
             if row:
-                return {"avg_rating": float(row["avg_rating"]), "total_surveys": row["total"]}
+                return {
+                    "avg_rating": float(row["avg_rating"]),
+                    "total_surveys": row["total"],
+                }
             return {"avg_rating": 0, "total_surveys": 0}
     else:
         conn = _get_sqlite_conn()
@@ -120,7 +167,10 @@ async def get_csat_score_db(tenant_id, start_date=None, end_date=None):
                 params.append(end_date)
             row = conn.execute(query, params).fetchone()
             if row:
-                return {"avg_rating": float(row["avg_rating"]), "total_surveys": row["total"]}
+                return {
+                    "avg_rating": float(row["avg_rating"]),
+                    "total_surveys": row["total"],
+                }
             return {"avg_rating": 0, "total_surveys": 0}
         finally:
             conn.close()
@@ -144,7 +194,11 @@ async def get_response_rate_db(tenant_id, start_date=None, end_date=None):
             row = await pool.fetchrow(query, *params)
             if row and row["total"] > 0:
                 rate = float(row["responded"] or 0) / float(row["total"])
-                return {"response_rate": round(rate * 100, 2), "total_sent": row["total"], "total_responded": row["responded"] or 0}
+                return {
+                    "response_rate": round(rate * 100, 2),
+                    "total_sent": row["total"],
+                    "total_responded": row["responded"] or 0,
+                }
             return {"response_rate": 0, "total_sent": 0, "total_responded": 0}
     else:
         conn = _get_sqlite_conn()
@@ -160,7 +214,11 @@ async def get_response_rate_db(tenant_id, start_date=None, end_date=None):
             row = conn.execute(query, params).fetchone()
             if row and row["total"] > 0:
                 rate = float(row["responded"] or 0) / float(row["total"])
-                return {"response_rate": round(rate * 100, 2), "total_sent": row["total"], "total_responded": row["responded"] or 0}
+                return {
+                    "response_rate": round(rate * 100, 2),
+                    "total_sent": row["total"],
+                    "total_responded": row["responded"] or 0,
+                }
             return {"response_rate": 0, "total_sent": 0, "total_responded": 0}
         finally:
             conn.close()
@@ -201,7 +259,13 @@ async def get_nps_score_db(tenant_id, start_date=None, end_date=None):
                     "detractors": row["detractors"] or 0,
                     "total": row["total"],
                 }
-            return {"nps": 0, "promoters": 0, "passives": 0, "detractors": 0, "total": 0}
+            return {
+                "nps": 0,
+                "promoters": 0,
+                "passives": 0,
+                "detractors": 0,
+                "total": 0,
+            }
     else:
         conn = _get_sqlite_conn()
         try:
@@ -233,12 +297,20 @@ async def get_nps_score_db(tenant_id, start_date=None, end_date=None):
                     "detractors": row["detractors"] or 0,
                     "total": row["total"],
                 }
-            return {"nps": 0, "promoters": 0, "passives": 0, "detractors": 0, "total": 0}
+            return {
+                "nps": 0,
+                "promoters": 0,
+                "passives": 0,
+                "detractors": 0,
+                "total": 0,
+            }
         finally:
             conn.close()
 
 
-async def get_sentiment_trends_db(tenant_id, start_date=None, end_date=None, granularity="day"):
+async def get_sentiment_trends_db(
+    tenant_id, start_date=None, end_date=None, granularity="day"
+):
     if granularity == "hour":
         pg_trunc = "date_trunc('hour', created_at)"
     else:
@@ -292,36 +364,51 @@ async def get_sentiment_trends_db(tenant_id, start_date=None, end_date=None, gra
 
 
 async def get_customer_360_db(tenant_id, customer_id):
-    result = {"customer_id": customer_id, "interactions": [], "surveys": [], "summary": {}}
+    result = {
+        "customer_id": customer_id,
+        "interactions": [],
+        "surveys": [],
+        "summary": {},
+    }
 
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
             interactions = await pool.fetch(
                 "SELECT * FROM customer_interactions WHERE tenant_id = $1 AND customer_id = $2 ORDER BY created_at DESC LIMIT 50",
-                tenant_id, customer_id
+                tenant_id,
+                customer_id,
             )
             result["interactions"] = [dict(r) for r in interactions]
 
             surveys = await pool.fetch(
                 "SELECT * FROM csat_surveys WHERE tenant_id = $1 AND customer_id = $2 ORDER BY created_at DESC LIMIT 50",
-                tenant_id, customer_id
+                tenant_id,
+                customer_id,
             )
             result["surveys"] = [dict(r) for r in surveys]
 
-            summary = await pool.fetchrow("""
+            summary = await pool.fetchrow(
+                """
                 SELECT COUNT(DISTINCT interaction_type) as interaction_types,
                        COUNT(*) as total_interactions,
                        AVG(CASE WHEN sentiment = 'positive' THEN 1.0 WHEN sentiment = 'neutral' THEN 0.5 ELSE 0.0 END) as sentiment_avg
                 FROM customer_interactions WHERE tenant_id = $1 AND customer_id = $2
-            """, tenant_id, customer_id)
+            """,
+                tenant_id,
+                customer_id,
+            )
             if summary:
                 result["summary"] = dict(summary)
 
-            csat_summary = await pool.fetchrow("""
+            csat_summary = await pool.fetchrow(
+                """
                 SELECT COALESCE(AVG(rating), 0) as avg_csat, COUNT(*) as survey_count
                 FROM csat_surveys WHERE tenant_id = $1 AND customer_id = $2
-            """, tenant_id, customer_id)
+            """,
+                tenant_id,
+                customer_id,
+            )
             if csat_summary:
                 result["summary"]["avg_csat"] = float(csat_summary["avg_csat"])
                 result["summary"]["survey_count"] = csat_summary["survey_count"]
@@ -330,29 +417,35 @@ async def get_customer_360_db(tenant_id, customer_id):
         try:
             interactions = conn.execute(
                 "SELECT * FROM customer_interactions WHERE tenant_id = ? AND customer_id = ? ORDER BY created_at DESC LIMIT 50",
-                (tenant_id, customer_id)
+                (tenant_id, customer_id),
             ).fetchall()
             result["interactions"] = [dict(r) for r in interactions]
 
             surveys = conn.execute(
                 "SELECT * FROM csat_surveys WHERE tenant_id = ? AND customer_id = ? ORDER BY created_at DESC LIMIT 50",
-                (tenant_id, customer_id)
+                (tenant_id, customer_id),
             ).fetchall()
             result["surveys"] = [dict(r) for r in surveys]
 
-            summary = conn.execute("""
+            summary = conn.execute(
+                """
                 SELECT COUNT(DISTINCT interaction_type) as interaction_types,
                        COUNT(*) as total_interactions,
                        AVG(CASE WHEN sentiment = 'positive' THEN 1.0 WHEN sentiment = 'neutral' THEN 0.5 ELSE 0.0 END) as sentiment_avg
                 FROM customer_interactions WHERE tenant_id = ? AND customer_id = ?
-            """, (tenant_id, customer_id)).fetchone()
+            """,
+                (tenant_id, customer_id),
+            ).fetchone()
             if summary:
                 result["summary"] = dict(summary)
 
-            csat_summary = conn.execute("""
+            csat_summary = conn.execute(
+                """
                 SELECT COALESCE(AVG(rating), 0) as avg_csat, COUNT(*) as survey_count
                 FROM csat_surveys WHERE tenant_id = ? AND customer_id = ?
-            """, (tenant_id, customer_id)).fetchone()
+            """,
+                (tenant_id, customer_id),
+            ).fetchone()
             if csat_summary:
                 result["summary"]["avg_csat"] = float(csat_summary["avg_csat"])
                 result["summary"]["survey_count"] = csat_summary["survey_count"]

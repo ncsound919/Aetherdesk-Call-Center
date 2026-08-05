@@ -18,24 +18,28 @@ class InputSanitizer:
     MAX_TRANSCRIPT_LENGTH = 1000
 
     DANGEROUS_PATTERNS = [
-        r'<script[^>]*>.*?</script>',
-        r'javascript:',
-        r'on\w+\s*=',
-        r'\$\{.*\}',
-        r'\{\{.*\}\}',
+        r"<script[^>]*>.*?</script>",
+        r"javascript:",
+        r"on\w+\s*=",
+        r"\$\{.*\}",
+        r"\{\{.*\}\}",
     ]
 
     @classmethod
-    def sanitize_string(cls, value: str, field_name: str = "field") -> SanitizationResult:
+    def sanitize_string(
+        cls, value: str, field_name: str = "field"
+    ) -> SanitizationResult:
         errors = []
 
         if not isinstance(value, str):
             return SanitizationResult(False, None, [f"{field_name} must be a string"])
 
         if len(value) > cls.MAX_STRING_LENGTH:
-            errors.append(f"{field_name} exceeds maximum length of {cls.MAX_STRING_LENGTH}")
+            errors.append(
+                f"{field_name} exceeds maximum length of {cls.MAX_STRING_LENGTH}"
+            )
 
-        sanitized = value[:cls.MAX_STRING_LENGTH]
+        sanitized = value[: cls.MAX_STRING_LENGTH]
 
         for pattern in cls.DANGEROUS_PATTERNS:
             if re.search(pattern, sanitized, re.IGNORECASE):
@@ -45,9 +49,7 @@ class InputSanitizer:
         sanitized = html.escape(sanitized)
 
         return SanitizationResult(
-            is_valid=len(errors) == 0,
-            sanitized_value=sanitized.strip(),
-            errors=errors
+            is_valid=len(errors) == 0, sanitized_value=sanitized.strip(), errors=errors
         )
 
     @classmethod
@@ -70,7 +72,8 @@ class InputSanitizer:
             elif isinstance(value, list):
                 sanitized[sanitized_key] = [
                     cls.sanitize_string(v, f"{sanitized_key}[{i}]").sanitized_value
-                    if isinstance(v, str) else v
+                    if isinstance(v, str)
+                    else v
                     for i, v in enumerate(value[:100])
                 ]
             else:
@@ -82,12 +85,14 @@ class InputSanitizer:
     def sanitize_transcript(cls, transcript: list[str]) -> list[str]:
         return [
             cls.sanitize_string(text, f"transcript[{i}]").sanitized_value
-            for i, text in enumerate(transcript[:cls.MAX_TRANSCRIPT_LENGTH])
+            for i, text in enumerate(transcript[: cls.MAX_TRANSCRIPT_LENGTH])
             if isinstance(text, str)
         ]
 
     @classmethod
-    def sanitize_protocol_fields(cls, fields: dict[str, Any], required_fields: list[str]) -> SanitizationResult:
+    def sanitize_protocol_fields(
+        cls, fields: dict[str, Any], required_fields: list[str]
+    ) -> SanitizationResult:
         errors = []
         sanitized = {}
 
@@ -118,13 +123,9 @@ class InputSanitizer:
                 sanitized[key] = value
 
         return SanitizationResult(
-            is_valid=len(errors) == 0,
-            sanitized_value=sanitized,
-            errors=errors
+            is_valid=len(errors) == 0, sanitized_value=sanitized, errors=errors
         )
 
 
 def sanitize_user_input(data: dict[str, Any]) -> dict[str, Any]:
     return InputSanitizer.sanitize_dict(data)
-
-

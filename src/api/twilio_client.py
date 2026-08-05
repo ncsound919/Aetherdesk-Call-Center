@@ -21,10 +21,14 @@ class TwilioVoiceClient:
         account_sid = os.getenv("TWILIO_ACCOUNT_SID", "")
         auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
         self.from_number = os.getenv("TWILIO_FROM_NUMBER", "")
-        self.webhook_base = os.getenv("TWILIO_WEBHOOK_BASE", os.getenv("API_URL", "http://localhost:8000"))
+        self.webhook_base = os.getenv(
+            "TWILIO_WEBHOOK_BASE", os.getenv("API_URL", "http://localhost:8000")
+        )
 
         if not account_sid or not auth_token:
-            logger.warning("Twilio credentials not configured — calls will be simulated")
+            logger.warning(
+                "Twilio credentials not configured — calls will be simulated"
+            )
             self.client = None
         else:
             self.client = TwilioRestClient(account_sid, auth_token)
@@ -35,9 +39,11 @@ class TwilioVoiceClient:
     def _cleanup_expired_calls(self):
         """Remove completed calls older than TTL from memory."""
         import time
+
         now = time.time()
         expired = [
-            sid for sid, info in list(self.active_calls.items())
+            sid
+            for sid, info in list(self.active_calls.items())
             if info.get("status") in ("completed", "failed", "canceled")
             and now - self._call_created_at.get(sid, now) > self.ACTIVE_CALL_TTL
         ]
@@ -70,8 +76,11 @@ class TwilioVoiceClient:
         voice_url = f"{self.webhook_base}/webhooks/twilio/voice"
 
         if self.client is None:
-            logger.info(f"MOCK call to {mask_phone(to_phone)} from {mask_phone(caller_id)} — Twilio not configured")
+            logger.info(
+                f"MOCK call to {mask_phone(to_phone)} from {mask_phone(caller_id)} — Twilio not configured"
+            )
             import time as _time
+
             self._call_created_at[call_sid] = _time.time()
             self.active_calls[call_sid] = {
                 "to": to_phone,
@@ -88,20 +97,26 @@ class TwilioVoiceClient:
                 "to": to_phone,
                 "from_": caller_id,
                 "status_callback": status_callback,
-                "status_callback_event": ["initiated", "ringing", "answered", "completed"],
+                "status_callback_event": [
+                    "initiated",
+                    "ringing",
+                    "answered",
+                    "completed",
+                ],
                 "timeout": 30,
             }
             if is_local:
                 call_kwargs["twiml"] = (
                     '<Response><Say voice="alice">Hello from AetherDesk. How can I help you today?</Say>'
                     '<Gather input="speech" timeout="5" language="en-US"/>'
-                    '</Response>'
+                    "</Response>"
                 )
             else:
                 call_kwargs["url"] = voice_url
             call = self.client.calls.create(**call_kwargs)
             sid = call.sid
             import time as _time
+
             self._call_created_at[sid] = _time.time()
             self.active_calls[sid] = {
                 "to": to_phone,
@@ -124,7 +139,12 @@ class TwilioVoiceClient:
             return info
         try:
             call = self.client.calls(ref).fetch()
-            return {"ref": call.sid, "status": call.status, "to": call.to, "from": call.from_}
+            return {
+                "ref": call.sid,
+                "status": call.status,
+                "to": call.to,
+                "from": call.from_,
+            }
         except Exception as e:
             logger.error(f"Twilio get call failed: {e}")
             return None
@@ -167,5 +187,11 @@ class TwilioVoiceClient:
     async def say_text(self, app_ref: str, text: str, voice: str = "alice") -> dict:
         return {"success": True, "_mock": True}
 
-    async def gather_speech(self, app_ref: str, timeout: int = 15000, language: str = "en-US", hints: list[str] | None = None) -> dict:
+    async def gather_speech(
+        self,
+        app_ref: str,
+        timeout: int = 15000,
+        language: str = "en-US",
+        hints: list[str] | None = None,
+    ) -> dict:
         return {"success": True, "text": "", "_mock": True}

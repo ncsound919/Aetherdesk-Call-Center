@@ -13,6 +13,7 @@ router = APIRouter(prefix="/platform", tags=["platform"])
 
 # ── Pydantic Models ───────────────────────────────────────────────
 
+
 class BrandingConfig(BaseModel):
     company_name: str | None = None
     logo_url: str | None = None
@@ -42,6 +43,7 @@ class ProvisionNumberRequest(BaseModel):
 
 # ── White-Label Endpoints ─────────────────────────────────────────
 
+
 @router.get("/branding")
 async def get_branding(tenant_id: str = Depends(verify_tenant_access)):
     return await white_label_service.get_branding(tenant_id)
@@ -63,7 +65,12 @@ async def update_branding(
 async def get_domain(tenant_id: str = Depends(verify_tenant_access)):
     domain = await white_label_service.get_custom_domain(tenant_id)
     if not domain:
-        return {"tenant_id": tenant_id, "domain": None, "ssl_status": None, "verified": False}
+        return {
+            "tenant_id": tenant_id,
+            "domain": None,
+            "ssl_status": None,
+            "verified": False,
+        }
     return {
         "tenant_id": tenant_id,
         "domain": domain.get("domain"),
@@ -77,7 +84,9 @@ async def set_domain(
     data: DomainConfig,
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    result = await white_label_service.set_custom_domain(tenant_id, data.domain, data.ssl_status)
+    result = await white_label_service.set_custom_domain(
+        tenant_id, data.domain, data.ssl_status
+    )
     if not result:
         raise HTTPException(status_code=400, detail="Failed to set custom domain")
     return result
@@ -93,11 +102,17 @@ async def verify_domain(
 
 # ── Self-Serve Onboarding Endpoints ───────────────────────────────
 
+
 @router.post("/signup")
 async def signup(data: SignupRequest):
-    result = await self_serve_service.create_trial_tenant(data.email, data.company_name, data.password)
+    result = await self_serve_service.create_trial_tenant(
+        data.email, data.company_name, data.password
+    )
     from api.services.security_guard import mask_email
-    logger.info("self_serve_signup", email=mask_email(data.email), company=data.company_name)
+
+    logger.info(
+        "self_serve_signup", email=mask_email(data.email), company=data.company_name
+    )
     return result
 
 

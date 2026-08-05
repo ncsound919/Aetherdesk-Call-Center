@@ -7,12 +7,15 @@ class DatabaseError(Exception):
         self.detail = detail or {}
         super().__init__(self.message)
 
+
 class NotFoundError(DatabaseError):
     def __init__(self, resource: str, resource_id: str):
-        super().__init__(f"{resource} not found: {resource_id}", {"resource": resource, "id": resource_id})
+        super().__init__(
+            f"{resource} not found: {resource_id}",
+            {"resource": resource, "id": resource_id},
+        )
+
 
 class PoolNotAvailableError(DatabaseError):
     def __init__(self):
         super().__init__("Database pool not available")
-
-

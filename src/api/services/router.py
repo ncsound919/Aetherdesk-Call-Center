@@ -8,9 +8,14 @@ class RouteInfo(TypedDict):
     queue: str
     fields: list[str]
 
+
 INTENT_TO_PROTOCOL = {
     "pharmacy_refill": ("pharmacy_refill_v1", "rx", ["rx_number"]),
-    "pharmacy_refill_doc": ("pharmacy_refill_doc_v1", "rx", ["patient_dob", "doctor_name"]),
+    "pharmacy_refill_doc": (
+        "pharmacy_refill_doc_v1",
+        "rx",
+        ["patient_dob", "doctor_name"],
+    ),
     "billing_invoice": ("billing_invoice_v1", "billing", ["invoice_id"]),
     "billing_refund": ("billing_refund_v1", "billing", ["order_id", "reason_code"]),
     "order_status": ("order_status_v1", "ops", ["order_id", "zip"]),
@@ -29,7 +34,11 @@ class TwoQuestionRouter:
         key = f"{q1}:{q2}"
         info = self.table.get(key)
         if not info:
-            return {"protocol_id":"fallback_handoff_v1","queue":"general","fields":[]}
+            return {
+                "protocol_id": "fallback_handoff_v1",
+                "queue": "general",
+                "fields": [],
+            }
         return info
 
 
@@ -39,12 +48,12 @@ class LLMIntentRouter:
 
     def _get_classifier(self):
         from api.services.intent_classifier import classifier
+
         return classifier
 
     def route(self, intent: str, entities: dict) -> RouteInfo:
         protocol_id, queue, fields = INTENT_TO_PROTOCOL.get(
-            intent,
-            ("fallback_handoff_v1", "general", [])
+            intent, ("fallback_handoff_v1", "general", [])
         )
 
         return {
@@ -52,7 +61,7 @@ class LLMIntentRouter:
             "queue": queue,
             "fields": fields,
             "entities": entities,
-            "intent": intent
+            "intent": intent,
         }
 
     async def route_from_transcript(self, transcript: str) -> RouteInfo:
@@ -61,17 +70,25 @@ class LLMIntentRouter:
         return self.route(result.intent, result.entities)
 
 
-routes_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "config", "routes.json")
+routes_path = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))),
+    "config",
+    "routes.json",
+)
 try:
     with open(routes_path) as f:
         route_table = json.load(f)
 except (FileNotFoundError, json.JSONDecodeError, PermissionError) as e:
     import structlog
-    structlog.get_logger().warning("route_table_load_failed_using_empty", error=str(e), path=routes_path)
+
+    structlog.get_logger().warning(
+        "route_table_load_failed_using_empty", error=str(e), path=routes_path
+    )
     route_table = {}
 
 two_question_router = TwoQuestionRouter(route_table)
 llm_router = LLMIntentRouter()
+
 
 def get_router():
     use_llm = os.getenv("USE_LLM_ROUTING", "false").lower() == "true"
@@ -79,6 +96,5 @@ def get_router():
         return llm_router
     return two_question_router
 
+
 router = get_router()
-
-

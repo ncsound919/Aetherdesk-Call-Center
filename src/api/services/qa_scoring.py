@@ -9,21 +9,58 @@ class QAScore:
     def __init__(self):
         self.default_criteria = [
             {"name": "greeting", "description": "Professional greeting", "weight": 15},
-            {"name": "listening", "description": "Active listening skills", "weight": 20},
-            {"name": "knowledge", "description": "Product/service knowledge", "weight": 20},
-            {"name": "resolution", "description": "Issue resolution effectiveness", "weight": 25},
-            {"name": "closing", "description": "Professional closing and follow-up", "weight": 10},
-            {"name": "compliance", "description": "Script and policy compliance", "weight": 10},
+            {
+                "name": "listening",
+                "description": "Active listening skills",
+                "weight": 20,
+            },
+            {
+                "name": "knowledge",
+                "description": "Product/service knowledge",
+                "weight": 20,
+            },
+            {
+                "name": "resolution",
+                "description": "Issue resolution effectiveness",
+                "weight": 25,
+            },
+            {
+                "name": "closing",
+                "description": "Professional closing and follow-up",
+                "weight": 10,
+            },
+            {
+                "name": "compliance",
+                "description": "Script and policy compliance",
+                "weight": 10,
+            },
         ]
 
-    async def score_call(self, tenant_id, call_id, agent_id, reviewer_id, rubric_id, scores_per_criterion: dict, notes=None) -> dict:
+    async def score_call(
+        self,
+        tenant_id,
+        call_id,
+        agent_id,
+        reviewer_id,
+        rubric_id,
+        scores_per_criterion: dict,
+        notes=None,
+    ) -> dict:
         from api.services.db_wfm import create_qa_score_db
+
         return await create_qa_score_db(
-            tenant_id, call_id, agent_id, reviewer_id, rubric_id, scores_per_criterion, notes
+            tenant_id,
+            call_id,
+            agent_id,
+            reviewer_id,
+            rubric_id,
+            scores_per_criterion,
+            notes,
         )
 
     async def get_agent_summary(self, agent_id) -> dict:
         from api.services.db_wfm import get_agent_qa_summary_db
+
         return await get_agent_qa_summary_db(agent_id)
 
     async def get_tenant_stats(self, tenant_id) -> dict:
@@ -73,7 +110,9 @@ class QAScore:
 
         issues = []
         for k in criteria_totals:
-            avg_val = criteria_totals[k] / criteria_counts[k] if criteria_counts[k] else 0
+            avg_val = (
+                criteria_totals[k] / criteria_counts[k] if criteria_counts[k] else 0
+            )
             if avg_val < 3.0:
                 issues.append({"criterion": k, "avg_score": round(avg_val, 2)})
         issues.sort(key=lambda x: x["avg_score"])

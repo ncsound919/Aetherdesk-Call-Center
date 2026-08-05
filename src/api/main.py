@@ -19,6 +19,7 @@ import asyncio
 import logging
 import os
 
+
 # Startup env validation
 def _assert_env():
     required = ["JWT_SECRET", "INTERNAL_API_KEY"]
@@ -26,10 +27,17 @@ def _assert_env():
     missing_req = [k for k in required if not os.environ.get(k)]
     missing_rec = [k for k in recommended if not os.environ.get(k)]
     if missing_req:
-        print(f"[FATAL] Aetherdesk: Missing required env vars: {', '.join(missing_req)}", file=sys.stderr)
+        print(
+            f"[FATAL] Aetherdesk: Missing required env vars: {', '.join(missing_req)}",
+            file=sys.stderr,
+        )
         sys.exit(1)
     if missing_rec:
-        print(f"[WARN] Aetherdesk: Missing recommended env vars: {', '.join(missing_rec)}", file=sys.stderr)
+        print(
+            f"[WARN] Aetherdesk: Missing recommended env vars: {', '.join(missing_rec)}",
+            file=sys.stderr,
+        )
+
 
 _assert_env()
 from contextlib import asynccontextmanager
@@ -127,9 +135,12 @@ def get_voice_client() -> Any | None:
     if fonster_key and fonster_key != "your-fonoster-api-key":
         try:
             from api.fonoster_client import FonosterHTTPClient as FC
+
             fonster_url = os.getenv("FONOSTER_URL", "http://aetherdesk-fonoster:50062")
             fonster_secret = os.getenv("FONOSTER_API_SECRET", "")
-            client = FC(base_url=fonster_url, api_key=fonster_key, api_secret=fonster_secret)
+            client = FC(
+                base_url=fonster_url, api_key=fonster_key, api_secret=fonster_secret
+            )
             logging.info("Using Fonoster voice client")
             return client
         except Exception as e:
@@ -139,6 +150,7 @@ def get_voice_client() -> Any | None:
     if twilio_sid:
         try:
             from api.twilio_client import TwilioVoiceClient
+
             client = TwilioVoiceClient()
             logging.info("Using Twilio voice client")
             return client
@@ -147,7 +159,10 @@ def get_voice_client() -> Any | None:
 
     try:
         from api.mock_voice_client import MockVoiceClient
-        logging.warning("No real voice client — MockVoiceClient active (calls logged, not placed)")
+
+        logging.warning(
+            "No real voice client — MockVoiceClient active (calls logged, not placed)"
+        )
         return MockVoiceClient()
     except Exception:
         logging.error("Failed to create MockVoiceClient")
@@ -159,13 +174,12 @@ def get_voice_client() -> Any | None:
 # =============================================================================
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    None
-)
+DATABASE_URL = os.getenv("DATABASE_URL", None)
 if not DATABASE_URL:
     if os.getenv("USE_POSTGRES", "false").lower() == "true":
-        raise RuntimeError("DATABASE_URL environment variable must be set for production.")
+        raise RuntimeError(
+            "DATABASE_URL environment variable must be set for production."
+        )
     else:
         logger.warning("database_url_not_set_using_sqlite")
 REDIS_URL = os.getenv("REDIS_URL", "redis://aetherdesk-redis:6379")
@@ -173,11 +187,15 @@ FONOSTER_URL = os.getenv("FONOSTER_URL", "http://aetherdesk-fonoster:50062")
 ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
 if not ENCRYPTION_KEY:
     if os.getenv("APP_ENV", "development") == "production":
-        raise RuntimeError("ENCRYPTION_KEY environment variable must be set for production.")
+        raise RuntimeError(
+            "ENCRYPTION_KEY environment variable must be set for production."
+        )
 JWT_SECRET = os.getenv("JWT_SECRET")
 if not JWT_SECRET:
     if os.getenv("USE_POSTGRES", "false").lower() == "true":
-        raise RuntimeError("JWT_SECRET environment variable must be set for production.")
+        raise RuntimeError(
+            "JWT_SECRET environment variable must be set for production."
+        )
 SALT_ROUNDS = int(os.getenv("SALT_ROUNDS", "12"))
 
 # =============================================================================
@@ -189,6 +207,7 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 if LOG_FORMAT == "json":
     import structlog
+
     structlog.configure(
         processors=[
             structlog.stdlib.filter_by_level,
@@ -212,7 +231,7 @@ if LOG_FORMAT == "json":
 else:
     logging.basicConfig(
         level=getattr(logging, LOG_LEVEL.upper(), logging.INFO),
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[logging.StreamHandler()],
     )
 
@@ -238,6 +257,7 @@ async def lifespan(app: FastAPI):
                 logger.info("PostgreSQL schema ready")
         else:
             from api.services.database import init_sqlite_schema
+
             init_sqlite_schema()
             logger.info("SQLite schema ready")
     except Exception as e:
@@ -255,11 +275,15 @@ async def lifespan(app: FastAPI):
                 break
             except Exception as e:
                 if attempt < max_retries - 1:
-                    wait = 2 ** attempt
-                    logger.warning(f"Redis connection attempt {attempt+1} failed, retrying in {wait}s: {e}")
+                    wait = 2**attempt
+                    logger.warning(
+                        f"Redis connection attempt {attempt + 1} failed, retrying in {wait}s: {e}"
+                    )
                     await asyncio.sleep(wait)
                 else:
-                    logger.error(f"Redis connection failed after {max_retries} attempts: {e}")
+                    logger.error(
+                        f"Redis connection failed after {max_retries} attempts: {e}"
+                    )
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
 
@@ -283,14 +307,18 @@ async def lifespan(app: FastAPI):
 
     # Wire DI instances into router modules (replaces module-level singletons)
     from api.routers import realtime as realtime_router
+
     realtime_router._default_store = app.state.transcript_store
     realtime_router.manager._store = app.state.transcript_store
 
     from api.routers import voice_cloning as vc_router
+
     vc_router._profile_store = app.state.voice_profile_store
 
     # Start stale transcript cleanup
-    transcript_cleanup_task = asyncio.create_task(app.state.transcript_store.cleanup_stale_loop())
+    transcript_cleanup_task = asyncio.create_task(
+        app.state.transcript_store.cleanup_stale_loop()
+    )
 
     # Start data retention cleanup (GDPR compliance — purge expired recordings, sessions)
     async def _retention_cleanup_loop():
@@ -305,9 +333,11 @@ async def lifespan(app: FastAPI):
                         # Phase 1: flag records for deletion
                         await pool.execute(
                             "UPDATE recordings SET pii_redacted = TRUE, retention_until = NOW() WHERE created_at < $1 AND pii_redacted = FALSE",
-                            cutoff
+                            cutoff,
                         )
-                        logger.info("retention_flag_completed", purged_before=cutoff.isoformat())
+                        logger.info(
+                            "retention_flag_completed", purged_before=cutoff.isoformat()
+                        )
                         # Phase 2: hard-delete records past retention_until
                         del_trans = await pool.execute(
                             "DELETE FROM transcriptions WHERE retention_until IS NOT NULL AND retention_until < NOW()"
@@ -315,18 +345,25 @@ async def lifespan(app: FastAPI):
                         del_recs = await pool.execute(
                             "DELETE FROM recordings WHERE retention_until IS NOT NULL AND retention_until < NOW()"
                         )
-                        logger.info("retention_hard_delete_completed", transcriptions=del_trans, recordings=del_recs)
+                        logger.info(
+                            "retention_hard_delete_completed",
+                            transcriptions=del_trans,
+                            recordings=del_recs,
+                        )
                 else:
                     import datetime as dt
 
                     from api.services.database import _get_sqlite_conn
+
                     conn = _get_sqlite_conn()
                     try:
-                        cutoff = (dt.datetime.now(dt.UTC) - dt.timedelta(days=retention_days)).isoformat()
+                        cutoff = (
+                            dt.datetime.now(dt.UTC) - dt.timedelta(days=retention_days)
+                        ).isoformat()
                         # Phase 1: flag records for deletion
                         conn.execute(
                             "UPDATE recordings SET pii_redacted = 1, retention_until = ? WHERE created_at < ? AND pii_redacted = 0",
-                            (dt.datetime.now(dt.UTC).isoformat(), cutoff)
+                            (dt.datetime.now(dt.UTC).isoformat(), cutoff),
                         )
                         conn.commit()
                         logger.info("retention_flag_completed")
@@ -334,14 +371,18 @@ async def lifespan(app: FastAPI):
                         now_iso = dt.datetime.now(dt.UTC).isoformat()
                         del_trans = conn.execute(
                             "DELETE FROM transcriptions WHERE retention_until IS NOT NULL AND retention_until < ?",
-                            (now_iso,)
+                            (now_iso,),
                         ).rowcount
                         del_recs = conn.execute(
                             "DELETE FROM recordings WHERE retention_until IS NOT NULL AND retention_until < ?",
-                            (now_iso,)
+                            (now_iso,),
                         ).rowcount
                         conn.commit()
-                        logger.info("retention_hard_delete_completed", transcriptions=del_trans, recordings=del_recs)
+                        logger.info(
+                            "retention_hard_delete_completed",
+                            transcriptions=del_trans,
+                            recordings=del_recs,
+                        )
                     finally:
                         conn.close()
             except Exception as e:
@@ -368,18 +409,21 @@ async def lifespan(app: FastAPI):
     # Flush observability backends before shutdown
     try:
         from api.services.langfuse_client import flush as langfuse_flush
+
         langfuse_flush()
     except Exception:
         pass
 
     try:
         import sentry_sdk
+
         sentry_sdk.flush()
     except Exception:
         pass
 
     try:
         from api.services.analytics_client import shutdown as posthog_shutdown
+
         posthog_shutdown()
     except Exception:
         pass
@@ -395,7 +439,9 @@ async def safe_redis_publish(channel: str, message: str) -> bool:
         await redis_client.publish(channel, message)
         return True
     except Exception as e:
-        logger.warning(f"redis_publish_failed_attempting_reconnect: channel={channel} error={e}")
+        logger.warning(
+            f"redis_publish_failed_attempting_reconnect: channel={channel} error={e}"
+        )
         try:
             redis_client = redis.from_url(REDIS_URL, decode_responses=True)
             app.state.redis = redis_client
@@ -429,15 +475,19 @@ if sentry_dsn:
     try:
         import sentry_sdk
         from sentry_sdk.integrations.fastapi import FastApiIntegration
+
         sentry_sdk.setup_integrations(
-            [FastApiIntegration(
-                app=app,
-                failed_request_status_codes={400, 401, 403, 404, 500},
-            )],
+            [
+                FastApiIntegration(
+                    app=app,
+                    failed_request_status_codes={400, 401, 403, 404, 500},
+                )
+            ],
             raise_server_exceptions=False,
         )
     except Exception as e:
         logger.warning("sentry_fastapi_integration_failed", error=str(e))
+
 
 @app.exception_handler(NotFoundError)
 async def not_found_handler(request, exc: NotFoundError):
@@ -463,8 +513,13 @@ async def database_error_handler(request, exc: DatabaseError):
     )
 
 
-cors_origin_env = os.getenv("CORS_ORIGIN", "http://127.0.0.1:3001,http://localhost:3001,https://app.aetherdesk.com")
-cors_origins = [origin.strip() for origin in cors_origin_env.split(",") if origin.strip()]
+cors_origin_env = os.getenv(
+    "CORS_ORIGIN",
+    "http://127.0.0.1:3001,http://localhost:3001,https://app.aetherdesk.com",
+)
+cors_origins = [
+    origin.strip() for origin in cors_origin_env.split(",") if origin.strip()
+]
 
 app.add_middleware(
     CORSMiddleware,
@@ -517,14 +572,17 @@ app.include_router(platform_ops.router, prefix="/api/v1")
 
 # Overlay 365 public signup (no prefix - already has /api/v1/signup)
 from api.routers.signup_overlay365 import router as signup_overlay365_router
+
 app.include_router(signup_overlay365_router)
 
 # Overlay 365 Blocklabor integration (no prefix - already has /api/v1/blocklabor)
 from api.routers.blocklabor_overlay365 import router as blocklabor_overlay365_router
+
 app.include_router(blocklabor_overlay365_router)
 
 # Overlay 365 admin + public SEO
 from api.routers.admin_ops import admin_router, public_router
+
 app.include_router(admin_router)
 app.include_router(public_router)
 
@@ -557,8 +615,6 @@ app.add_middleware(RBACMiddleware)
 # =============================================================================
 
 
-
-
 # =============================================================================
 # Security
 # =============================================================================
@@ -567,22 +623,11 @@ app.add_middleware(RBACMiddleware)
 def create_access_token(data: dict, expires_delta: timedelta = None):
     """Create JWT access token signed with RS256."""
     from api.services.jwt_utils import create_access_token as _create_rs256_token
+
     return _create_rs256_token(data, expires_delta)
 
 
-
 # =============================================================================
-
-
-
-
-
-
-
-
-
-
-
 
 
 # =============================================================================
@@ -611,6 +656,8 @@ if sentry_dsn:
             integrations=sentry_integrations,
             send_default_pii=False,
         )
-        logger.info("sentry_initialized", environment=os.getenv("APP_ENV", "development"))
+        logger.info(
+            "sentry_initialized", environment=os.getenv("APP_ENV", "development")
+        )
     except Exception as e:
         logger.warning("sentry_init_failed", error=str(e))

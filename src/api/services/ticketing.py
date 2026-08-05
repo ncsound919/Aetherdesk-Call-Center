@@ -12,24 +12,19 @@ logger = structlog.get_logger()
 
 class TicketingConnector(ABC):
     @abstractmethod
-    async def create_ticket(self, data: dict) -> dict:
-        ...
+    async def create_ticket(self, data: dict) -> dict: ...
 
     @abstractmethod
-    async def get_ticket(self, ticket_id: str) -> dict:
-        ...
+    async def get_ticket(self, ticket_id: str) -> dict: ...
 
     @abstractmethod
-    async def update_ticket(self, ticket_id: str, data: dict) -> dict:
-        ...
+    async def update_ticket(self, ticket_id: str, data: dict) -> dict: ...
 
     @abstractmethod
-    async def list_tickets(self, tenant_id: str, status: str | None = None) -> dict:
-        ...
+    async def list_tickets(self, tenant_id: str, status: str | None = None) -> dict: ...
 
     @abstractmethod
-    async def get_health(self) -> dict:
-        ...
+    async def get_health(self) -> dict: ...
 
 
 def _std_response(success, provider, data=None, error=None):
@@ -67,10 +62,20 @@ class ZendeskConnector(TicketingConnector):
             resp.raise_for_status()
             return resp.json()
         except httpx.HTTPStatusError as e:
-            logger.error("zendesk_http_error", path=path, status=e.response.status_code, tenant_id=self.tenant_id)
+            logger.error(
+                "zendesk_http_error",
+                path=path,
+                status=e.response.status_code,
+                tenant_id=self.tenant_id,
+            )
             return None
         except httpx.RequestError as e:
-            logger.error("zendesk_request_error", path=path, error=str(e), tenant_id=self.tenant_id)
+            logger.error(
+                "zendesk_request_error",
+                path=path,
+                error=str(e),
+                tenant_id=self.tenant_id,
+            )
             return None
 
     async def create_ticket(self, data: dict) -> dict:
@@ -88,8 +93,18 @@ class ZendeskConnector(TicketingConnector):
         result = await self._request("POST", "/api/v2/tickets", json=payload)
         if result:
             ticket = result.get("ticket", {})
-            return _std_response(True, self.provider, {"id": str(ticket.get("id")), "ticket_number": ticket.get("id"), **data})
-        return _std_response(False, self.provider, error="Failed to create Zendesk ticket")
+            return _std_response(
+                True,
+                self.provider,
+                {
+                    "id": str(ticket.get("id")),
+                    "ticket_number": ticket.get("id"),
+                    **data,
+                },
+            )
+        return _std_response(
+            False, self.provider, error="Failed to create Zendesk ticket"
+        )
 
     async def get_ticket(self, ticket_id: str) -> dict:
         logger.info("zendesk_get_ticket", ticket_id=ticket_id)
@@ -97,7 +112,9 @@ class ZendeskConnector(TicketingConnector):
         if result:
             ticket = result.get("ticket", {})
             return _std_response(True, self.provider, ticket)
-        return _std_response(False, self.provider, error=f"Ticket {ticket_id} not found")
+        return _std_response(
+            False, self.provider, error=f"Ticket {ticket_id} not found"
+        )
 
     async def update_ticket(self, ticket_id: str, data: dict) -> dict:
         logger.info("zendesk_update_ticket", ticket_id=ticket_id)
@@ -108,10 +125,14 @@ class ZendeskConnector(TicketingConnector):
                     payload["ticket"]["comment"] = {"body": data["comment"]}
                 else:
                     payload["ticket"][field] = data[field]
-        result = await self._request("PUT", f"/api/v2/tickets/{ticket_id}", json=payload)
+        result = await self._request(
+            "PUT", f"/api/v2/tickets/{ticket_id}", json=payload
+        )
         if result:
             return _std_response(True, self.provider, {"id": ticket_id, **data})
-        return _std_response(False, self.provider, error=f"Failed to update ticket {ticket_id}")
+        return _std_response(
+            False, self.provider, error=f"Failed to update ticket {ticket_id}"
+        )
 
     async def list_tickets(self, tenant_id: str, status: str | None = None) -> dict:
         logger.info("zendesk_list_tickets", tenant_id=tenant_id, status=status)
@@ -121,7 +142,9 @@ class ZendeskConnector(TicketingConnector):
         result = await self._request("GET", "/api/v2/tickets", params=params)
         if result:
             tickets = result.get("tickets", [])
-            return _std_response(True, self.provider, {"tickets": tickets, "total": len(tickets)})
+            return _std_response(
+                True, self.provider, {"tickets": tickets, "total": len(tickets)}
+            )
         return _std_response(True, self.provider, {"tickets": [], "total": 0})
 
     async def get_health(self) -> dict:
@@ -129,8 +152,14 @@ class ZendeskConnector(TicketingConnector):
         try:
             resp = await self._client.get("/api/v2/tickets", params={"per_page": 1})
             if resp.status_code == 200:
-                return _std_response(True, self.provider, {"status": "healthy", "details": "Zendesk API reachable"})
-            return _std_response(False, self.provider, error=f"Zendesk returned {resp.status_code}")
+                return _std_response(
+                    True,
+                    self.provider,
+                    {"status": "healthy", "details": "Zendesk API reachable"},
+                )
+            return _std_response(
+                False, self.provider, error=f"Zendesk returned {resp.status_code}"
+            )
         except httpx.RequestError as e:
             return _std_response(False, self.provider, error=str(e))
 
@@ -163,10 +192,20 @@ class ServiceNowConnector(TicketingConnector):
             resp.raise_for_status()
             return resp.json()
         except httpx.HTTPStatusError as e:
-            logger.error("servicenow_http_error", path=path, status=e.response.status_code, tenant_id=self.tenant_id)
+            logger.error(
+                "servicenow_http_error",
+                path=path,
+                status=e.response.status_code,
+                tenant_id=self.tenant_id,
+            )
             return None
         except httpx.RequestError as e:
-            logger.error("servicenow_request_error", path=path, error=str(e), tenant_id=self.tenant_id)
+            logger.error(
+                "servicenow_request_error",
+                path=path,
+                error=str(e),
+                tenant_id=self.tenant_id,
+            )
             return None
 
     async def create_ticket(self, data: dict) -> dict:
@@ -183,8 +222,19 @@ class ServiceNowConnector(TicketingConnector):
         result = await self._request("POST", "/api/now/table/incident", json=payload)
         if result:
             rec = result.get("result", {})
-            return _std_response(True, self.provider, {"id": rec.get("sys_id"), "sys_id": rec.get("sys_id"), "number": rec.get("number"), **data})
-        return _std_response(False, self.provider, error="Failed to create ServiceNow incident")
+            return _std_response(
+                True,
+                self.provider,
+                {
+                    "id": rec.get("sys_id"),
+                    "sys_id": rec.get("sys_id"),
+                    "number": rec.get("number"),
+                    **data,
+                },
+            )
+        return _std_response(
+            False, self.provider, error="Failed to create ServiceNow incident"
+        )
 
     async def get_ticket(self, ticket_id: str) -> dict:
         logger.info("servicenow_get_ticket", ticket_id=ticket_id)
@@ -192,7 +242,9 @@ class ServiceNowConnector(TicketingConnector):
         if result:
             rec = result.get("result", {})
             return _std_response(True, self.provider, rec)
-        return _std_response(False, self.provider, error=f"Incident {ticket_id} not found")
+        return _std_response(
+            False, self.provider, error=f"Incident {ticket_id} not found"
+        )
 
     async def update_ticket(self, ticket_id: str, data: dict) -> dict:
         logger.info("servicenow_update_ticket", ticket_id=ticket_id)
@@ -207,10 +259,14 @@ class ServiceNowConnector(TicketingConnector):
             payload["state"] = self._map_status(data["status"])
         if "comment" in data:
             payload["work_notes"] = data["comment"]
-        result = await self._request("PATCH", f"/api/now/table/incident/{ticket_id}", json=payload)
+        result = await self._request(
+            "PATCH", f"/api/now/table/incident/{ticket_id}", json=payload
+        )
         if result:
             return _std_response(True, self.provider, {"id": ticket_id, **data})
-        return _std_response(False, self.provider, error=f"Failed to update incident {ticket_id}")
+        return _std_response(
+            False, self.provider, error=f"Failed to update incident {ticket_id}"
+        )
 
     async def list_tickets(self, tenant_id: str, status: str | None = None) -> dict:
         logger.info("servicenow_list_tickets", tenant_id=tenant_id, status=status)
@@ -220,16 +276,26 @@ class ServiceNowConnector(TicketingConnector):
         result = await self._request("GET", "/api/now/table/incident", params=params)
         if result:
             records = result.get("result", [])
-            return _std_response(True, self.provider, {"tickets": records, "total": len(records)})
+            return _std_response(
+                True, self.provider, {"tickets": records, "total": len(records)}
+            )
         return _std_response(True, self.provider, {"tickets": [], "total": 0})
 
     async def get_health(self) -> dict:
         logger.info("servicenow_health_check")
         try:
-            resp = await self._client.get("/api/now/table/incident", params={"sysparm_limit": 1})
+            resp = await self._client.get(
+                "/api/now/table/incident", params={"sysparm_limit": 1}
+            )
             if resp.status_code == 200:
-                return _std_response(True, self.provider, {"status": "healthy", "details": "ServiceNow API reachable"})
-            return _std_response(False, self.provider, error=f"ServiceNow returned {resp.status_code}")
+                return _std_response(
+                    True,
+                    self.provider,
+                    {"status": "healthy", "details": "ServiceNow API reachable"},
+                )
+            return _std_response(
+                False, self.provider, error=f"ServiceNow returned {resp.status_code}"
+            )
         except httpx.RequestError as e:
             return _std_response(False, self.provider, error=str(e))
 
@@ -281,18 +347,28 @@ class TicketingFactory:
     _connectors = {"zendesk": ZendeskConnector, "servicenow": ServiceNowConnector}
 
     @classmethod
-    def get_connector(cls, tenant_id: str, provider: str, config: dict) -> TicketingConnector:
+    def get_connector(
+        cls, tenant_id: str, provider: str, config: dict
+    ) -> TicketingConnector:
         klass = cls._connectors.get(provider)
         if not klass:
             logger.warning("unknown_ticketing_provider", provider=provider)
             raise ValueError(f"Unsupported ticketing provider: {provider}")
-        logger.info("ticketing_connector_created", provider=provider, tenant_id=tenant_id)
+        logger.info(
+            "ticketing_connector_created", provider=provider, tenant_id=tenant_id
+        )
         return klass(tenant_id, config)
 
     @classmethod
     async def from_tenant(cls, tenant_id: str, provider: str) -> TicketingConnector:
-        configs = await list_integration_configs_db(tenant_id, integration_type="ticketing")
+        configs = await list_integration_configs_db(
+            tenant_id, integration_type="ticketing"
+        )
         for cfg in configs:
             if cfg.get("provider") == provider:
-                return cls.get_connector(tenant_id, provider, cfg.get("config_json", {}))
-        raise ValueError(f"No ticketing config found for provider {provider} and tenant {tenant_id}")
+                return cls.get_connector(
+                    tenant_id, provider, cfg.get("config_json", {})
+                )
+        raise ValueError(
+            f"No ticketing config found for provider {provider} and tenant {tenant_id}"
+        )

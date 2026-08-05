@@ -11,42 +11,81 @@ logger = structlog.get_logger()
 
 # ── Evaluation Results ────────────────────────────────────────────
 
+
 async def create_evaluation_db(
-    tenant_id, experiment_id, call_id, predicted_intent,
-    actual_intent, confidence, is_correct, model_used=None, latency_ms=0.0
+    tenant_id,
+    experiment_id,
+    call_id,
+    predicted_intent,
+    actual_intent,
+    confidence,
+    is_correct,
+    model_used=None,
+    latency_ms=0.0,
 ):
     eval_id = str(uuid.uuid4())
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO ai_evaluation_results
                     (id, tenant_id, experiment_id, call_id, predicted_intent,
                      actual_intent, confidence, is_correct, model_used, latency_ms, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
-            """, eval_id, tenant_id, experiment_id, call_id, predicted_intent,
-                actual_intent, confidence, is_correct, model_used, latency_ms)
-            row = await pool.fetchrow("SELECT * FROM ai_evaluation_results WHERE id = $1", eval_id)
+            """,
+                eval_id,
+                tenant_id,
+                experiment_id,
+                call_id,
+                predicted_intent,
+                actual_intent,
+                confidence,
+                is_correct,
+                model_used,
+                latency_ms,
+            )
+            row = await pool.fetchrow(
+                "SELECT * FROM ai_evaluation_results WHERE id = $1", eval_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
             now = datetime.now(UTC).isoformat()
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO ai_evaluation_results
                     (id, tenant_id, experiment_id, call_id, predicted_intent,
                      actual_intent, confidence, is_correct, model_used, latency_ms, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (eval_id, tenant_id, experiment_id, call_id, predicted_intent,
-                  actual_intent, confidence, is_correct, model_used, latency_ms, now))
+            """,
+                (
+                    eval_id,
+                    tenant_id,
+                    experiment_id,
+                    call_id,
+                    predicted_intent,
+                    actual_intent,
+                    confidence,
+                    is_correct,
+                    model_used,
+                    latency_ms,
+                    now,
+                ),
+            )
             conn.commit()
-            row = conn.execute("SELECT * FROM ai_evaluation_results WHERE id = ?", (eval_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM ai_evaluation_results WHERE id = ?", (eval_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
 
 
-async def list_evaluations_db(tenant_id, limit=100, offset=0, experiment_id=None, start_date=None, end_date=None):
+async def list_evaluations_db(
+    tenant_id, limit=100, offset=0, experiment_id=None, start_date=None, end_date=None
+):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
@@ -124,7 +163,8 @@ async def get_accuracy_metrics_db(tenant_id, start_date=None, end_date=None):
 
     if not results:
         return {
-            "total_evaluations": 0, "accuracy": 0.0,
+            "total_evaluations": 0,
+            "accuracy": 0.0,
             "intents": {},
             "confusion_matrix": {},
             "avg_confidence": 0.0,
@@ -148,7 +188,9 @@ async def get_accuracy_metrics_db(tenant_id, start_date=None, end_date=None):
             intent_map[intent]["fp"] += 1
             actual = r.get("actual_intent")
             if actual and actual != intent:
-                intent_map[actual] = intent_map.get(actual, {"tp": 0, "fp": 0, "fn": 0, "total": 0, "correct": 0})
+                intent_map[actual] = intent_map.get(
+                    actual, {"tp": 0, "fp": 0, "fn": 0, "total": 0, "correct": 0}
+                )
                 intent_map[actual]["fn"] += 1
 
     intents = {}
@@ -156,7 +198,11 @@ async def get_accuracy_metrics_db(tenant_id, start_date=None, end_date=None):
         tp, fp, fn = m["tp"], m["fp"], m["fn"]
         precision = tp / (tp + fp) if (tp + fp) else 0.0
         recall = tp / (tp + fn) if (tp + fn) else 0.0
-        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+        f1 = (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall)
+            else 0.0
+        )
         intents[intent] = {
             "precision": round(precision, 4),
             "recall": round(recall, 4),
@@ -188,29 +234,57 @@ async def get_accuracy_metrics_db(tenant_id, start_date=None, end_date=None):
 
 # ── Experiments ───────────────────────────────────────────────────
 
-async def create_experiment_db(tenant_id, name, description, model_a, model_b, traffic_split):
+
+async def create_experiment_db(
+    tenant_id, name, description, model_a, model_b, traffic_split
+):
     exp_id = str(uuid.uuid4())
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
-            await pool.execute("""
+            await pool.execute(
+                """
                 INSERT INTO ai_experiments
                     (id, tenant_id, name, description, model_a, model_b, traffic_split, status, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, 'active', NOW())
-            """, exp_id, tenant_id, name, description, model_a, model_b, traffic_split)
-            row = await pool.fetchrow("SELECT * FROM ai_experiments WHERE id = $1", exp_id)
+            """,
+                exp_id,
+                tenant_id,
+                name,
+                description,
+                model_a,
+                model_b,
+                traffic_split,
+            )
+            row = await pool.fetchrow(
+                "SELECT * FROM ai_experiments WHERE id = $1", exp_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
         try:
             now = datetime.now(UTC).isoformat()
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO ai_experiments
                     (id, tenant_id, name, description, model_a, model_b, traffic_split, status, created_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?)
-            """, (exp_id, tenant_id, name, description, model_a, model_b, traffic_split, now))
+            """,
+                (
+                    exp_id,
+                    tenant_id,
+                    name,
+                    description,
+                    model_a,
+                    model_b,
+                    traffic_split,
+                    now,
+                ),
+            )
             conn.commit()
-            row = conn.execute("SELECT * FROM ai_experiments WHERE id = ?", (exp_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM ai_experiments WHERE id = ?", (exp_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -251,7 +325,8 @@ async def get_experiment_db(tenant_id, experiment_id):
         if pool:
             row = await pool.fetchrow(
                 "SELECT * FROM ai_experiments WHERE id = $1 AND tenant_id = $2",
-                experiment_id, tenant_id
+                experiment_id,
+                tenant_id,
             )
             return dict(row) if row else None
     else:
@@ -259,14 +334,16 @@ async def get_experiment_db(tenant_id, experiment_id):
         try:
             row = conn.execute(
                 "SELECT * FROM ai_experiments WHERE id = ? AND tenant_id = ?",
-                (experiment_id, tenant_id)
+                (experiment_id, tenant_id),
             ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
 
 
-async def update_experiment_db(tenant_id, experiment_id, winner=None, status=None, stopped_at=None):
+async def update_experiment_db(
+    tenant_id, experiment_id, winner=None, status=None, stopped_at=None
+):
     if USE_POSTGRES:
         pool = await get_pg_pool()
         if pool:
@@ -289,10 +366,12 @@ async def update_experiment_db(tenant_id, experiment_id, winner=None, status=Non
                 return None
             params.extend([experiment_id, tenant_id])
             await pool.execute(
-                f"UPDATE ai_experiments SET {', '.join(set_parts)} WHERE id = ${idx} AND tenant_id = ${idx+1}",
-                *params
+                f"UPDATE ai_experiments SET {', '.join(set_parts)} WHERE id = ${idx} AND tenant_id = ${idx + 1}",
+                *params,
             )
-            row = await pool.fetchrow("SELECT * FROM ai_experiments WHERE id = $1", experiment_id)
+            row = await pool.fetchrow(
+                "SELECT * FROM ai_experiments WHERE id = $1", experiment_id
+            )
             return dict(row) if row else None
     else:
         conn = _get_sqlite_conn()
@@ -313,10 +392,12 @@ async def update_experiment_db(tenant_id, experiment_id, winner=None, status=Non
             params.extend([experiment_id, tenant_id])
             conn.execute(
                 f"UPDATE ai_experiments SET {', '.join(set_parts)} WHERE id = ? AND tenant_id = ?",
-                params
+                params,
             )
             conn.commit()
-            row = conn.execute("SELECT * FROM ai_experiments WHERE id = ?", (experiment_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM ai_experiments WHERE id = ?", (experiment_id,)
+            ).fetchone()
             return dict(row) if row else None
         finally:
             conn.close()
@@ -373,5 +454,7 @@ async def get_confidence_distribution_db(tenant_id, start_date=None, end_date=No
     return {
         "total": len(confidences),
         "buckets": buckets,
-        "avg_confidence": round(sum(confidences) / len(confidences), 4) if confidences else 0.0,
+        "avg_confidence": round(sum(confidences) / len(confidences), 4)
+        if confidences
+        else 0.0,
     }

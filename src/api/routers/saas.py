@@ -2,7 +2,6 @@ import os
 import uuid
 from datetime import datetime, timedelta
 
-import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException
 
 from api.services.database import (
@@ -24,7 +23,9 @@ router = APIRouter(prefix="/saas", tags=["saas"])
 async def get_tenant_id(x_api_key: str = Header(...)):
     if os.getenv("ENV") == "test":
         return "TENANT-001"
-    if os.getenv("ENV") != "production" and x_api_key == os.getenv("DEV_API_KEY", "dev-api-key"):
+    if os.getenv("ENV") != "production" and x_api_key == os.getenv(
+        "DEV_API_KEY", "dev-api-key"
+    ):
         return "TENANT-001"
 
     row = await get_tenant_by_api_key(x_api_key)
@@ -40,14 +41,18 @@ async def get_saas_dashboard(tenant_id: str = Depends(get_tenant_id)):
 
 
 @router.post("/profile")
-async def create_profile(name: str, prompt: str, parameters: dict, tenant_id: str = Depends(get_tenant_id)):
+async def create_profile(
+    name: str, prompt: str, parameters: dict, tenant_id: str = Depends(get_tenant_id)
+):
     profile_id = f"PROF-{uuid.uuid4().hex[:6].upper()}"
     await create_agent_profile_db(profile_id, tenant_id, name, prompt, parameters)
     return {"ok": True, "profile_id": profile_id}
 
 
 @router.post("/rent")
-async def rent_agent(profile_id: str, duration_type: str, tenant_id: str = Depends(get_tenant_id)):
+async def rent_agent(
+    profile_id: str, duration_type: str, tenant_id: str = Depends(get_tenant_id)
+):
     # duration_type: hour, day, week, month
     rental_id = f"RENT-{uuid.uuid4().hex[:6].upper()}"
 
@@ -77,9 +82,16 @@ async def get_settings(tenant_id: str = Depends(get_tenant_id)):
             "redact_pii": bool(row["redact_pii"]),
             "require_consent": bool(row["require_consent"]),
             "sync_dnc": bool(row["sync_dnc"]),
-            "mcp_servers": row["mcp_servers"] or "{}"
+            "mcp_servers": row["mcp_servers"] or "{}",
         }
-    return {"api_feeds": "{}", "auto_mode_enabled": False, "redact_pii": True, "require_consent": True, "sync_dnc": False, "mcp_servers": "{}"}
+    return {
+        "api_feeds": "{}",
+        "auto_mode_enabled": False,
+        "redact_pii": True,
+        "require_consent": True,
+        "sync_dnc": False,
+        "mcp_servers": "{}",
+    }
 
 
 @router.post("/settings")
@@ -104,7 +116,9 @@ async def generate_script(goal: dict, tenant_id: str = Depends(get_tenant_id)):
         )
         return {"script": result.text}
     except Exception:
-        return {"script": f"You are an AI agent designed to handle: {objective}. Be polite, handle objections gracefully, and ensure compliance with all requests."}
+        return {
+            "script": f"You are an AI agent designed to handle: {objective}. Be polite, handle objections gracefully, and ensure compliance with all requests."
+        }
 
 
 @router.get("/recordings")
@@ -120,11 +134,17 @@ async def get_approvals(tenant_id: str = Depends(get_tenant_id)):
 
 
 @router.post("/approvals/{approval_id}")
-async def process_approval(approval_id: str, status: str, tenant_id: str = Depends(get_tenant_id)):
+async def process_approval(
+    approval_id: str, status: str, tenant_id: str = Depends(get_tenant_id)
+):
     # Whitelist valid statuses to prevent injection
     if status not in ("approved", "rejected"):
-        raise HTTPException(status_code=400, detail="Status must be 'approved' or 'rejected'")
+        raise HTTPException(
+            status_code=400, detail="Status must be 'approved' or 'rejected'"
+        )
     success = await process_approval_db(approval_id, status, tenant_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Approval not found or unauthorized")
+        raise HTTPException(
+            status_code=404, detail="Approval not found or unauthorized"
+        )
     return {"ok": True}

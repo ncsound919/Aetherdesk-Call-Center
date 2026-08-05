@@ -16,7 +16,13 @@ class PerTenantRateLimiter:
         self._local_store = defaultdict(lambda: defaultdict(list))
         self._local_configs = defaultdict(dict)
 
-    async def check_limit(self, tenant_id: str, route_key: str, max_requests: int = 100, window_seconds: int = 60) -> dict:
+    async def check_limit(
+        self,
+        tenant_id: str,
+        route_key: str,
+        max_requests: int = 100,
+        window_seconds: int = 60,
+    ) -> dict:
         config = await self._get_config(tenant_id, route_key)
         if config:
             max_requests = config["max_requests"]
@@ -38,7 +44,12 @@ class PerTenantRateLimiter:
                     await pipe.execute()
             except Exception as e:
                 logger.warning("redis_rate_limit_failed", error=str(e))
-                return {"allowed": True, "remaining": 1, "reset_in": 0, "total": max_requests}
+                return {
+                    "allowed": True,
+                    "remaining": 1,
+                    "reset_in": 0,
+                    "total": max_requests,
+                }
         else:
             tenant_store = self._local_store[tenant_id]
             timestamps = tenant_store.get(route_key, [])
@@ -52,7 +63,9 @@ class PerTenantRateLimiter:
         reset_in = max(0, int(window_seconds - (now - window_start)))
 
         if not allowed:
-            logger.warning("rate_limit_exceeded", tenant_id=tenant_id, route=route_key, count=count)
+            logger.warning(
+                "rate_limit_exceeded", tenant_id=tenant_id, route=route_key, count=count
+            )
 
         return {
             "allowed": allowed,
@@ -78,19 +91,26 @@ class PerTenantRateLimiter:
 
     async def get_limits(self, tenant_id: str) -> list[dict]:
         from api.services.db_reliability import list_rate_limit_configs_db
+
         try:
             return await list_rate_limit_configs_db(tenant_id)
         except Exception:
             return []
 
-    async def set_limits(self, tenant_id: str, route_key: str, max_requests: int, window_seconds: int):
+    async def set_limits(
+        self, tenant_id: str, route_key: str, max_requests: int, window_seconds: int
+    ):
         from api.services.db_reliability import set_rate_limit_config_db
-        result = await set_rate_limit_config_db(tenant_id, route_key, max_requests, window_seconds)
+
+        result = await set_rate_limit_config_db(
+            tenant_id, route_key, max_requests, window_seconds
+        )
         self._local_configs[tenant_id][route_key] = result
         return result
 
     async def get_all_limits(self) -> list[dict]:
         from api.services.db_reliability import list_rate_limit_configs_db
+
         try:
             return await list_rate_limit_configs_db()
         except Exception:
@@ -102,7 +122,9 @@ rate_limiter = PerTenantRateLimiter()
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        tenant_id = getattr(request.state, "tenant_id", None) or request.query_params.get("tenant_id")
+        tenant_id = getattr(
+            request.state, "tenant_id", None
+        ) or request.query_params.get("tenant_id")
         if not tenant_id:
             return await call_next(request)
 

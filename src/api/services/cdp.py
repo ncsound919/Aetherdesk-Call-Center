@@ -23,7 +23,6 @@ logger = structlog.get_logger()
 
 
 class CDPService:
-
     async def unify_customer(self, tenant_id, identifiers):
         phone = identifiers.get("phone")
         email = identifiers.get("email")
@@ -44,8 +43,16 @@ class CDPService:
             pid = primary["id"]
             for dup in existing[1:]:
                 if dup.get("tags_json"):
-                    ptags = json.loads(primary.get("tags_json", "[]")) if isinstance(primary.get("tags_json"), str) else primary.get("tags_json", [])
-                    dtags = json.loads(dup.get("tags_json", "[]")) if isinstance(dup.get("tags_json"), str) else dup.get("tags_json", [])
+                    ptags = (
+                        json.loads(primary.get("tags_json", "[]"))
+                        if isinstance(primary.get("tags_json"), str)
+                        else primary.get("tags_json", [])
+                    )
+                    dtags = (
+                        json.loads(dup.get("tags_json", "[]"))
+                        if isinstance(dup.get("tags_json"), str)
+                        else dup.get("tags_json", [])
+                    )
                     merged_tags = list(set(ptags + dtags))
                     await update_customer_tags_db(pid, merged_tags)
 
@@ -96,7 +103,9 @@ class CDPService:
         sentiments = []
         for c in calls:
             if c.get("sentiment"):
-                sentiments.append({"date": c.get("created_at"), "sentiment": c.get("sentiment")})
+                sentiments.append(
+                    {"date": c.get("created_at"), "sentiment": c.get("sentiment")}
+                )
 
         rfm = await self.get_rfm_scores(tenant_id, customer_id)
 
@@ -114,7 +123,9 @@ class CDPService:
         existing = await get_customer_tags_db(customer_id)
         merged = list(set(existing + tags))
         await update_customer_tags_db(customer_id, merged)
-        logger.info("customer_tagged", tenant_id=tenant_id, customer_id=customer_id, tags=tags)
+        logger.info(
+            "customer_tagged", tenant_id=tenant_id, customer_id=customer_id, tags=tags
+        )
         return {"tags": merged}
 
     async def search_customers(self, tenant_id, query):
@@ -151,13 +162,16 @@ class CDPService:
         min_csat = criteria.get("min_csat", 0)
         max_recency_days = criteria.get("max_recency_days", 9999)
 
-
         all_profiles = await search_customers_db(tenant_id, "")
         matching = []
         for p in all_profiles:
             pid = p["id"]
-            interactions = await list_customer_interactions_db(tenant_id, pid, limit=500)
-            voice_interactions = [i for i in interactions if i.get("channel") == "voice"]
+            interactions = await list_customer_interactions_db(
+                tenant_id, pid, limit=500
+            )
+            voice_interactions = [
+                i for i in interactions if i.get("channel") == "voice"
+            ]
             if len(voice_interactions) < min_calls:
                 continue
             surveys = await list_csat_surveys_for_customer_db(tenant_id, pid)
@@ -180,7 +194,9 @@ class CDPService:
         return matching
 
     async def get_rfm_scores(self, tenant_id, customer_id):
-        interactions = await list_customer_interactions_db(tenant_id, customer_id, limit=500)
+        interactions = await list_customer_interactions_db(
+            tenant_id, customer_id, limit=500
+        )
         now = datetime.now(UTC)
         recency_days = 999
         frequency = 0
@@ -189,7 +205,9 @@ class CDPService:
             dates = []
             for i in interactions:
                 try:
-                    d = datetime.fromisoformat(i.get("created_at", "").replace("Z", "+00:00"))
+                    d = datetime.fromisoformat(
+                        i.get("created_at", "").replace("Z", "+00:00")
+                    )
                     dates.append(d)
                 except (ValueError, TypeError):
                     pass
@@ -213,25 +231,31 @@ class CDPService:
         }
 
     async def get_interaction_timeline(self, tenant_id, customer_id):
-        interactions = await list_customer_interactions_db(tenant_id, customer_id, limit=200)
+        interactions = await list_customer_interactions_db(
+            tenant_id, customer_id, limit=200
+        )
         surveys = await list_csat_surveys_for_customer_db(tenant_id, customer_id)
         timeline = []
         for i in interactions:
-            timeline.append({
-                "type": "interaction",
-                "channel": i.get("channel"),
-                "interaction_type": i.get("interaction_type"),
-                "sentiment": i.get("sentiment"),
-                "summary": i.get("summary"),
-                "timestamp": i.get("created_at"),
-            })
+            timeline.append(
+                {
+                    "type": "interaction",
+                    "channel": i.get("channel"),
+                    "interaction_type": i.get("interaction_type"),
+                    "sentiment": i.get("sentiment"),
+                    "summary": i.get("summary"),
+                    "timestamp": i.get("created_at"),
+                }
+            )
         for s in surveys:
-            timeline.append({
-                "type": "csat_survey",
-                "rating": s.get("rating"),
-                "feedback": s.get("feedback"),
-                "timestamp": s.get("created_at"),
-            })
+            timeline.append(
+                {
+                    "type": "csat_survey",
+                    "rating": s.get("rating"),
+                    "feedback": s.get("feedback"),
+                    "timestamp": s.get("created_at"),
+                }
+            )
         timeline.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
         return timeline
 

@@ -10,7 +10,10 @@ from twilio.request_validator import RequestValidator
 
 router = APIRouter(prefix="/webhooks/twilio", tags=["twilio"])
 
-async def validate_twilio_request(request: Request, x_twilio_signature: str = Header(default=None)):
+
+async def validate_twilio_request(
+    request: Request, x_twilio_signature: str = Header(default=None)
+):
     auth_token = os.getenv("TWILIO_AUTH_TOKEN", "")
     is_dev = os.getenv("APP_ENV", "development") == "development"
 
@@ -37,20 +40,22 @@ async def validate_twilio_request(request: Request, x_twilio_signature: str = He
     webhook_base = os.getenv("TWILIO_WEBHOOK_BASE")
     if webhook_base:
         from urllib.parse import urlparse
+
         parsed_base = urlparse(webhook_base)
         parsed_url = urlparse(str(request.url))
-        url = parsed_url._replace(scheme=parsed_base.scheme, netloc=parsed_base.netloc).geturl()
+        url = parsed_url._replace(
+            scheme=parsed_base.scheme, netloc=parsed_base.netloc
+        ).geturl()
     else:
         url = str(request.url)
 
     # Fastapi request.form() must be awaited and can only be consumed once unless using request.form() again because it caches.
     form_data = await request.form()
-    params = {k: v for k, v in form_data.items()}
+    params = dict(form_data.items())
 
     if not validator.validate(url, params, x_twilio_signature):
         raise HTTPException(status_code=403, detail="Invalid Twilio Signature")
     return True
-
 
 
 @router.get("/ping")
@@ -70,12 +75,14 @@ async def handle_incoming_voice(request: Request):
     # Escape for safe use as a URL path segment and then again for the XML
     # attribute context, since CallSid originates from an external request.
     from urllib.parse import quote
+
     call_sid = quote(str(raw_call_sid), safe="")
 
     # Avoid hardcoded port 8000, construct stream URL robustly from TWILIO_WEBHOOK_BASE
     webhook_base = os.getenv("TWILIO_WEBHOOK_BASE")
     if webhook_base:
         from urllib.parse import urlparse
+
         parsed = urlparse(webhook_base)
         ws_scheme = "wss" if parsed.scheme == "https" else "ws"
         ws_url = f"{ws_scheme}://{parsed.netloc}/realtime/call/{call_sid}"
@@ -108,6 +115,7 @@ async def handle_call_status(request: Request):
     from structlog import get_logger
 
     from api.services.security_guard import mask_phone
+
     logger = get_logger()
     logger.info(
         "twilio_call_status",
@@ -124,6 +132,7 @@ async def handle_call_status(request: Request):
     if call_status in ("completed", "failed", "no-answer", "busy", "canceled"):
         try:
             import httpx
+
             blocklabor_url = os.getenv("BLOCKLABOR_URL", "")
             blocklabor_key = os.getenv("BLOCKLABOR_API_KEY", "")
             if blocklabor_url and blocklabor_key:
@@ -183,12 +192,19 @@ async def handle_call_status(request: Request):
                     if USE_POSTGRES:
                         await conn.execute(
                             "UPDATE campaign_calls SET outcome = $1, ended_at = $2 WHERE id = $3",
-                            outcome, datetime.now(UTC).isoformat(), row["id"],
+                            outcome,
+                            datetime.now(UTC).isoformat(),
+                            row["id"],
                         )
-                        lead_status = {"answered": "answered", "no_answer": "new", "failed": "new"}[outcome]
+                        lead_status = {
+                            "answered": "answered",
+                            "no_answer": "new",
+                            "failed": "new",
+                        }[outcome]
                         await conn.execute(
                             "UPDATE leads SET status = $1 WHERE id = $2",
-                            lead_status, row["lead_id"],
+                            lead_status,
+                            row["lead_id"],
                         )
                     else:
                         cur = conn.cursor()
@@ -196,8 +212,15 @@ async def handle_call_status(request: Request):
                             "UPDATE campaign_calls SET outcome = ?, ended_at = ? WHERE id = ?",
                             (outcome, datetime.now(UTC).isoformat(), row["id"]),
                         )
-                        lead_status = {"answered": "answered", "no_answer": "new", "failed": "new"}[outcome]
-                        cur.execute("UPDATE leads SET status = ? WHERE id = ?", (lead_status, row["lead_id"]))
+                        lead_status = {
+                            "answered": "answered",
+                            "no_answer": "new",
+                            "failed": "new",
+                        }[outcome]
+                        cur.execute(
+                            "UPDATE leads SET status = ? WHERE id = ?",
+                            (lead_status, row["lead_id"]),
+                        )
                         conn.commit()
     except Exception:
         # Never let campaign bookkeeping break the Twilio flow.
@@ -215,6 +238,7 @@ async def handle_gather(request: Request):
     call_sid = form.get("CallSid", "unknown")
 
     from structlog import get_logger
+
     logger = get_logger()
     # Redact potentially sensitive DTMF/speech content: log only length and
     # a short, truncated preview rather than the raw value.

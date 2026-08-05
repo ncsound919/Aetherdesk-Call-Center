@@ -35,6 +35,7 @@ router = APIRouter(prefix="/metabase", tags=["metabase"])
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _is_metabase_configured() -> bool:
     return bool(os.getenv("METABASE_SECRET_KEY") and os.getenv("METABASE_SITE_URL"))
 
@@ -65,6 +66,7 @@ def _sign_metabase_resource(resource_id: int, expiry_minutes: int = 10) -> str:
 # ---------------------------------------------------------------------------
 # Dashboard data endpoints (fallback when Metabase is not configured)
 # ---------------------------------------------------------------------------
+
 
 class CallStatsResponse(BaseModel):
     source: str  # "clickhouse" or "mock"
@@ -105,7 +107,11 @@ async def get_call_stats(
 
     try:
         end = datetime.fromisoformat(end_date) if end_date else datetime.utcnow()
-        start = datetime.fromisoformat(start_date) if start_date else end - timedelta(days=30)
+        start = (
+            datetime.fromisoformat(start_date)
+            if start_date
+            else end - timedelta(days=30)
+        )
         stats = query_call_stats(tenant_id, start, end)
         return CallStatsResponse(source="clickhouse", **stats)
     except Exception as exc:
@@ -125,7 +131,11 @@ async def get_intent_distribution(
 
     try:
         end = datetime.fromisoformat(end_date) if end_date else datetime.utcnow()
-        start = datetime.fromisoformat(start_date) if start_date else end - timedelta(days=30)
+        start = (
+            datetime.fromisoformat(start_date)
+            if start_date
+            else end - timedelta(days=30)
+        )
         intents = query_intent_distribution(tenant_id, start, end)
         return IntentDistributionResponse(source="clickhouse", intents=intents)
     except Exception as exc:
@@ -145,7 +155,11 @@ async def get_agent_performance(
 
     try:
         end = datetime.fromisoformat(end_date) if end_date else datetime.utcnow()
-        start = datetime.fromisoformat(start_date) if start_date else end - timedelta(days=30)
+        start = (
+            datetime.fromisoformat(start_date)
+            if start_date
+            else end - timedelta(days=30)
+        )
         agents = query_agent_performance(tenant_id, start, end)
         return AgentPerformanceResponse(source="clickhouse", agents=agents)
     except Exception as exc:
@@ -165,7 +179,11 @@ async def get_hourly_volume(
 
     try:
         end = datetime.fromisoformat(end_date) if end_date else datetime.utcnow()
-        start = datetime.fromisoformat(start_date) if start_date else end - timedelta(days=7)
+        start = (
+            datetime.fromisoformat(start_date)
+            if start_date
+            else end - timedelta(days=7)
+        )
         hours = query_hourly_volume(tenant_id, start, end)
         return HourlyVolumeResponse(source="clickhouse", hours=hours)
     except Exception as exc:
@@ -176,6 +194,7 @@ async def get_hourly_volume(
 # ---------------------------------------------------------------------------
 # Embedded dashboard URL
 # ---------------------------------------------------------------------------
+
 
 class EmbedResponse(BaseModel):
     configured: bool

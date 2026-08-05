@@ -11,7 +11,7 @@ import structlog
 from api.middleware.metrics import track_llm_latency
 from api.services.connection_pool import get_http_client
 from api.services.langfuse_client import get_langfuse, score_call
-from api.services.llm_client import llm_client, parse_json_content
+from api.services.llm_client import parse_json_content
 from api.services.memory import memory_service
 from api.services.retry import retry_ollama
 
@@ -24,7 +24,7 @@ INTENT_SCHEMA = {
     "intent": "string - one of: pharmacy_refill, pharmacy_refill_doc, billing_invoice, billing_refund, order_status, tech_support_password, generalInquiry, agent_handoff",
     "entities": "object - extracted key-value pairs from the transcript",
     "confidence": "float - confidence score between 0 and 1",
-    "reasoning": "string - brief explanation of the classification"
+    "reasoning": "string - brief explanation of the classification",
 }
 
 SYSTEM_PROMPT = f"""You are an intent classifier for a call center IVR system.
@@ -93,25 +93,25 @@ class IntentClassifier:
                     intent=intent,
                     entities={},
                     confidence=0.5,
-                    reasoning=f"Keyword fallback matched '{keyword}'"
+                    reasoning=f"Keyword fallback matched '{keyword}'",
                 )
 
         return IntentResult(
             intent="generalInquiry",
             entities={},
             confidence=0.2,
-            reasoning="No strong keyword match found"
+            reasoning="No strong keyword match found",
         )
 
-    async def _call_ollama(self, transcript: str, session_id: str = None) -> dict[str, Any]:
+    async def _call_ollama(
+        self, transcript: str, session_id: str = None
+    ) -> dict[str, Any]:
         # Build context from memory if session_id provided
         context = ""
         if session_id:
             try:
                 memories = await memory_service.search_memories(
-                    query=transcript,
-                    session_id=session_id,
-                    k=3
+                    query=transcript, session_id=session_id, k=3
                 )
                 if memories:
                     context = "Relevant context from conversation history:\n"
@@ -128,7 +128,7 @@ class IntentClassifier:
         result = await _lc.chat(
             [
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             temperature=0.1,
             json_mode=True,
@@ -145,7 +145,10 @@ class IntentClassifier:
         trace_id = None
         generation = None
         if lf:
-            trace = lf.trace(name="intent_classify", metadata={"transcript_preview": (transcript or "")[:100]})
+            trace = lf.trace(
+                name="intent_classify",
+                metadata={"transcript_preview": (transcript or "")[:100]},
+            )
             trace_id = trace.id
             generation = lf.generation(
                 name="ollama_intent_classification",
@@ -157,14 +160,16 @@ class IntentClassifier:
         if not transcript or not transcript.strip():
             if generation:
                 try:
-                    generation.update(output={"intent": "generalInquiry", "confidence": 0.0})
+                    generation.update(
+                        output={"intent": "generalInquiry", "confidence": 0.0}
+                    )
                 except Exception:
                     pass
             return IntentResult(
                 intent="generalInquiry",
                 entities={},
                 confidence=0.0,
-                reasoning="Empty transcript"
+                reasoning="Empty transcript",
             )
 
         try:
@@ -178,7 +183,7 @@ class IntentClassifier:
                 intent=result.get("intent", "agent_handoff"),
                 entities=result.get("entities", {}),
                 confidence=result.get("confidence", 0.5),
-                reasoning=result.get("reasoning", "")
+                reasoning=result.get("reasoning", ""),
             )
 
             # Langfuse scoring
@@ -193,8 +198,12 @@ class IntentClassifier:
             if generation:
                 try:
                     generation.update(
-                        output={"intent": intent_result.intent, "confidence": intent_result.confidence, "reasoning": intent_result.reasoning},
-                        usage={"input": len(transcript), "output": len(content)},
+                        output={
+                            "intent": intent_result.intent,
+                            "confidence": intent_result.confidence,
+                            "reasoning": intent_result.reasoning,
+                        },
+                        usage={"input": len(transcript), "output": len(str(result))},
                     )
                 except Exception:
                     pass
@@ -207,7 +216,9 @@ class IntentClassifier:
             duration = time.time() - start_time
             track_llm_latency(duration, model="ollama")
 
-    async def classify_with_retry(self, transcript: str, max_retries: int = 3) -> IntentResult:
+    async def classify_with_retry(
+        self, transcript: str, max_retries: int = 3
+    ) -> IntentResult:
         last_error = None
         for attempt in range(max_retries):
             try:
@@ -215,16 +226,18 @@ class IntentClassifier:
             except Exception as e:
                 last_error = e
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
 
         return IntentResult(
             intent="agent_handoff",
             entities={},
             confidence=0.0,
-            reasoning=f"Failed after {max_retries} attempts: {str(last_error)}"
+            reasoning=f"Failed after {max_retries} attempts: {str(last_error)}",
         )
 
-    async def classify_with_fallback(self, transcript: str, fallback_intent: str = "generalInquiry") -> IntentResult:
+    async def classify_with_fallback(
+        self, transcript: str, fallback_intent: str = "generalInquiry"
+    ) -> IntentResult:
         result = await self.classify(transcript)
 
         if result.confidence < 0.5:
@@ -232,12 +245,10 @@ class IntentClassifier:
                 intent=fallback_intent,
                 entities=result.entities,
                 confidence=0.5,
-                reasoning=f"Low confidence ({result.confidence}), defaulting to {fallback_intent}"
+                reasoning=f"Low confidence ({result.confidence}), defaulting to {fallback_intent}",
             )
 
         return result
 
 
 classifier = IntentClassifier()
-
-

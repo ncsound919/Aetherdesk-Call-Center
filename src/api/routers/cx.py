@@ -1,4 +1,3 @@
-
 import structlog
 from fastapi import APIRouter, Depends, Query
 
@@ -72,7 +71,9 @@ async def get_response_rate(
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
 ):
-    return await get_response_rate_db(tenant_id, start_date=start_date, end_date=end_date)
+    return await get_response_rate_db(
+        tenant_id, start_date=start_date, end_date=end_date
+    )
 
 
 @router.get("/csat/nps")
@@ -91,7 +92,9 @@ async def get_sentiment_trends(
     end_date: str | None = Query(None),
     granularity: str = Query("day", regex="^(hour|day)$"),
 ):
-    return await get_sentiment_trends_db(tenant_id, start_date=start_date, end_date=end_date, granularity=granularity)
+    return await get_sentiment_trends_db(
+        tenant_id, start_date=start_date, end_date=end_date, granularity=granularity
+    )
 
 
 @router.get("/customers/{customer_id}/360")
@@ -110,13 +113,19 @@ async def get_cx_summary(
 ):
     csat = await get_csat_score_db(tenant_id, start_date=start_date, end_date=end_date)
     nps = await get_nps_score_db(tenant_id, start_date=start_date, end_date=end_date)
-    response_rate = await get_response_rate_db(tenant_id, start_date=start_date, end_date=end_date)
-    trends = await get_sentiment_trends_db(tenant_id, start_date=start_date, end_date=end_date, granularity="day")
+    response_rate = await get_response_rate_db(
+        tenant_id, start_date=start_date, end_date=end_date
+    )
+    trends = await get_sentiment_trends_db(
+        tenant_id, start_date=start_date, end_date=end_date, granularity="day"
+    )
 
     sentiment_dist = {"positive": 0, "neutral": 0, "negative": 0}
     for row in trends:
         sentiment = row.get("sentiment", "neutral")
-        sentiment_dist[sentiment] = sentiment_dist.get(sentiment, 0) + row.get("count", 0)
+        sentiment_dist[sentiment] = sentiment_dist.get(sentiment, 0) + row.get(
+            "count", 0
+        )
 
     return {
         "csat": csat,

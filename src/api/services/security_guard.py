@@ -18,6 +18,7 @@ def init_security_modules():
     try:
         from presidio_analyzer import AnalyzerEngine
         from presidio_anonymizer import AnonymizerEngine
+
         analyzer = AnalyzerEngine()
         anonymizer = AnonymizerEngine()
         logger.info("presidio_initialized", status="success")
@@ -26,6 +27,7 @@ def init_security_modules():
 
     try:
         from transformers import pipeline
+
         prompt_classifier = pipeline(
             "text-classification",
             model="protectai/deberta-v3-base-prompt-injection",
@@ -35,7 +37,10 @@ def init_security_modules():
     except ImportError:
         logger.warning("transformers_missing", fallback="regex_heuristics")
     except Exception as e:
-        logger.warning("prompt_guard_init_failed", error=str(e), fallback="regex_heuristics")
+        logger.warning(
+            "prompt_guard_init_failed", error=str(e), fallback="regex_heuristics"
+        )
+
 
 # --- Fallback Heuristics ---
 INJECTION_PATTERNS = [
@@ -66,9 +71,9 @@ def detect_prompt_injection(text: str) -> tuple[bool, float]:
         try:
             result = prompt_classifier(text[:2000])[0]
             # typical labels: INJECTION, SAFE
-            if result['label'] == 'INJECTION' and result['score'] > 0.85:
-                return True, result['score']
-            return False, result['score']
+            if result["label"] == "INJECTION" and result["score"] > 0.85:
+                return True, result["score"]
+            return False, result["score"]
         except Exception as e:
             logger.error("prompt_classifier_error", error=str(e))
 
@@ -91,17 +96,21 @@ def redact_pii(text: str, return_detailed: bool = False) -> str:
         init_security_modules()
     if analyzer and anonymizer:
         try:
-            results = analyzer.analyze(text=text, language='en')
-            anonymized_result = anonymizer.anonymize(text=text, analyzer_results=results)
+            results = analyzer.analyze(text=text, language="en")
+            anonymized_result = anonymizer.anonymize(
+                text=text, analyzer_results=results
+            )
             return anonymized_result.text
         except Exception as e:
             logger.error("presidio_redact_error", error=str(e))
 
     # Fallback to Regex Redaction
-    text = re.compile(r'\b\d{3}-\d{2}-\d{4}\b').sub('[REDACTED_SSN]', text)
-    text = re.compile(r'\b(?:\d[ -]*?){13,16}\b').sub('[REDACTED_CC]', text)
-    text = re.compile(r'\b[\w\.-]+@[\w\.-]+\.\w+\b').sub('[REDACTED_EMAIL]', text)
-    text = re.compile(r'\b(?:\+\d{1,2}\s)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b').sub('[REDACTED_PHONE]', text)
+    text = re.compile(r"\b\d{3}-\d{2}-\d{4}\b").sub("[REDACTED_SSN]", text)
+    text = re.compile(r"\b(?:\d[ -]*?){13,16}\b").sub("[REDACTED_CC]", text)
+    text = re.compile(r"\b[\w\.-]+@[\w\.-]+\.\w+\b").sub("[REDACTED_EMAIL]", text)
+    text = re.compile(r"\b(?:\+\d{1,2}\s)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b").sub(
+        "[REDACTED_PHONE]", text
+    )
 
     return text
 
@@ -127,6 +136,5 @@ def mask_email(email: str | None) -> str:
         masked_local = local[:2] + "*" * (len(local) - 2)
     return f"{masked_local}@{domain}"
 
+
 # Lazy initialization happens on first use; do NOT init at import time
-
-

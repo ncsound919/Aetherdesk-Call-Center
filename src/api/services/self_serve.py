@@ -18,7 +18,6 @@ logger = structlog.get_logger()
 
 
 class SelfServeOnboardingService:
-
     @staticmethod
     async def create_trial_tenant(email: str, company_name: str, password: str) -> dict:
         import hashlib
@@ -34,25 +33,45 @@ class SelfServeOnboardingService:
             pool = await get_pg_pool()
             if pool:
                 async with pool.acquire() as conn:
-                    await conn.execute("""
+                    await conn.execute(
+                        """
                         INSERT INTO tenants (id, name, slug, email, settings, is_active, is_verified, gdpr_consent, api_key, created_at, updated_at)
                         VALUES ($1, $2, $3, $4, '{}', TRUE, TRUE, TRUE, $5, NOW(), NOW())
-                    """, tenant_id, company_name, slug, email, api_key)
-                    await conn.execute("""
+                    """,
+                        tenant_id,
+                        company_name,
+                        slug,
+                        email,
+                        api_key,
+                    )
+                    await conn.execute(
+                        """
                         INSERT INTO users (id, email, password_hash, full_name, tenant_id, role, email_verified, created_at, updated_at)
                         VALUES ($1, $2, $3, $4, $5, 'owner', TRUE, NOW(), NOW())
-                    """, user_id, email, password_hash, company_name, tenant_id)
+                    """,
+                        user_id,
+                        email,
+                        password_hash,
+                        company_name,
+                        tenant_id,
+                    )
         else:
             conn = _get_sqlite_conn()
             try:
-                conn.execute("""
+                conn.execute(
+                    """
                     INSERT INTO tenants (id, name, slug, email, settings, is_active, is_verified, gdpr_consent, api_key, created_at, updated_at)
                     VALUES (?, ?, ?, ?, '{}', 1, 1, 1, ?, ?, ?)
-                """, (tenant_id, company_name, slug, email, api_key, now, now))
-                conn.execute("""
+                """,
+                    (tenant_id, company_name, slug, email, api_key, now, now),
+                )
+                conn.execute(
+                    """
                     INSERT INTO users (id, email, password_hash, full_name, tenant_id, role, email_verified, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, 'owner', 1, ?, ?)
-                """, (user_id, email, password_hash, company_name, tenant_id, now, now))
+                """,
+                    (user_id, email, password_hash, company_name, tenant_id, now, now),
+                )
                 conn.commit()
             finally:
                 conn.close()
@@ -101,12 +120,42 @@ class SelfServeOnboardingService:
         return {
             "tenant_id": tenant_id,
             "steps": [
-                {"id": "configure_greetings", "label": "Configure Greetings", "done": False, "link": "/settings/greetings"},
-                {"id": "add_agents", "label": "Add AI Agents", "done": False, "link": "/agents"},
-                {"id": "set_hours", "label": "Set Business Hours", "done": False, "link": "/settings/hours"},
-                {"id": "configure_routing", "label": "Configure Call Routing", "done": False, "link": "/settings/routing"},
-                {"id": "create_scripts", "label": "Create Call Scripts", "done": False, "link": "/scripts"},
-                {"id": "invite_team", "label": "Invite Team Members", "done": False, "link": "/settings/team"},
+                {
+                    "id": "configure_greetings",
+                    "label": "Configure Greetings",
+                    "done": False,
+                    "link": "/settings/greetings",
+                },
+                {
+                    "id": "add_agents",
+                    "label": "Add AI Agents",
+                    "done": False,
+                    "link": "/agents",
+                },
+                {
+                    "id": "set_hours",
+                    "label": "Set Business Hours",
+                    "done": False,
+                    "link": "/settings/hours",
+                },
+                {
+                    "id": "configure_routing",
+                    "label": "Configure Call Routing",
+                    "done": False,
+                    "link": "/settings/routing",
+                },
+                {
+                    "id": "create_scripts",
+                    "label": "Create Call Scripts",
+                    "done": False,
+                    "link": "/scripts",
+                },
+                {
+                    "id": "invite_team",
+                    "label": "Invite Team Members",
+                    "done": False,
+                    "link": "/settings/team",
+                },
             ],
         }
 
@@ -143,7 +192,9 @@ class SelfServeOnboardingService:
     async def get_setup_progress(tenant_id: str) -> dict:
         status = await SelfServeOnboardingService.get_onboarding_status(tenant_id)
         steps = ["welcome", "phone_number", "quickstart", "health_check"]
-        completed_count = len([s for s in steps if s in status.get("steps_completed", [])])
+        completed_count = len(
+            [s for s in steps if s in status.get("steps_completed", [])]
+        )
         total = len(steps)
         pct = int((completed_count / total) * 100) if total else 0
 

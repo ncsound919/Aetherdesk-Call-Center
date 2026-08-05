@@ -7,11 +7,13 @@ import structlog
 
 logger = structlog.get_logger()
 
+
 class MemoryService:
     """
     Long-term Memory Service inspired by Mem0/MemGPT.
     Extracts and persists customer-specific facts across sessions.
     """
+
     def __init__(self):
         self.storage_path = os.path.abspath("data/memory")
         os.makedirs(self.storage_path, exist_ok=True)
@@ -20,9 +22,10 @@ class MemoryService:
 
     def _sanitize_filename(self, name: str) -> str:
         """Prevent path traversal and invalid characters."""
-        clean = re.sub(r'[^a-zA-Z0-9_-]', '', name)
+        clean = re.sub(r"[^a-zA-Z0-9_-]", "", name)
         if not clean:
             import hashlib
+
             return hashlib.sha256(name.encode()).hexdigest()[:16]
         return clean
 
@@ -40,7 +43,9 @@ class MemoryService:
             # Memory safety: if we have too many locks, clear them (rare but prevents leak)
             if len(self._locks) > 1000:
                 # Only clear locks that aren't currently held
-                self._locks = {k: lock for k, lock in self._locks.items() if lock.locked()}
+                self._locks = {
+                    k: lock for k, lock in self._locks.items() if lock.locked()
+                }
 
             if key not in self._locks:
                 self._locks[key] = asyncio.Lock()
@@ -54,9 +59,11 @@ class MemoryService:
             return []
 
         try:
+
             def _read():
                 with open(path) as f:
                     return json.load(f)
+
             data = await asyncio.to_thread(_read)
             return data.get("facts", [])
         except Exception as e:
@@ -77,7 +84,7 @@ class MemoryService:
             new_facts = []
             if "prefer" in transcript.lower():
                 # Prevent massively long string injections
-                safe_snippet = transcript[:200].replace('\n', ' ')
+                safe_snippet = transcript[:200].replace("\n", " ")
                 new_facts.append(f"Derived from transcript: {safe_snippet}...")
 
             if not new_facts:
@@ -89,14 +96,20 @@ class MemoryService:
                 combined = combined[-50:]
 
             try:
+
                 def _write():
-                    with open(path, 'w') as f:
+                    with open(path, "w") as f:
                         json.dump({"facts": combined}, f)
+
                 await asyncio.to_thread(_write)
-                logger.info("memories_updated", tenant_id=tenant_id, customer_id=customer_id, count=len(new_facts))
+                logger.info(
+                    "memories_updated",
+                    tenant_id=tenant_id,
+                    customer_id=customer_id,
+                    count=len(new_facts),
+                )
             except Exception as e:
                 logger.error("memory_write_error", error=str(e))
 
+
 memory_service = MemoryService()
-
-

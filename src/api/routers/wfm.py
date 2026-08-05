@@ -1,4 +1,3 @@
-
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,6 +21,7 @@ router = APIRouter(prefix="/wfm", tags=["wfm"])
 
 
 # ── Pydantic Models ───────────────────────────────────────────────
+
 
 class ShiftCreate(BaseModel):
     agent_id: str
@@ -101,6 +101,7 @@ class AdherenceResponse(BaseModel):
 
 # ── Shift Routes ──────────────────────────────────────────────────
 
+
 @router.get("/shifts")
 async def list_shifts(
     tenant_id: str = Depends(verify_tenant_access),
@@ -108,7 +109,9 @@ async def list_shifts(
     date_to: str | None = Query(None),
     agent_id: str | None = Query(None),
 ):
-    return await list_shifts_db(tenant_id, date_from=date_from, date_to=date_to, agent_id=agent_id)
+    return await list_shifts_db(
+        tenant_id, date_from=date_from, date_to=date_to, agent_id=agent_id
+    )
 
 
 @router.post("/shifts")
@@ -117,8 +120,12 @@ async def create_shift(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     result = await create_shift_db(
-        tenant_id, data.agent_id, data.start_time, data.end_time,
-        shift_type=data.shift_type, notes=data.notes
+        tenant_id,
+        data.agent_id,
+        data.start_time,
+        data.end_time,
+        shift_type=data.shift_type,
+        notes=data.notes,
     )
     if not result:
         raise HTTPException(status_code=400, detail="Failed to create shift")
@@ -132,9 +139,12 @@ async def update_shift(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     result = await update_shift_db(
-        shift_id, tenant_id,
-        start_time=data.start_time, end_time=data.end_time,
-        shift_type=data.shift_type, notes=data.notes
+        shift_id,
+        tenant_id,
+        start_time=data.start_time,
+        end_time=data.end_time,
+        shift_type=data.shift_type,
+        notes=data.notes,
     )
     if not result:
         raise HTTPException(status_code=404, detail="Shift not found")
@@ -153,6 +163,7 @@ async def delete_shift(
 
 
 # ── Schedule Routes ───────────────────────────────────────────────
+
 
 @router.get("/schedules")
 async def list_schedules(
@@ -186,7 +197,11 @@ async def get_adherence(
     schedules = await list_schedules_db(tenant_id, date_from=date, date_to=date)
     schedule = schedules[0] if schedules else None
 
-    overall = float(schedule["adherence_pct"]) if schedule and schedule.get("adherence_pct") else 0.0
+    overall = (
+        float(schedule["adherence_pct"])
+        if schedule and schedule.get("adherence_pct")
+        else 0.0
+    )
 
     return {
         "date": date,
@@ -203,6 +218,7 @@ async def get_adherence(
 
 # ── QA Routes ─────────────────────────────────────────────────────
 
+
 @router.get("/qa/scores")
 async def list_qa_scores(
     tenant_id: str = Depends(verify_tenant_access),
@@ -211,7 +227,9 @@ async def list_qa_scores(
     date_to: str | None = Query(None),
     limit: int = Query(100, ge=1, le=1000),
 ):
-    return await list_qa_scores_db(tenant_id, agent_id=agent_id, date_from=date_from, date_to=date_to, limit=limit)
+    return await list_qa_scores_db(
+        tenant_id, agent_id=agent_id, date_from=date_from, date_to=date_to, limit=limit
+    )
 
 
 @router.post("/qa/scores")
@@ -220,8 +238,13 @@ async def create_qa_score(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     result = await qa_engine.score_call(
-        tenant_id, data.call_id, data.agent_id, "reviewer",
-        data.rubric_id, data.scores_per_criterion, data.notes
+        tenant_id,
+        data.call_id,
+        data.agent_id,
+        "reviewer",
+        data.rubric_id,
+        data.scores_per_criterion,
+        data.notes,
     )
     if not result:
         raise HTTPException(status_code=400, detail="Failed to create QA score")
@@ -240,7 +263,9 @@ async def create_qa_rubric(
     data: QARubricCreate,
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    result = await create_qa_rubric_db(tenant_id, data.name, data.criteria, data.description)
+    result = await create_qa_rubric_db(
+        tenant_id, data.name, data.criteria, data.description
+    )
     if not result:
         raise HTTPException(status_code=400, detail="Failed to create QA rubric")
     return result

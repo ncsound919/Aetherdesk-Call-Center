@@ -72,9 +72,9 @@ class ObscuraClient:
         await self._ws.send(json.dumps(msg))
         try:
             return await asyncio.wait_for(fut, timeout=self._timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._pending.pop(mid, None)
-            raise ObscuraError(f"CDP command timed out: {method}")
+            raise ObscuraError(f"CDP command timed out: {method}") from None
 
     async def new_page(self, url: str = "about:blank") -> str:
         res = await self._send("Target.createTarget", {"url": url})

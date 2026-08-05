@@ -7,7 +7,7 @@ import structlog
 
 logger = structlog.get_logger()
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 DEFAULT_MAX_RETRIES = 3
 DEFAULT_BASE_DELAY = 1.0
@@ -26,7 +26,7 @@ def exponential_backoff(
     base_delay: float = DEFAULT_BASE_DELAY,
     max_delay: float = DEFAULT_MAX_DELAY,
     exponential_base: float = 2.0,
-    jitter: bool = True
+    jitter: bool = True,
 ):
     def decorator(func: Callable) -> Callable:
         @wraps(func)
@@ -44,9 +44,10 @@ def exponential_backoff(
                     if attempt >= max_retries:
                         break
 
-                    delay = min(base_delay * (exponential_base ** attempt), max_delay)
+                    delay = min(base_delay * (exponential_base**attempt), max_delay)
                     if jitter:
                         import random
+
                         delay = delay * (0.5 + random.random())  # nosec B311 — jitter for retry timing, not cryptographic
 
                     logger.warning(
@@ -55,16 +56,18 @@ def exponential_backoff(
                         attempt=attempt + 1,
                         max_retries=max_retries,
                         delay_sec=delay,
-                        error=str(e)
+                        error=str(e),
                     )
                     await asyncio.sleep(delay)
 
             raise RetryError(
                 f"Failed after {max_retries + 1} attempts",
                 last_exception,
-                max_retries + 1
+                max_retries + 1,
             )
+
         return wrapper
+
     return decorator
 
 
@@ -75,7 +78,7 @@ class RetryConfig:
         base_delay: float = DEFAULT_BASE_DELAY,
         max_delay: float = DEFAULT_MAX_DELAY,
         exponential_base: float = 2.0,
-        retry_on: tuple = (Exception,)
+        retry_on: tuple = (Exception,),
     ):
         self.max_retries = max_retries
         self.base_delay = base_delay
@@ -104,8 +107,8 @@ class AsyncRetry:
                     break
 
                 delay = min(
-                    self.config.base_delay * (self.config.exponential_base ** attempt),
-                    self.config.max_delay
+                    self.config.base_delay * (self.config.exponential_base**attempt),
+                    self.config.max_delay,
                 )
 
                 logger.warning(
@@ -113,19 +116,17 @@ class AsyncRetry:
                     function=func.__name__,
                     attempt=attempt + 1,
                     delay_sec=delay,
-                    error=str(e)
+                    error=str(e),
                 )
                 await asyncio.sleep(delay)
 
         raise RetryError(
             f"Failed after {self.config.max_retries + 1} attempts",
             last_exception,
-            self.config.max_retries + 1
+            self.config.max_retries + 1,
         )
 
 
 retry_default = AsyncRetry(RetryConfig(max_retries=3, base_delay=1.0))
 retry_ollama = AsyncRetry(RetryConfig(max_retries=2, base_delay=1.0, max_delay=10.0))
 retry_rag = AsyncRetry(RetryConfig(max_retries=2, base_delay=0.5, max_delay=10.0))
-
-

@@ -39,18 +39,27 @@ class AgentResponse:
 class LookupInvoiceInput(BaseModel):
     invoice_id: str = Field(..., min_length=1, description="The invoice ID to look up")
 
+
 class GetOrderStatusInput(BaseModel):
     order_id: str = Field(..., min_length=1, description="The order ID to check")
 
+
 class SearchKnowledgeBaseInput(BaseModel):
-    query: str = Field(..., min_length=1, description="The search query for the knowledge base")
+    query: str = Field(
+        ..., min_length=1, description="The search query for the knowledge base"
+    )
+
 
 class HandoffToHumanInput(BaseModel):
-    reason: str = Field(..., min_length=1, description="The reason for handing off to a human agent")
+    reason: str = Field(
+        ..., min_length=1, description="The reason for handing off to a human agent"
+    )
+
 
 class ToolCallResponse(BaseModel):
     thought: str = Field(default="")
     response: str = Field(..., min_length=1)
+
 
 class ToolCallAction(BaseModel):
     thought: str = Field(default="")
@@ -59,11 +68,7 @@ class ToolCallAction(BaseModel):
 
 
 class AgentService:
-    def __init__(
-        self,
-        model: str = None,
-        host: str = None
-    ):
+    def __init__(self, model: str = None, host: str = None):
         self.model = model or OLLAMA_MODEL
         self.host = host or OLLAMA_HOST
         self._client: httpx.AsyncClient | None = None
@@ -72,7 +77,7 @@ class AgentService:
         if self._client is None or self._client.is_closed:
             self._client = httpx.AsyncClient(
                 timeout=60.0,
-                limits=httpx.Limits(max_keepalive_connections=20, max_connections=100)
+                limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
             )
         return self._client
 
@@ -84,54 +89,57 @@ class AgentService:
         self,
         question: str,
         context_results: list[dict[str, Any]],
-        history: list[dict[str, str]] = None
+        history: list[dict[str, str]] = None,
     ) -> AgentResponse:
         if not context_results:
             return AgentResponse(
                 text="I don't have enough information to answer that. Would you like to speak with an agent?",
                 sources=[],
-                needs_agent=True
+                needs_agent=True,
             )
 
-        context = "\n\n".join([
-            f"- {r['content']}" for r in context_results
-        ])
+        context = "\n\n".join([f"- {r['content']}" for r in context_results])
 
         history_text = "No previous conversation"
         if history:
-            history_text = "\n".join([
-                f"Customer: {h.get('customer', '')}\nAgent: {h.get('agent', '')}"
-                for h in history[-3:]
-            ])
+            history_text = "\n".join(
+                [
+                    f"Customer: {h.get('customer', '')}\nAgent: {h.get('agent', '')}"
+                    for h in history[-3:]
+                ]
+            )
 
         prompt = SYSTEM_PROMPT.format(
-            context=context,
-            history=history_text,
-            question=question
+            context=context, history=history_text, question=question
         )
 
-        client = self._get_client()
+        self._get_client()
 
         try:
             result = await llm_client.chat(
                 [
                     {"role": "system", "content": prompt},
-                    {"role": "user", "content": question}
+                    {"role": "user", "content": question},
                 ],
                 temperature=0.7,
             )
             answer_text = result.text
-            sources = [r.get("metadata", {}).get("source", "unknown") for r in context_results]
+            sources = [
+                r.get("metadata", {}).get("source", "unknown") for r in context_results
+            ]
 
             needs_agent = any(
                 keyword in answer_text.lower()
-                for keyword in ["i don't know", "can't help", "speak with an agent", "transfer"]
+                for keyword in [
+                    "i don't know",
+                    "can't help",
+                    "speak with an agent",
+                    "transfer",
+                ]
             )
 
             return AgentResponse(
-                text=answer_text,
-                sources=sources,
-                needs_agent=needs_agent
+                text=answer_text, sources=sources, needs_agent=needs_agent
             )
 
         except Exception as e:
@@ -139,14 +147,11 @@ class AgentService:
             return AgentResponse(
                 text="I'm having trouble processing that request. Please hold while I connect you to an agent.",
                 sources=[],
-                needs_agent=True
+                needs_agent=True,
             )
 
     async def answer_with_rag(
-        self,
-        question: str,
-        history: list[dict[str, str]] = None,
-        use_rag: bool = True
+        self, question: str, history: list[dict[str, str]] = None, use_rag: bool = True
     ) -> AgentResponse:
         from api.services.rag import rag_service
 
@@ -156,6 +161,7 @@ class AgentService:
             context_results = []
 
         return await self.answer(question, context_results, history)
+
 
 agent_service = AgentService()
 
@@ -195,7 +201,9 @@ Keep your responses natural, conversational, and concise for voice interaction.
 
         if tool_name == "lookup_invoice":
             validated = LookupInvoiceInput(invoice_id=tool_input)
-            res = self.actions.run("lookup_invoice", {"invoice_id": validated.invoice_id})
+            res = self.actions.run(
+                "lookup_invoice", {"invoice_id": validated.invoice_id}
+            )
             if res.get("success"):
                 return f"Invoice {validated.invoice_id} found. Status: Paid, Amount: $42.00"
             return f"Could not find invoice {validated.invoice_id}"
@@ -210,20 +218,26 @@ Keep your responses natural, conversational, and concise for voice interaction.
             return "\n".join([f"- {r['content']}" for r in results])
         elif tool_name == "handoff_to_human":
             validated = HandoffToHumanInput(reason=tool_input)
-            self.actions.run("handoff", {"queue": "general", "reason": validated.reason})
+            self.actions.run(
+                "handoff", {"queue": "general", "reason": validated.reason}
+            )
             return "Handoff initiated."
         else:
             return f"Unknown tool: {tool_name}"
 
-    async def step(self, history: list[dict[str, str]], user_input: str) -> AgentResponse:
-        client = self._get_client()
+    async def step(
+        self, history: list[dict[str, str]], user_input: str
+    ) -> AgentResponse:
+        self._get_client()
 
         messages = [{"role": "system", "content": self.system_prompt}]
         for msg in history:
             role = "user" if msg["from"] == "customer" else "assistant"
             content = msg["text"]
             if role == "assistant":
-                content = json.dumps({"thought": "continuing conversation", "response": content})
+                content = json.dumps(
+                    {"thought": "continuing conversation", "response": content}
+                )
             messages.append({"role": role, "content": content})
 
         messages.append({"role": "user", "content": user_input})
@@ -233,7 +247,7 @@ Keep your responses natural, conversational, and concise for voice interaction.
         action_taken = None
 
         for _step_idx in range(max_steps):
-            for attempt in range(2): # SELF-HEALING LOOP
+            for attempt in range(2):  # SELF-HEALING LOOP
                 try:
                     result = await llm_client.chat(
                         messages,
@@ -249,18 +263,35 @@ Keep your responses natural, conversational, and concise for voice interaction.
                         elif "tool" in parsed:
                             ToolCallAction(**parsed)
                         else:
-                            raise ValueError("Agent output must contain 'response' or 'tool'")
+                            raise ValueError(
+                                "Agent output must contain 'response' or 'tool'"
+                            )
                         break
                     except (ValueError, ValidationError) as e:
-                        logger.warning("agent_json_parse_error", raw=ai_msg, error=str(e))
+                        logger.warning(
+                            "agent_json_parse_error", raw=ai_msg, error=str(e)
+                        )
                         if attempt == 0:
                             messages.append({"role": "assistant", "content": ai_msg})
-                            messages.append({"role": "user", "content": "Your response was not valid JSON. Please repeat but ensure valid JSON format."})
+                            messages.append(
+                                {
+                                    "role": "user",
+                                    "content": "Your response was not valid JSON. Please repeat but ensure valid JSON format.",
+                                }
+                            )
                             continue
-                        return AgentResponse(text="I'm sorry, I encountered an error processing that.", sources=[], needs_agent=True)
+                        return AgentResponse(
+                            text="I'm sorry, I encountered an error processing that.",
+                            sources=[],
+                            needs_agent=True,
+                        )
                 except Exception as e:
                     logger.error("agent_step_error", error=str(e))
-                    return AgentResponse(text="I'm having trouble processing that request right now.", sources=[], needs_agent=True)
+                    return AgentResponse(
+                        text="I'm having trouble processing that request right now.",
+                        sources=[],
+                        needs_agent=True,
+                    )
 
             if "response" in parsed:
                 if parsed.get("thought"):
@@ -269,13 +300,18 @@ Keep your responses natural, conversational, and concise for voice interaction.
                     text=parsed["response"],
                     sources=[],
                     needs_agent=needs_agent,
-                    action_taken=action_taken
+                    action_taken=action_taken,
                 )
 
             if "tool" in parsed:
                 tool_name = parsed["tool"]
                 tool_input = str(parsed.get("tool_input", ""))
-                logger.info("agent_tool_call", tool=tool_name, input=tool_input, thought=parsed.get("thought"))
+                logger.info(
+                    "agent_tool_call",
+                    tool=tool_name,
+                    input=tool_input,
+                    thought=parsed.get("thought"),
+                )
 
                 # SUPERVISION CHECK
                 if tool_name == "handoff_to_human":
@@ -284,7 +320,12 @@ Keep your responses natural, conversational, and concise for voice interaction.
                         self._pending_handoff = tool_input
                         tool_result = f"Confirmation required: Are you sure you want to transfer to a human agent? Reason: {tool_input}. Reply with the same handoff tool call to confirm."
                         messages.append({"role": "assistant", "content": ai_msg})
-                        messages.append({"role": "user", "content": f"Tool '{tool_name}' needs confirmation: {tool_result}"})
+                        messages.append(
+                            {
+                                "role": "user",
+                                "content": f"Tool '{tool_name}' needs confirmation: {tool_result}",
+                            }
+                        )
                         action_taken = "confirmation_pending"
                         continue
                     self._pending_handoff = None
@@ -293,9 +334,16 @@ Keep your responses natural, conversational, and concise for voice interaction.
                 logger.info("agent_tool_result", result=tool_result)
 
                 messages.append({"role": "assistant", "content": ai_msg})
-                messages.append({"role": "user", "content": f"Tool '{tool_name}' returned: {tool_result}"})
+                messages.append(
+                    {
+                        "role": "user",
+                        "content": f"Tool '{tool_name}' returned: {tool_result}",
+                    }
+                )
                 continue
 
-        return AgentResponse(text="I need to transfer you to an agent as this is taking too long.", sources=[], needs_agent=True)
-
-
+        return AgentResponse(
+            text="I need to transfer you to an agent as this is taking too long.",
+            sources=[],
+            needs_agent=True,
+        )

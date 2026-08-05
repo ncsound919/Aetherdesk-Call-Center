@@ -139,7 +139,11 @@ class LLMClient:
             ]
             attempts.append(
                 (
-                    {**base_body, "messages": messages_json, "response_format": {"type": "json_object"}},
+                    {
+                        **base_body,
+                        "messages": messages_json,
+                        "response_format": {"type": "json_object"},
+                    },
                     "json_object",
                 )
             )
@@ -165,7 +169,9 @@ class LLMClient:
                 )
                 if resp.status_code != 200:
                     last_error = f"DeepSeek HTTP {resp.status_code}: {resp.text[:200]}"
-                    logger.warning("deepseek_http_error", label=label, status=resp.status_code)
+                    logger.warning(
+                        "deepseek_http_error", label=label, status=resp.status_code
+                    )
                     continue
                 data = resp.json()
                 choice = (data.get("choices") or [{}])[0]
@@ -173,10 +179,16 @@ class LLMClient:
                 if not content.strip():
                     finish = choice.get("finish_reason", "unknown")
                     last_error = f"DeepSeek empty content (finish_reason={finish})"
-                    logger.warning("deepseek_empty_content", label=label, finish_reason=finish)
+                    logger.warning(
+                        "deepseek_empty_content", label=label, finish_reason=finish
+                    )
                     continue
-                return {"content": content, "usage": data.get("usage") or {}, "model": model}
-            except (httpx.HTTPError, asyncio.TimeoutError) as e:
+                return {
+                    "content": content,
+                    "usage": data.get("usage") or {},
+                    "model": model,
+                }
+            except (TimeoutError, httpx.HTTPError) as e:
                 last_error = str(e)
                 logger.warning("deepseek_request_error", label=label, error=last_error)
 
@@ -218,7 +230,7 @@ class LLMClient:
                 "usage": {"prompt_tokens": usage or 0, "completion_tokens": 0},
                 "model": model,
             }
-        except (httpx.HTTPError, asyncio.TimeoutError) as e:
+        except (TimeoutError, httpx.HTTPError) as e:
             logger.warning("ollama_request_error", error=str(e))
             return None
 
@@ -254,7 +266,11 @@ class LLMClient:
                 json=body,
             )
             if resp.status_code != 200:
-                logger.warning("litellm_http_error", status=resp.status_code, detail=resp.text[:200])
+                logger.warning(
+                    "litellm_http_error",
+                    status=resp.status_code,
+                    detail=resp.text[:200],
+                )
                 return None
             data = resp.json()
             choice = (data.get("choices") or [{}])[0]
@@ -266,7 +282,7 @@ class LLMClient:
                 "usage": data.get("usage") or {},
                 "model": model,
             }
-        except (httpx.HTTPError, asyncio.TimeoutError) as e:
+        except (TimeoutError, httpx.HTTPError) as e:
             logger.warning("litellm_request_error", error=str(e))
             return None
 
@@ -300,11 +316,17 @@ class LLMClient:
         last_error = ""
         for provider, model_name in candidates:
             if provider == "litellm":
-                result = await self._gateway_chat(messages, temperature, json_mode, model_name)
+                result = await self._gateway_chat(
+                    messages, temperature, json_mode, model_name
+                )
             elif provider == "deepseek":
-                result = await self._deepseek_chat(messages, temperature, json_mode, model_name)
+                result = await self._deepseek_chat(
+                    messages, temperature, json_mode, model_name
+                )
             elif provider == "ollama":
-                result = await self._ollama_chat(messages, temperature, json_mode, model_name)
+                result = await self._ollama_chat(
+                    messages, temperature, json_mode, model_name
+                )
             else:
                 continue
 

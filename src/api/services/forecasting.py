@@ -9,9 +9,9 @@ logger = structlog.get_logger()
 
 class DemandForecaster:
     def __init__(self):
-        self.alpha = 0.3   # level smoothing
-        self.beta = 0.1    # trend smoothing
-        self.gamma = 0.2   # seasonal smoothing
+        self.alpha = 0.3  # level smoothing
+        self.beta = 0.1  # trend smoothing
+        self.gamma = 0.2  # seasonal smoothing
         self.seasonal_period = 24  # 24-hour daily pattern
 
     async def forecast(self, tenant_id: str, hours_ahead: int = 24) -> dict:
@@ -49,12 +49,14 @@ class DemandForecaster:
             base_time = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
             for h in range(hours_ahead):
                 t = base_time + timedelta(hours=h + 1)
-                forecast_list.append({
-                    "hour": t.isoformat(),
-                    "predicted_volume": round(avg),
-                    "confidence_low": round(avg * 0.8),
-                    "confidence_high": round(avg * 1.2),
-                })
+                forecast_list.append(
+                    {
+                        "hour": t.isoformat(),
+                        "predicted_volume": round(avg),
+                        "confidence_low": round(avg * 0.8),
+                        "confidence_high": round(avg * 1.2),
+                    }
+                )
             return {
                 "forecast": forecast_list,
                 "seasonal_indices": {},
@@ -68,11 +70,13 @@ class DemandForecaster:
         train_end = len(data)
         test_start = max(0, train_end - self.seasonal_period)
         actuals = data[test_start:train_end]
-        predicted = self._holt_winters(data[:test_start], self.seasonal_period, len(actuals))
+        predicted = self._holt_winters(
+            data[:test_start], self.seasonal_period, len(actuals)
+        )
         mape = None
         if actuals and predicted:
             errors = []
-            for a, p in zip(actuals, predicted):
+            for a, p in zip(actuals, predicted, strict=False):
                 if a > 0:
                     errors.append(abs(a - p) / a)
             if errors:
@@ -82,15 +86,15 @@ class DemandForecaster:
         seasonal = {}
         if len(data) >= self.seasonal_period:
             for i in range(self.seasonal_period):
-                season_vals = data[i::self.seasonal_period]
+                season_vals = data[i :: self.seasonal_period]
                 if season_vals:
                     seasonal[str(i)] = round(statistics.mean(season_vals), 2)
 
         # Trend
         trend = 0.0
         if len(data) >= self.seasonal_period * 2:
-            first_half = statistics.mean(data[:self.seasonal_period])
-            second_half = statistics.mean(data[-self.seasonal_period:])
+            first_half = statistics.mean(data[: self.seasonal_period])
+            second_half = statistics.mean(data[-self.seasonal_period :])
             trend = round(second_half - first_half, 2)
 
         base_time = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
@@ -98,12 +102,14 @@ class DemandForecaster:
         for i, pred in enumerate(predictions):
             t = base_time + timedelta(hours=i + 1)
             spread = max(5, abs(pred) * 0.15)
-            forecast_list.append({
-                "hour": t.isoformat(),
-                "predicted_volume": round(pred),
-                "confidence_low": round(max(0, pred - spread)),
-                "confidence_high": round(pred + spread),
-            })
+            forecast_list.append(
+                {
+                    "hour": t.isoformat(),
+                    "predicted_volume": round(pred),
+                    "confidence_low": round(max(0, pred - spread)),
+                    "confidence_high": round(pred + spread),
+                }
+            )
 
         return {
             "forecast": forecast_list,
@@ -119,7 +125,12 @@ class DemandForecaster:
 
         # Initialize level, trend, seasonal
         level = statistics.mean(data[:seasonal_period])
-        trend = (statistics.mean(data[seasonal_period:2 * seasonal_period]) - level) / seasonal_period if n >= 2 * seasonal_period else 0
+        trend = (
+            (statistics.mean(data[seasonal_period : 2 * seasonal_period]) - level)
+            / seasonal_period
+            if n >= 2 * seasonal_period
+            else 0
+        )
         seasonal = [0.0] * seasonal_period
         for i in range(seasonal_period):
             seasonal[i] = data[i] - level
@@ -128,9 +139,14 @@ class DemandForecaster:
         for t in range(seasonal_period, n):
             val = data[t]
             prev_level = level
-            level = self.alpha * (val - seasonal[t % seasonal_period]) + self.beta * (prev_level + trend)
+            level = self.alpha * (val - seasonal[t % seasonal_period]) + self.beta * (
+                prev_level + trend
+            )
             trend = self.beta * (level - prev_level) + (1 - self.beta) * trend
-            seasonal[t % seasonal_period] = self.gamma * (val - level) + (1 - self.gamma) * seasonal[t % seasonal_period]
+            seasonal[t % seasonal_period] = (
+                self.gamma * (val - level)
+                + (1 - self.gamma) * seasonal[t % seasonal_period]
+            )
 
         # Forecast
         results = []
@@ -151,12 +167,17 @@ class DemandForecaster:
 
         sum_terms = 0.0
         for k in range(N):
-            sum_terms += (A ** k) / math.factorial(k)
-        last_term = (A ** N) / (math.factorial(N) * (1 - rho))
+            sum_terms += (A**k) / math.factorial(k)
+        last_term = (A**N) / (math.factorial(N) * (1 - rho))
         erlang_c = last_term / (sum_terms + last_term)
         return erlang_c
 
-    def _compute_staffing(self, forecasted_volume: float, target_service_level: float = 0.8, target_answer_time: int = 20) -> int:
+    def _compute_staffing(
+        self,
+        forecasted_volume: float,
+        target_service_level: float = 0.8,
+        target_answer_time: int = 20,
+    ) -> int:
         """Compute required agents using Erlang C given forecasted hourly volume."""
         if forecasted_volume <= 0:
             return 0
@@ -167,9 +188,13 @@ class DemandForecaster:
 
         # Iteratively increase agents until service level target met
         for n in range(agents, agents + 50):
-            A = (forecasted_volume * avg_handle_time) / 3600  # Erlang A traffic intensity
+            A = (
+                forecasted_volume * avg_handle_time
+            ) / 3600  # Erlang A traffic intensity
             pw = self._erlang_c(A, n)
-            service_level = 1 - pw * math.exp(-(n - A) * (target_answer_time / avg_handle_time))
+            service_level = 1 - pw * math.exp(
+                -(n - A) * (target_answer_time / avg_handle_time)
+            )
             if service_level >= target_service_level:
                 return n
         return agents + 50
@@ -201,13 +226,15 @@ async def get_forecasted_staffing(tenant_id: str, date: str) -> dict:
     for entry in result["forecast"]:
         vol = entry["predicted_volume"]
         agents = forecaster._compute_staffing(vol)
-        hourly_staffing.append({
-            "hour": entry["hour"],
-            "predicted_volume": vol,
-            "recommended_agents": agents,
-            "confidence_low": entry["confidence_low"],
-            "confidence_high": entry["confidence_high"],
-        })
+        hourly_staffing.append(
+            {
+                "hour": entry["hour"],
+                "predicted_volume": vol,
+                "recommended_agents": agents,
+                "confidence_low": entry["confidence_low"],
+                "confidence_high": entry["confidence_high"],
+            }
+        )
 
     total_agent_hours = sum(h["recommended_agents"] for h in hourly_staffing)
 

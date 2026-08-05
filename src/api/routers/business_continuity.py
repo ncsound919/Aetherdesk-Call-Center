@@ -30,7 +30,9 @@ class BackupChannelCreateRequest(BaseModel):
 
 
 @router.post("/failover/test")
-async def run_failover_test(data: FailoverTestRequest, tenant_id: str = Depends(verify_tenant_access)):
+async def run_failover_test(
+    data: FailoverTestRequest, tenant_id: str = Depends(verify_tenant_access)
+):
     result = await dr_service.test_failover(data.service, tenant_id)
     if not result:
         raise HTTPException(status_code=400, detail="Failover test failed")
@@ -48,8 +50,12 @@ async def get_multi_region_status(tenant_id: str = Depends(verify_tenant_access)
 
 
 @router.post("/chaos/run")
-async def run_chaos(data: ChaosRunRequest, tenant_id: str = Depends(verify_tenant_access)):
-    result = await dr_service.run_chaos_experiment(data.target, data.fault_type, data.duration_seconds, tenant_id)
+async def run_chaos(
+    data: ChaosRunRequest, tenant_id: str = Depends(verify_tenant_access)
+):
+    result = await dr_service.run_chaos_experiment(
+        data.target, data.fault_type, data.duration_seconds, tenant_id
+    )
     if not result:
         raise HTTPException(status_code=400, detail="Failed to start chaos experiment")
     return result
@@ -61,8 +67,12 @@ async def list_chaos_experiments(tenant_id: str = Depends(verify_tenant_access))
 
 
 @router.post("/contracts")
-async def create_contract(data: ContractCreateRequest, tenant_id: str = Depends(verify_tenant_access)):
-    result = await dr_service.manage_contract(tenant_id, data.vendor, data.terms, data.renewal_date, data.cost)
+async def create_contract(
+    data: ContractCreateRequest, tenant_id: str = Depends(verify_tenant_access)
+):
+    result = await dr_service.manage_contract(
+        tenant_id, data.vendor, data.terms, data.renewal_date, data.cost
+    )
     if not result:
         raise HTTPException(status_code=400, detail="Failed to create contract")
     return result
@@ -82,10 +92,16 @@ async def get_contract_alerts(
 
 
 @router.post("/backup-channels")
-async def configure_backup_channel(data: BackupChannelCreateRequest, tenant_id: str = Depends(verify_tenant_access)):
-    result = await dr_service.configure_backup_channel(tenant_id, data.channel_type, data.config)
+async def configure_backup_channel(
+    data: BackupChannelCreateRequest, tenant_id: str = Depends(verify_tenant_access)
+):
+    result = await dr_service.configure_backup_channel(
+        tenant_id, data.channel_type, data.config
+    )
     if not result:
-        raise HTTPException(status_code=400, detail="Failed to configure backup channel")
+        raise HTTPException(
+            status_code=400, detail="Failed to configure backup channel"
+        )
     return result
 
 

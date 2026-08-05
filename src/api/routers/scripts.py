@@ -1,4 +1,3 @@
-
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -9,6 +8,7 @@ router = APIRouter(prefix="/scripts", tags=["scripts"])
 
 
 # --- Pydantic models ---
+
 
 class ScriptCreate(BaseModel):
     name: str
@@ -35,11 +35,15 @@ class TemplateCreate(BaseModel):
 
 # --- Auth helper ---
 
-async def get_tenant_id(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))) -> str:
+
+async def get_tenant_id(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
+) -> str:
     """Extract tenant_id from JWT token."""
     if not credentials:
         raise HTTPException(status_code=401, detail="Authentication required")
     from api.services.auth import verify_access_token
+
     payload = await verify_access_token(credentials.credentials)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -51,10 +55,12 @@ async def get_tenant_id(credentials: HTTPAuthorizationCredentials = Depends(HTTP
 
 # --- Endpoints ---
 
+
 @router.post("")
 async def create_script(script: ScriptCreate, tenant_id: str = Depends(get_tenant_id)):
     """Create a new script."""
     from api.services.db_tenants import create_script_db
+
     result = await create_script_db(
         tenant_id=tenant_id,
         name=script.name,
@@ -63,6 +69,7 @@ async def create_script(script: ScriptCreate, tenant_id: str = Depends(get_tenan
     )
     if script.is_active:
         from api.services.db_tenants import update_script_db
+
         await update_script_db(result["id"], tenant_id, {"is_active": True})
     logger.info("script_created", script_id=result["id"], tenant_id=tenant_id)
     return result
@@ -77,7 +84,10 @@ async def list_scripts(
 ):
     """List scripts for the tenant."""
     from api.services.db_tenants import list_scripts_db
-    rows = await list_scripts_db(tenant_id, is_active=is_active, limit=limit, offset=offset)
+
+    rows = await list_scripts_db(
+        tenant_id, is_active=is_active, limit=limit, offset=offset
+    )
     return {"items": rows, "count": len(rows), "limit": limit, "offset": offset}
 
 
@@ -85,6 +95,7 @@ async def list_scripts(
 async def get_script(script_id: str, tenant_id: str = Depends(get_tenant_id)):
     """Get a single script."""
     from api.services.db_tenants import get_script_db
+
     row = await get_script_db(script_id, tenant_id)
     if not row:
         raise HTTPException(status_code=404, detail="Script not found")
@@ -92,9 +103,12 @@ async def get_script(script_id: str, tenant_id: str = Depends(get_tenant_id)):
 
 
 @router.patch("/{script_id}")
-async def update_script(script_id: str, updates: ScriptUpdate, tenant_id: str = Depends(get_tenant_id)):
+async def update_script(
+    script_id: str, updates: ScriptUpdate, tenant_id: str = Depends(get_tenant_id)
+):
     """Update a script."""
     from api.services.db_tenants import update_script_db
+
     update_dict = {k: v for k, v in updates.model_dump().items() if v is not None}
     row = await update_script_db(script_id, tenant_id, update_dict)
     if not row:
@@ -107,6 +121,7 @@ async def update_script(script_id: str, updates: ScriptUpdate, tenant_id: str = 
 async def delete_script(script_id: str, tenant_id: str = Depends(get_tenant_id)):
     """Delete a script."""
     from api.services.db_tenants import delete_script_db
+
     success = await delete_script_db(script_id, tenant_id)
     if not success:
         raise HTTPException(status_code=404, detail="Script not found")
@@ -116,6 +131,7 @@ async def delete_script(script_id: str, tenant_id: str = Depends(get_tenant_id))
 
 # --- Template endpoints ---
 
+
 @router.get("/templates/list")
 async def list_templates(
     industry: str | None = Query(None),
@@ -124,6 +140,7 @@ async def list_templates(
 ):
     """List public script templates (no auth required)."""
     from api.services.db_tenants import list_script_templates_db
+
     rows = await list_script_templates_db(industry=industry, limit=limit, offset=offset)
     return {"items": rows, "count": len(rows), "limit": limit, "offset": offset}
 
@@ -132,6 +149,7 @@ async def list_templates(
 async def get_template(template_id: str):
     """Get a single template (no auth required)."""
     from api.services.db_tenants import get_script_template_db
+
     row = await get_script_template_db(template_id)
     if not row:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -142,6 +160,7 @@ async def get_template(template_id: str):
 async def clone_template(template_id: str, tenant_id: str = Depends(get_tenant_id)):
     """Clone a public template into tenant's scripts."""
     from api.services.db_tenants import create_script_db, get_script_template_db
+
     template = await get_script_template_db(template_id)
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -151,7 +170,12 @@ async def clone_template(template_id: str, tenant_id: str = Depends(get_tenant_i
         content=template["content"],
         variables=template["variables"],
     )
-    logger.info("template_cloned", template_id=template_id, script_id=result["id"], tenant_id=tenant_id)
+    logger.info(
+        "template_cloned",
+        template_id=template_id,
+        script_id=result["id"],
+        tenant_id=tenant_id,
+    )
     return {"script_id": result["id"], "message": "Template cloned"}
 
 
@@ -159,6 +183,7 @@ async def clone_template(template_id: str, tenant_id: str = Depends(get_tenant_i
 async def publish_template(template: TemplateCreate):
     """Publish a new template (no auth required for now, but should be admin-only in production)."""
     from api.services.db_tenants import create_script_template_db
+
     result = await create_script_template_db(
         name=template.name,
         description=template.description,

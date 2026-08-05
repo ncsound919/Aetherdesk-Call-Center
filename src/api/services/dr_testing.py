@@ -69,8 +69,15 @@ class DRTestingService:
         }
 
         elapsed = round(time.time() - start + simulated_duration, 2)
-        await create_dr_test_db(tenant_id, f"service_restart:{service_name}", status, result, elapsed)
-        logger.info("dr_test_service_restart_completed", service=service_name, success=success, duration=elapsed)
+        await create_dr_test_db(
+            tenant_id, f"service_restart:{service_name}", status, result, elapsed
+        )
+        logger.info(
+            "dr_test_service_restart_completed",
+            service=service_name,
+            success=success,
+            duration=elapsed,
+        )
         return result
 
     async def test_network_partition(self, tenant_id: str = "system"):
@@ -86,12 +93,16 @@ class DRTestingService:
             "success": success,
             "recovery_time_seconds": round(simulated_duration, 2),
             "details": "Simulated network partition between primary and secondary regions",
-            "services_affected": ["api", "database", "websocket"] if not success else [],
+            "services_affected": ["api", "database", "websocket"]
+            if not success
+            else [],
         }
 
         elapsed = round(time.time() - start + simulated_duration, 2)
         await create_dr_test_db(tenant_id, "network_partition", status, result, elapsed)
-        logger.info("dr_test_network_partition_completed", success=success, duration=elapsed)
+        logger.info(
+            "dr_test_network_partition_completed", success=success, duration=elapsed
+        )
         return result
 
     async def get_dr_status(self):
@@ -113,7 +124,9 @@ class DRTestingService:
         start = time.time()
         results = {
             "database_failover": await self.test_database_failover(tenant_id),
-            "service_restart": await self.test_service_restart("api-gateway", tenant_id),
+            "service_restart": await self.test_service_restart(
+                "api-gateway", tenant_id
+            ),
             "network_partition": await self.test_network_partition(tenant_id),
         }
 

@@ -10,6 +10,7 @@ from api.services.queue import QueueManager
 
 logger = structlog.get_logger()
 
+
 class AutonomousWorker:
     def __init__(self, redis_client):
         self.qm = QueueManager(redis_client)
@@ -25,31 +26,34 @@ class AutonomousWorker:
 
             item = self.qm.claim("general", "AUTO-WORKER-001")
             if item:
-                logger.info("processing_queue_item", session_id=item['session_id'])
+                logger.info("processing_queue_item", session_id=item["session_id"])
 
                 # Simulate agent processing
-                history = [{"from": "customer", "text": item['preview']}]
-                response = await self.orchestrator.step({}, history, item['preview'])
+                history = [{"from": "customer", "text": item["preview"]}]
+                response = await self.orchestrator.step({}, history, item["preview"])
 
                 logger.info("auto_worker_response", response=response.text)
 
                 # Record for QA
-                await self.orchestrator.record_session(item['session_id'], history + [{"from": "agent", "text": response.text}])
+                await self.orchestrator.record_session(
+                    item["session_id"],
+                    history + [{"from": "agent", "text": response.text}],
+                )
 
                 # In a real system, you'd send the response back via the protocol (e.g. Twilio)
 
-            await asyncio.sleep(5) # Poll every 5 seconds
+            await asyncio.sleep(5)  # Poll every 5 seconds
+
 
 async def start_worker():
     r = redis.Redis(
         host=os.getenv("REDIS_HOST", "localhost"),
         port=int(os.getenv("REDIS_PORT", 6379)),
-        decode_responses=True
+        decode_responses=True,
     )
     worker = AutonomousWorker(r)
     await worker.run()
 
+
 if __name__ == "__main__":
     asyncio.run(start_worker())
-
-

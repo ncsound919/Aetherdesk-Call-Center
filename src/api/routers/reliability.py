@@ -25,7 +25,9 @@ async def reset_circuit_breaker(
 ):
     reset = await circuit_breaker_registry.reset(name)
     if not reset:
-        raise HTTPException(status_code=404, detail=f"Circuit breaker '{name}' not found")
+        raise HTTPException(
+            status_code=404, detail=f"Circuit breaker '{name}' not found"
+        )
     return {"success": True, "name": name, "state": "RESET"}
 
 
@@ -44,7 +46,9 @@ async def set_rate_limit(
     window_seconds: int = Query(60, ge=1, le=3600),
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    result = await rate_limiter.set_limits(target_tenant_id, route_key, max_requests, window_seconds)
+    result = await rate_limiter.set_limits(
+        target_tenant_id, route_key, max_requests, window_seconds
+    )
     return result
 
 
@@ -57,8 +61,13 @@ async def get_dr_status(
 
 @router.post("/dr/test")
 async def run_dr_test(
-    test_type: str = Query("full", description="full, database_failover, service_restart, or network_partition"),
-    service_name: str = Query(None, description="Service name for service_restart test"),
+    test_type: str = Query(
+        "full",
+        description="full, database_failover, service_restart, or network_partition",
+    ),
+    service_name: str = Query(
+        None, description="Service name for service_restart test"
+    ),
     tenant_id: str = Depends(verify_tenant_access),
 ):
     if test_type == "full":
@@ -98,4 +107,9 @@ async def warm_cache_key(
     if value:
         await redis_cache_service.set(key, value, ttl)
         return {"success": True, "key": key, "cached": True}
-    return {"success": False, "key": key, "cached": False, "message": "No value provided"}
+    return {
+        "success": False,
+        "key": key,
+        "cached": False,
+        "message": "No value provided",
+    }

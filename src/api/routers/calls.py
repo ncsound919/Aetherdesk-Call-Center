@@ -1,4 +1,3 @@
-
 import os
 import uuid
 from datetime import UTC, datetime
@@ -21,11 +20,10 @@ from api.services.database import (
 
 router = APIRouter(prefix="/calls", tags=["calls"])
 
+
 @router.post("", response_model=CallResponse, status_code=201)
 async def create_call(
-    request: Request,
-    call: CallCreate,
-    tenant_id: str = Depends(verify_tenant_access)
+    request: Request, call: CallCreate, tenant_id: str = Depends(verify_tenant_access)
 ):
     """Create and initiate a call via Fonster"""
     call_id = str(uuid.uuid4())
@@ -77,17 +75,19 @@ async def create_call(
     # Place outbound call via Twilio directly
     try:
         from dotenv import load_dotenv
+
         load_dotenv(override=True)
         twilio_sid = os.environ.get("TWILIO_ACCOUNT_SID", "")
         twilio_token = os.environ.get("TWILIO_AUTH_TOKEN", "")
         twilio_from = os.environ.get("TWILIO_FROM_NUMBER", "")
         if twilio_sid and twilio_token and twilio_from:
             from twilio.rest import Client as TwilioRest
+
             tc = TwilioRest(twilio_sid, twilio_token)
             tc.calls.create(
                 to=call.caller_number,
                 from_=twilio_from,
-                twiml='<Response><Say>Hello from AetherDesk.</Say></Response>',
+                twiml="<Response><Say>Hello from AetherDesk.</Say></Response>",
                 timeout=30,
             )
     except Exception:
@@ -138,7 +138,11 @@ async def call_action(
     )
 
     if not fonster_client:
-        return {"success": True, "action": action.action, "note": "Fonster not connected (dev mode)"}
+        return {
+            "success": True,
+            "action": action.action,
+            "note": "Fonster not connected (dev mode)",
+        }
 
     if action.action == "answer":
         result = await fonster_client.answer_call(call_id)
@@ -157,8 +161,14 @@ async def call_action(
             raise HTTPException(status_code=400, detail="Transfer target required")
         result = await fonster_client.transfer_call(call_id, action.target)
     elif action.action == "gather":
-        hints = action.data.get("hints", ["sales", "support", "billing", "technical"]) if action.data else []
-        result = await fonster_client.gather_speech(call_id, hints=hints, language="en-US")
+        hints = (
+            action.data.get("hints", ["sales", "support", "billing", "technical"])
+            if action.data
+            else []
+        )
+        result = await fonster_client.gather_speech(
+            call_id, hints=hints, language="en-US"
+        )
     elif action.action == "say":
         text = action.data.get("text", "") if action.data else ""
         result = await fonster_client.say_text(call_id, text)

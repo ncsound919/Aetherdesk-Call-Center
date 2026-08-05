@@ -27,6 +27,7 @@ _tenant_thresholds: dict[str, dict] = {}
 
 # ── Pydantic Models ───────────────────────────────────────────────
 
+
 class AIEvaluationCreate(BaseModel):
     experiment_id: str | None = None
     call_id: str | None = None
@@ -53,12 +54,15 @@ class ConfidenceThresholdSet(BaseModel):
 
 # ── Evaluation Routes ─────────────────────────────────────────────
 
+
 @router.post("/evaluate")
 async def record_evaluation(
     data: AIEvaluationCreate,
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    is_correct = 1 if (data.actual_intent and data.predicted_intent == data.actual_intent) else 0
+    is_correct = (
+        1 if (data.actual_intent and data.predicted_intent == data.actual_intent) else 0
+    )
     result = await create_evaluation_db(
         tenant_id=tenant_id,
         experiment_id=data.experiment_id,
@@ -72,7 +76,12 @@ async def record_evaluation(
     )
     if not result:
         raise HTTPException(status_code=400, detail="Failed to record evaluation")
-    logger.info("evaluation_recorded", tenant_id=tenant_id, predicted=data.predicted_intent, is_correct=is_correct)
+    logger.info(
+        "evaluation_recorded",
+        tenant_id=tenant_id,
+        predicted=data.predicted_intent,
+        is_correct=is_correct,
+    )
     return result
 
 
@@ -82,10 +91,13 @@ async def get_accuracy(
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
 ):
-    return await get_accuracy_metrics_db(tenant_id, start_date=start_date, end_date=end_date)
+    return await get_accuracy_metrics_db(
+        tenant_id, start_date=start_date, end_date=end_date
+    )
 
 
 # ── Experiment Routes ─────────────────────────────────────────────
+
 
 @router.post("/experiments")
 async def create_experiment(
@@ -124,7 +136,9 @@ async def get_experiment(
         raise HTTPException(status_code=404, detail="Experiment not found")
 
     # Build evaluation results for this experiment
-    evaluations = await list_evaluations_db(tenant_id, experiment_id=experiment_id, limit=10000)
+    evaluations = await list_evaluations_db(
+        tenant_id, experiment_id=experiment_id, limit=10000
+    )
     metrics = AIEvaluationService.calculate_accuracy_metrics(evaluations)
     return {**exp, "metrics": metrics}
 
@@ -141,7 +155,9 @@ async def stop_experiment(
         raise HTTPException(status_code=400, detail="Experiment is not active")
 
     # Evaluate to determine winner
-    evaluations = await list_evaluations_db(tenant_id, experiment_id=experiment_id, limit=10000)
+    evaluations = await list_evaluations_db(
+        tenant_id, experiment_id=experiment_id, limit=10000
+    )
     metrics = AIEvaluationService.calculate_accuracy_metrics(evaluations)
 
     # Determine winner by highest F1
@@ -149,29 +165,43 @@ async def stop_experiment(
     winner = exp.get("model_a")  # default
     if intents:
         best_f1 = 0.0
-        for intent, m in intents.items():
+        for _intent, m in intents.items():
             if m.get("f1", 0) > best_f1:
                 best_f1 = m["f1"]
         # For A/B, use overall accuracy comparison
         a_results = [e for e in evaluations if e.get("model_used") == exp["model_a"]]
         b_results = [e for e in evaluations if e.get("model_used") == exp["model_b"]]
-        a_acc = sum(1 for e in a_results if e.get("is_correct")) / len(a_results) if a_results else 0
-        b_acc = sum(1 for e in b_results if e.get("is_correct")) / len(b_results) if b_results else 0
+        a_acc = (
+            sum(1 for e in a_results if e.get("is_correct")) / len(a_results)
+            if a_results
+            else 0
+        )
+        b_acc = (
+            sum(1 for e in b_results if e.get("is_correct")) / len(b_results)
+            if b_results
+            else 0
+        )
         winner = exp["model_a"] if a_acc >= b_acc else exp["model_b"]
 
     from datetime import datetime
+
     now = datetime.now(UTC).isoformat()
     result = await update_experiment_db(
-        tenant_id, experiment_id,
-        winner=winner, status="stopped", stopped_at=now
+        tenant_id, experiment_id, winner=winner, status="stopped", stopped_at=now
     )
     if not result:
         raise HTTPException(status_code=400, detail="Failed to stop experiment")
-    logger.info("experiment_stopped", tenant_id=tenant_id, experiment_id=experiment_id, winner=winner)
+    logger.info(
+        "experiment_stopped",
+        tenant_id=tenant_id,
+        experiment_id=experiment_id,
+        winner=winner,
+    )
     return result
 
 
 # ── Confidence Routes ─────────────────────────────────────────────
+
 
 @router.get("/confidence/distribution")
 async def get_confidence_distribution(
@@ -179,7 +209,9 @@ async def get_confidence_distribution(
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
 ):
-    return await get_confidence_distribution_db(tenant_id, start_date=start_date, end_date=end_date)
+    return await get_confidence_distribution_db(
+        tenant_id, start_date=start_date, end_date=end_date
+    )
 
 
 @router.post("/confidence/thresholds")
@@ -200,8 +232,11 @@ async def set_confidence_thresholds(
 async def get_confidence_thresholds(
     tenant_id: str = Depends(verify_tenant_access),
 ):
-    return _tenant_thresholds.get(tenant_id, {
-        "proceed": 0.8,
-        "review": 0.5,
-        "escalate": 0.0,
-    })
+    return _tenant_thresholds.get(
+        tenant_id,
+        {
+            "proceed": 0.8,
+            "review": 0.5,
+            "escalate": 0.0,
+        },
+    )

@@ -25,7 +25,7 @@ class InMemoryQueue:
                 self._queues[key] = []
             self._queues[key].insert(0, value)
             if len(self._queues[key]) > self.MAX_QUEUE_ITEMS:
-                self._queues[key] = self._queues[key][:self.MAX_QUEUE_ITEMS]
+                self._queues[key] = self._queues[key][: self.MAX_QUEUE_ITEMS]
 
     def rpop(self, key: str) -> str | None:
         with self._lock:
@@ -38,7 +38,7 @@ class InMemoryQueue:
             if key not in self._queues:
                 return []
             # Redis lrange stop is inclusive, Python slice stop is exclusive
-            return self._queues[key][start:stop + 1 if stop >= 0 else None]
+            return self._queues[key][start : stop + 1 if stop >= 0 else None]
 
     def rpush(self, key: str, value: str):
         with self._lock:
@@ -84,7 +84,12 @@ class InMemoryQueue:
 
 
 class QueueManager:
-    def __init__(self, redis_client, use_fallback: bool = True, in_memory_queue: InMemoryQueue | None = None):
+    def __init__(
+        self,
+        redis_client,
+        use_fallback: bool = True,
+        in_memory_queue: InMemoryQueue | None = None,
+    ):
         self.r = redis_client
         self._use_fallback = use_fallback
         self._in_memory = in_memory_queue or InMemoryQueue()
@@ -98,7 +103,7 @@ class QueueManager:
 
         self._last_health_check = now
         try:
-            if hasattr(self.r, 'ping'):
+            if hasattr(self.r, "ping"):
                 self._redis_ok = self.r.ping()
                 return self._redis_ok
         except Exception as e:
@@ -119,7 +124,7 @@ class QueueManager:
 
     def peek(self, queue: str, n: int = 50):
         backend = self._get_backend()
-        vals = backend.lrange(QUEUE_KEY.format(name=queue), 0, n-1)
+        vals = backend.lrange(QUEUE_KEY.format(name=queue), 0, n - 1)
         return [json.loads(v) for v in vals]
 
     def claim(self, queue: str, agent_id: str):
@@ -130,7 +135,12 @@ class QueueManager:
         item = json.loads(v)
         item["claimed_by"] = agent_id
         item["claimed_ts"] = time.time()
-        backend.rpush(f"log:{item['session_id']}", json.dumps({"event":"claimed","agent_id":agent_id,"ts":item["claimed_ts"]}))
+        backend.rpush(
+            f"log:{item['session_id']}",
+            json.dumps(
+                {"event": "claimed", "agent_id": agent_id, "ts": item["claimed_ts"]}
+            ),
+        )
         return item
 
     def session_set(self, sid: str, data: dict, ttl: int = 1800):
@@ -145,5 +155,3 @@ class QueueManager:
     def session_delete(self, sid: str):
         backend = self._get_backend()
         backend.delete(SESSION_KEY.format(sid=sid))
-
-

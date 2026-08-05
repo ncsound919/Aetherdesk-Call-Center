@@ -32,7 +32,9 @@ class AITrainingServiceError(Exception):
 
 class AITrainingService:
     @staticmethod
-    async def collect_training_data(tenant_id: str, start_date: str, end_date: str) -> list[dict]:
+    async def collect_training_data(
+        tenant_id: str, start_date: str, end_date: str
+    ) -> list[dict]:
         cache_key = f"{tenant_id}:{start_date}:{end_date}"
         if cache_key in _training_data_cache:
             return _training_data_cache[cache_key]
@@ -48,17 +50,23 @@ class AITrainingService:
             transcript = call.get("transcription") or call.get("ai_summary") or ""
             if not transcript:
                 continue
-            examples.append({
-                "call_id": call.get("id", str(uuid.uuid4())),
-                "transcript": transcript,
-                "intent": call.get("intent_detected") or random.choice(["billing", "support", "sales", "technical", "general"]),
-                "resolution": call.get("call_status", "completed"),
-                "csat_score": call.get("sentiment_score") or round(random.uniform(1.0, 5.0), 2),
-                "agent_id": call.get("agent_id"),
-                "caller_number": call.get("caller_number"),
-                "start_time": call.get("start_time"),
-                "duration_seconds": call.get("duration_seconds", 0),
-            })
+            examples.append(
+                {
+                    "call_id": call.get("id", str(uuid.uuid4())),
+                    "transcript": transcript,
+                    "intent": call.get("intent_detected")
+                    or random.choice(
+                        ["billing", "support", "sales", "technical", "general"]
+                    ),
+                    "resolution": call.get("call_status", "completed"),
+                    "csat_score": call.get("sentiment_score")
+                    or round(random.uniform(1.0, 5.0), 2),
+                    "agent_id": call.get("agent_id"),
+                    "caller_number": call.get("caller_number"),
+                    "start_time": call.get("start_time"),
+                    "duration_seconds": call.get("duration_seconds", 0),
+                }
+            )
 
         _training_data_cache[cache_key] = examples
         logger.info("collected_training_data", tenant_id=tenant_id, count=len(examples))
@@ -74,15 +82,17 @@ class AITrainingService:
 
             turns = AITrainingService._segment_turns(transcript)
             for i, turn in enumerate(turns):
-                context = " ".join(turns[max(0, i - 3):i])
-                examples.append({
-                    "input": context,
-                    "output": turn,
-                    "intent": item.get("intent", "unknown"),
-                    "resolution": item.get("resolution", "unknown"),
-                    "csat_score": item.get("csat_score"),
-                    "source_call_id": item.get("call_id"),
-                })
+                context = " ".join(turns[max(0, i - 3) : i])
+                examples.append(
+                    {
+                        "input": context,
+                        "output": turn,
+                        "intent": item.get("intent", "unknown"),
+                        "resolution": item.get("resolution", "unknown"),
+                        "csat_score": item.get("csat_score"),
+                        "source_call_id": item.get("call_id"),
+                    }
+                )
 
         logger.info("generated_training_examples", count=len(examples))
         return examples
@@ -107,13 +117,15 @@ class AITrainingService:
             if not transcript:
                 continue
             turns = AITrainingService._segment_turns(transcript)
-            for i, turn in enumerate(turns):
-                context = " ".join(turns[max(0, i - 3):i])
-                examples.append({
-                    "context": context,
-                    "intent": item.get("intent", "unknown"),
-                    "source_call_id": item.get("call_id"),
-                })
+            for i, _turn in enumerate(turns):
+                context = " ".join(turns[max(0, i - 3) : i])
+                examples.append(
+                    {
+                        "context": context,
+                        "intent": item.get("intent", "unknown"),
+                        "source_call_id": item.get("call_id"),
+                    }
+                )
         logger.info("generated_classification_examples", count=len(examples))
         return examples
 
@@ -125,11 +137,13 @@ class AITrainingService:
             if not transcript:
                 continue
             summary = item.get("ai_summary") or item.get("resolution", "")
-            examples.append({
-                "conversation": transcript,
-                "summary": summary,
-                "source_call_id": item.get("call_id"),
-            })
+            examples.append(
+                {
+                    "conversation": transcript,
+                    "summary": summary,
+                    "source_call_id": item.get("call_id"),
+                }
+            )
         logger.info("generated_summarization_examples", count=len(examples))
         return examples
 
@@ -150,19 +164,33 @@ class AITrainingService:
             filtered.append(ex)
         removed = len(examples) - len(filtered)
         if removed:
-            logger.info("filtered_low_quality", removed=removed, remaining=len(filtered))
+            logger.info(
+                "filtered_low_quality", removed=removed, remaining=len(filtered)
+            )
         return filtered
 
     @staticmethod
     def generate_dataset_statistics(examples: list[dict]) -> dict[str, Any]:
         total_count = len(examples)
         if total_count == 0:
-            return {"total_count": 0, "avg_turn_length": 0, "intent_distribution": {}, "avg_csat": 0, "quality_histogram": {}}
+            return {
+                "total_count": 0,
+                "avg_turn_length": 0,
+                "intent_distribution": {},
+                "avg_csat": 0,
+                "quality_histogram": {},
+            }
 
         total_length = 0
         intents = Counter()
         csat_scores = []
-        quality_buckets = {"0.0-0.2": 0, "0.2-0.4": 0, "0.4-0.6": 0, "0.6-0.8": 0, "0.8-1.0": 0}
+        quality_buckets = {
+            "0.0-0.2": 0,
+            "0.2-0.4": 0,
+            "0.4-0.6": 0,
+            "0.6-0.8": 0,
+            "0.8-1.0": 0,
+        }
 
         for ex in examples:
             text = ex.get("output") or ex.get("context") or ex.get("conversation") or ""
@@ -191,7 +219,9 @@ class AITrainingService:
 
         avg_csat = round(sum(csat_scores) / len(csat_scores), 2) if csat_scores else 0.0
         total_intents = sum(intents.values()) or 1
-        intent_distribution = {k: round(v / total_intents, 4) for k, v in intents.most_common()}
+        intent_distribution = {
+            k: round(v / total_intents, 4) for k, v in intents.most_common()
+        }
 
         return {
             "total_count": total_count,
@@ -216,8 +246,14 @@ class AITrainingService:
 
         stats = AITrainingService.generate_dataset_statistics(examples)
 
-        quality_scores = [AITrainingService.get_turn_quality_score(ex) for ex in examples]
-        avg_quality = round(sum(quality_scores) / len(quality_scores), 4) if quality_scores else 0.0
+        quality_scores = [
+            AITrainingService.get_turn_quality_score(ex) for ex in examples
+        ]
+        avg_quality = (
+            round(sum(quality_scores) / len(quality_scores), 4)
+            if quality_scores
+            else 0.0
+        )
 
         dataset = await create_dataset_db(
             tenant_id=tenant_id,
@@ -246,7 +282,13 @@ class AITrainingService:
                 "status": "ready",
             }
 
-        logger.info("created_dataset", name=name, version=version, recipe_type=recipe_type, count=len(examples))
+        logger.info(
+            "created_dataset",
+            name=name,
+            version=version,
+            recipe_type=recipe_type,
+            count=len(examples),
+        )
         return dataset
 
     @staticmethod
@@ -319,20 +361,29 @@ class AITrainingService:
         if format == "jsonl":
             lines = []
             for ex in all_examples:
-                lines.append(json.dumps({
-                    "messages": [
-                        {"role": "user", "content": ex["input"]},
-                        {"role": "assistant", "content": ex["output"]},
-                    ],
-                    "metadata": {
-                        "intent": ex["intent"],
-                        "resolution": ex["resolution"],
-                        "csat_score": ex["csat_score"],
-                    },
-                }))
+                lines.append(
+                    json.dumps(
+                        {
+                            "messages": [
+                                {"role": "user", "content": ex["input"]},
+                                {"role": "assistant", "content": ex["output"]},
+                            ],
+                            "metadata": {
+                                "intent": ex["intent"],
+                                "resolution": ex["resolution"],
+                                "csat_score": ex["csat_score"],
+                            },
+                        }
+                    )
+                )
             return "\n".join(lines)
 
-        logger.info("exported_training_data", tenant_id=tenant_id, format=format, count=len(all_examples))
+        logger.info(
+            "exported_training_data",
+            tenant_id=tenant_id,
+            format=format,
+            count=len(all_examples),
+        )
         return json.dumps(all_examples, indent=2)
 
     @staticmethod
@@ -366,12 +417,14 @@ class AITrainingService:
             job_id,
             status="completed",
             progress=1.0,
-            result_json=json.dumps({
-                "accuracy": round(random.uniform(0.85, 0.98), 4),
-                "loss": round(random.uniform(0.02, 0.15), 4),
-                "model_path": f"/models/fine-tuned/{job_id}",
-                "training_duration_seconds": random.randint(30, 120),
-            }),
+            result_json=json.dumps(
+                {
+                    "accuracy": round(random.uniform(0.85, 0.98), 4),
+                    "loss": round(random.uniform(0.02, 0.15), 4),
+                    "model_path": f"/models/fine-tuned/{job_id}",
+                    "training_duration_seconds": random.randint(30, 120),
+                }
+            ),
         )
         logger.info("training_job_completed", job_id=job_id)
 
@@ -429,15 +482,17 @@ def _generate_mock_calls(tenant_id: str, start_date: str, end_date: str) -> list
             "id": str(uuid.uuid4()),
             "tenant_id": tenant_id,
             "agent_id": str(uuid.uuid4()),
-            "caller_number": f"+1555{random.randint(1000,9999)}",
+            "caller_number": f"+1555{random.randint(1000, 9999)}",
             "intent_detected": random.choice(intents),
-            "call_status": random.choice(["completed", "completed", "completed", "abandoned"]),
+            "call_status": random.choice(
+                ["completed", "completed", "completed", "abandoned"]
+            ),
             "sentiment_score": round(random.uniform(1.0, 5.0), 2),
             "duration_seconds": random.randint(30, 600),
             "start_time": start_date,
             "transcription": f"Caller asked about {random.choice(intents)} issue. Agent explained the process. "
-                             f"Customer was {random.choice(['satisfied', 'neutral', 'confused'])}. "
-                             f"Resolved after {random.randint(2,15)} minutes.",
+            f"Customer was {random.choice(['satisfied', 'neutral', 'confused'])}. "
+            f"Resolved after {random.randint(2, 15)} minutes.",
             "ai_summary": None,
         }
         for _ in range(random.randint(5, 20))
@@ -450,6 +505,7 @@ async def _async_sleep(seconds: float):
 
 def _auto_version(existing_versions: list[str]) -> str:
     import re
+
     if not existing_versions:
         return "1.0.0"
     nums = []

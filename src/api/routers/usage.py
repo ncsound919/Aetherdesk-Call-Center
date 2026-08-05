@@ -9,6 +9,7 @@ from api.services.database import get_pg_pool, get_usage_stats
 
 router = APIRouter(tags=["usage"])
 
+
 @router.get("/usage", response_model=UsageResponse)
 async def get_usage(
     tenant_id: str = Query(default="TENANT-001", description="Tenant ID"),
@@ -31,17 +32,14 @@ async def get_usage(
 
     # Guard against division by zero
     active = stats.get("active_agents", 0) or 0
-    avg_duration = (
-        round(stats["total_minutes"] / active, 2)
-        if active > 0 else 0.0
-    )
+    avg_duration = round(stats["total_minutes"] / active, 2) if active > 0 else 0.0
 
     pool = await get_pg_pool()
     queue_depth = 0
     if pool:
         queue_depth = await pool.fetchval(
             "SELECT COUNT(*) FROM call_queue WHERE tenant_id = $1 AND status = 'waiting'",
-            tenant_id
+            tenant_id,
         )
 
     return UsageResponse(
@@ -52,7 +50,8 @@ async def get_usage(
         total_minutes=stats["total_minutes"],
         avg_call_duration=avg_duration,
         queue_depth=queue_depth,
-        total_cost=stats["total_minutes"] * float(os.getenv("CALL_COST_PER_MINUTE", "0.015")),
+        total_cost=stats["total_minutes"]
+        * float(os.getenv("CALL_COST_PER_MINUTE", "0.015")),
         by_agent=[],
         by_day=[],
     )

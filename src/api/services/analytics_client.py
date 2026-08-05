@@ -33,6 +33,7 @@ def get_posthog():
         return None
     try:
         from posthog import Posthog
+
         api_key = os.getenv("POSTHOG_API_KEY", "")
         host = os.getenv("POSTHOG_HOST", "https://us.i.posthog.com")
         _client = Posthog(api_key=api_key, host=host)

@@ -14,6 +14,7 @@ _experiment_results: dict[str, list] = {}
 
 # ── Top-Level Functions ────────────────────────────────────────────
 
+
 def calculate_accuracy_metrics(results: list[dict]) -> dict:
     if not results:
         return {
@@ -44,7 +45,13 @@ def calculate_accuracy_metrics(results: list[dict]) -> dict:
             actual = r.get("actual_intent")
             if actual and actual != intent:
                 if actual not in intent_map:
-                    intent_map[actual] = {"tp": 0, "fp": 0, "fn": 0, "total": 0, "correct": 0}
+                    intent_map[actual] = {
+                        "tp": 0,
+                        "fp": 0,
+                        "fn": 0,
+                        "total": 0,
+                        "correct": 0,
+                    }
                 intent_map[actual]["fn"] += 1
 
     intents = {}
@@ -52,7 +59,11 @@ def calculate_accuracy_metrics(results: list[dict]) -> dict:
         tp, fp, fn = m["tp"], m["fp"], m["fn"]
         precision = tp / (tp + fp) if (tp + fp) else 0.0
         recall = tp / (tp + fn) if (tp + fn) else 0.0
-        f1 = 2 * precision * recall / (precision + recall) if (precision + recall) else 0.0
+        f1 = (
+            2 * precision * recall / (precision + recall)
+            if (precision + recall)
+            else 0.0
+        )
         intents[intent] = {
             "precision": round(precision, 4),
             "recall": round(recall, 4),
@@ -73,16 +84,26 @@ def calculate_accuracy_metrics(results: list[dict]) -> dict:
 
     return {
         "accuracy": round(accuracy, 4),
-        "precision": round(sum(intents[i]["precision"] for i in intents) / len(intents), 4) if intents else 0.0,
-        "recall": round(sum(intents[i]["recall"] for i in intents) / len(intents), 4) if intents else 0.0,
-        "f1": round(sum(intents[i]["f1"] for i in intents) / len(intents), 4) if intents else 0.0,
+        "precision": round(
+            sum(intents[i]["precision"] for i in intents) / len(intents), 4
+        )
+        if intents
+        else 0.0,
+        "recall": round(sum(intents[i]["recall"] for i in intents) / len(intents), 4)
+        if intents
+        else 0.0,
+        "f1": round(sum(intents[i]["f1"] for i in intents) / len(intents), 4)
+        if intents
+        else 0.0,
         "intents": intents,
         "confusion_matrix": confusion_matrix,
         "avg_confidence": round(avg_confidence, 4),
     }
 
 
-def create_experiment(name: str, description: str, model_a: str, model_b: str, traffic_split: float = 0.5) -> dict:
+def create_experiment(
+    name: str, description: str, model_a: str, model_b: str, traffic_split: float = 0.5
+) -> dict:
     exp_id = hashlib.sha256(
         f"{name}:{model_a}:{model_b}:{datetime.now(UTC).isoformat()}".encode()
     ).hexdigest()[:16]
@@ -132,14 +153,24 @@ def evaluate_experiment(results_a: list[dict], results_b: list[dict]) -> dict:
     a_rate = a_correct / len(results_a) if results_a else 0.0
     b_rate = b_correct / len(results_b) if results_b else 0.0
 
-    a_conf = sum(r.get("confidence", 0) for r in results_a) / len(results_a) if results_a else 0.0
-    b_conf = sum(r.get("confidence", 0) for r in results_b) / len(results_b) if results_b else 0.0
+    a_conf = (
+        sum(r.get("confidence", 0) for r in results_a) / len(results_a)
+        if results_a
+        else 0.0
+    )
+    b_conf = (
+        sum(r.get("confidence", 0) for r in results_b) / len(results_b)
+        if results_b
+        else 0.0
+    )
 
     significance = 0.0
     winner = None
     if len(results_a) >= 10 and len(results_b) >= 10:
         p_pool = (a_correct + b_correct) / (len(results_a) + len(results_b))
-        se = math.sqrt(p_pool * (1 - p_pool) * (1 / len(results_a) + 1 / len(results_b)))
+        se = math.sqrt(
+            p_pool * (1 - p_pool) * (1 / len(results_a) + 1 / len(results_b))
+        )
         if se > 0:
             z = (a_rate - b_rate) / se
             significance = round(abs(z), 4)
@@ -171,6 +202,7 @@ def check_confidence_threshold(confidence: float, thresholds: dict) -> str:
 
 
 # ── Backward Compatible Class ─────────────────────────────────────
+
 
 class AIEvaluationService:
     """Legacy wrapper — prefer top-level functions for new code."""

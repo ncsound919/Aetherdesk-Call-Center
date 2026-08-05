@@ -16,13 +16,16 @@ router = APIRouter(prefix="/omnichannel", tags=["omnichannel"])
 
 # ── SMS Endpoints ─────────────────────────────────────────────────
 
+
 @router.post("/sms/send")
 async def send_sms(
     data: SMSSendRequest,
     tenant_id: str = Depends(verify_tenant_access),
 ):
     result = await sms_service.send_sms(data.to_number, data.message)
-    await log_sms_db(tenant_id, data.to_number, data.message, status="sent", sid=result.get("sid"))
+    await log_sms_db(
+        tenant_id, data.to_number, data.message, status="sent", sid=result.get("sid")
+    )
     return result
 
 
@@ -34,7 +37,9 @@ async def send_bulk_sms(
     recipients = data.get("recipients", [])
     message = data.get("message", "")
     if not recipients or not message:
-        raise HTTPException(status_code=400, detail="recipients and message are required")
+        raise HTTPException(
+            status_code=400, detail="recipients and message are required"
+        )
     result = await sms_service.send_bulk_sms(recipients, message)
     for r in result.get("results", []):
         await log_sms_db(tenant_id, r["to"], message, status="sent", sid=r.get("sid"))
@@ -78,11 +83,14 @@ async def sms_inbound_webhook(
     session_id = data.get("session_id")
 
     result = await sms_service.process_inbound_sms(from_number, body, session_id)
-    await log_sms_db(tenant_id, from_number, body, direction="inbound", status="received")
+    await log_sms_db(
+        tenant_id, from_number, body, direction="inbound", status="received"
+    )
     return result
 
 
 # ── Chat Endpoints ────────────────────────────────────────────────
+
 
 @router.post("/chat/sessions")
 async def create_chat_session(
@@ -90,8 +98,10 @@ async def create_chat_session(
     tenant_id: str = Depends(verify_tenant_access),
 ):
     session = await chat_service.create_session(
-        data.visitor_id, tenant_id,
-        name=data.visitor_name, email=data.visitor_email,
+        data.visitor_id,
+        tenant_id,
+        name=data.visitor_name,
+        email=data.visitor_email,
         initial_message=data.initial_message,
     )
     if not session:

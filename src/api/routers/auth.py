@@ -3,7 +3,6 @@ import hmac
 import json
 import logging
 import os
-import secrets
 import time
 
 import structlog
@@ -77,7 +76,6 @@ elif os.getenv("ENABLE_DEV_USERS", "false").lower() == "true":
     )
 
 
-
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -133,12 +131,14 @@ async def login(credentials: LoginRequest):
     if enable_dev_users:
         user = DEV_USERS.get(email)
         if user and user["password"] == password:
-            token = generate_access_token({
-                "sub": user["user_id"],
-                "tenant_id": user["tenant_id"],
-                "email": email,
-                "role": user["role"],
-            })
+            token = generate_access_token(
+                {
+                    "sub": user["user_id"],
+                    "tenant_id": user["tenant_id"],
+                    "email": email,
+                    "role": user["role"],
+                }
+            )
             return LoginResponse(
                 access_token=token,
                 token_type="bearer",  # nosec B106 — OAuth2 standard token type, not a password
@@ -161,6 +161,7 @@ async def login(credentials: LoginRequest):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
     from api.services.auth import verify_password
+
     if not verify_password(password, row["password_hash"]):
         raise HTTPException(status_code=401, detail="Invalid email or password")
 
@@ -169,20 +170,24 @@ async def login(credentials: LoginRequest):
     mfa_enabled = await is_mfa_required(user_id)
     if mfa_enabled:
         # Return temporary token with mfa_pending flag
-        temp_token = await create_mfa_session_token(user_id, row["tenant_id"], row["email"], row["role"])
+        temp_token = await create_mfa_session_token(
+            user_id, row["tenant_id"], row["email"], row["role"]
+        )
         return {
             "mfa_required": True,
             "temp_token": temp_token,
-            "message": "MFA verification required"
+            "message": "MFA verification required",
         }
 
     # If MFA not required, proceed normally with full token
-    token = generate_access_token({
-        "sub": row["id"],
-        "tenant_id": row["tenant_id"],
-        "email": row["email"],
-        "role": row["role"],
-    })
+    token = generate_access_token(
+        {
+            "sub": row["id"],
+            "tenant_id": row["tenant_id"],
+            "email": row["email"],
+            "role": row["role"],
+        }
+    )
 
     return LoginResponse(
         access_token=token,
@@ -196,11 +201,14 @@ async def login(credentials: LoginRequest):
 
 
 @router.post("/logout")
-async def logout(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))):
+async def logout(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
+):
     """Logout endpoint - invalidates JWT token."""
     if credentials:
         token = credentials.credentials
         from api.services.auth import verify_access_token
+
         payload = await verify_access_token(token)
         if payload:
             jti = payload.get("jti")
@@ -209,23 +217,28 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(
                 import time
 
                 from api.main import redis_client
+
                 ttl = int(exp - time.time())
                 if ttl > 0:
                     if redis_client:
                         await redis_client.setex(f"jwt_blocklist:{jti}", ttl, "1")
                     else:
                         from api.services.auth import _fallback_blocklist
+
                         _fallback_blocklist.add(jti)
     return {"message": "Logged out successfully"}
 
 
 @router.get("/me")
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False))):
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(auto_error=False)),
+):
     """Get current user info from JWT token."""
     if not credentials:
         raise HTTPException(status_code=401, detail="No token provided")
 
     from api.services.auth import verify_access_token
+
     payload = await verify_access_token(credentials.credentials)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
@@ -254,10 +267,13 @@ async def register(credentials: RegisterRequest):
 
     # Validate password strength
     if len(credentials.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        raise HTTPException(
+            status_code=400, detail="Password must be at least 8 characters"
+        )
 
     # Hash password
     from api.services.auth import get_password_hash
+
     password_hash = get_password_hash(credentials.password)
 
     # Create tenant if company name provided
@@ -266,7 +282,9 @@ async def register(credentials: RegisterRequest):
         tenant = await create_tenant(
             name=credentials.company_name,
             email=credentials.email,
-            slug=credentials.company_name.lower().replace(" ", "-").replace("'", "")[:50]
+            slug=credentials.company_name.lower()
+            .replace(" ", "-")
+            .replace("'", "")[:50],
         )
         tenant_id = tenant["id"]
 
@@ -276,16 +294,19 @@ async def register(credentials: RegisterRequest):
         password_hash=password_hash,
         full_name=credentials.full_name,
         tenant_id=tenant_id,
-        role="owner"
+        role="owner",
     )
 
     from api.services.security_guard import mask_email
-    logger.info("user_registered", user_id=result["id"], email=mask_email(credentials.email))
+
+    logger.info(
+        "user_registered", user_id=result["id"], email=mask_email(credentials.email)
+    )
 
     return RegisterResponse(
         message="Account created. Please check your email to verify your account.",
         user_id=result["id"],
-        verification_token=result["verification_token"]
+        verification_token=result["verification_token"],
     )
 
 
@@ -296,7 +317,9 @@ async def verify_email(credentials: VerifyEmailRequest):
 
     user_id = await verify_user_email_db(credentials.token)
     if not user_id:
-        raise HTTPException(status_code=400, detail="Invalid or expired verification token")
+        raise HTTPException(
+            status_code=400, detail="Invalid or expired verification token"
+        )
 
     logger.info("email_verified", user_id=user_id)
     return {"message": "Email verified successfully"}
@@ -349,7 +372,9 @@ class OverlayTokenRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=100)
     email: str = Field(..., min_length=3, max_length=254)
     tier: str = Field(default="worker")
-    services: list[str] = Field(default_factory=lambda: ["aetherdesk", "jobclaw", "blocklabor", "agent-browser"])
+    services: list[str] = Field(
+        default_factory=lambda: ["aetherdesk", "jobclaw", "blocklabor", "agent-browser"]
+    )
     expires_in: int = Field(default=86400 * 30, ge=60, le=86400 * 365)
 
 
@@ -360,13 +385,18 @@ class OverlayValidateRequest(BaseModel):
 def _sign_overlay_token(payload: dict, secret: str) -> str:
     """HMAC-SHA256 signed JWT-like token (compact, no dependency on PyJWT)."""
     header = {"alg": "HS256", "typ": "OVERLAY"}
-    body = base64url_encode(json.dumps(header)) + "." + base64url_encode(json.dumps(payload))
+    body = (
+        base64url_encode(json.dumps(header))
+        + "."
+        + base64url_encode(json.dumps(payload))
+    )
     sig = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
     return body + "." + sig
 
 
 def base64url_encode(data: str) -> str:
     import base64
+
     return base64.urlsafe_b64encode(data.encode()).rstrip(b"=").decode()
 
 
@@ -380,7 +410,9 @@ def _verify_overlay_token(token: str, secret: str) -> dict | None:
         if len(parts) != 3:
             return None
         body, sig = parts[0] + "." + parts[1], parts[2]
-        expected_sig = hmac.new(secret.encode(), body.encode(), hashlib.sha256).hexdigest()
+        expected_sig = hmac.new(
+            secret.encode(), body.encode(), hashlib.sha256
+        ).hexdigest()
         if not hmac.compare_digest(sig, expected_sig):
             return None
         # Decode payload
@@ -413,7 +445,9 @@ async def generate_overlay_token(
     Requires OVERLAY_MASTER_KEY in Authorization header.
     """
     if not OVERLAY_MASTER_KEY:
-        raise HTTPException(status_code=503, detail="OVERLAY_MASTER_KEY not configured on server")
+        raise HTTPException(
+            status_code=503, detail="OVERLAY_MASTER_KEY not configured on server"
+        )
 
     # Verify master key
     provided_key = authorization.credentials

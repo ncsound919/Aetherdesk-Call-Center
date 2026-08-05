@@ -8,7 +8,9 @@ logger = structlog.get_logger()
 class SMSService:
     """SMS service with Twilio API stub implementations."""
 
-    async def send_sms(self, to_number, message, template_name=None, template_vars=None):
+    async def send_sms(
+        self, to_number, message, template_name=None, template_vars=None
+    ):
         sid = f"SM{uuid.uuid4().hex[:24]}"
         logger.info("sms_send_stub", to=to_number, template=template_name, sid=sid)
         return {
@@ -23,12 +25,14 @@ class SMSService:
         results = []
         for to in recipients:
             sid = f"SM{uuid.uuid4().hex[:24]}"
-            results.append({
-                "success": True,
-                "sid": sid,
-                "to": to,
-                "status": "sent",
-            })
+            results.append(
+                {
+                    "success": True,
+                    "sid": sid,
+                    "to": to,
+                    "status": "sent",
+                }
+            )
         logger.info("sms_bulk_stub", recipient_count=len(recipients))
         return {"success": True, "results": results, "total": len(results)}
 
@@ -44,14 +48,17 @@ class SMSService:
 
     async def get_sms_templates(self, tenant_id):
         from api.services.db_omnichannel import list_sms_templates_db
+
         return await list_sms_templates_db(tenant_id)
 
     async def create_sms_template(self, tenant_id, name, body):
         from api.services.db_omnichannel import create_sms_template_db
+
         return await create_sms_template_db(tenant_id, name, body)
 
     async def get_sms_log(self, tenant_id, limit=100, offset=0):
         from api.services.db_omnichannel import list_sms_log_db
+
         return await list_sms_log_db(tenant_id, limit=limit, offset=offset)
 
 

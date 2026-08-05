@@ -49,13 +49,21 @@ def score_call_quality(mos, jitter, packet_loss, latency):
 
     recommendations = []
     if mos < 3.5:
-        recommendations.append("Overall call quality is below threshold. Review network conditions.")
+        recommendations.append(
+            "Overall call quality is below threshold. Review network conditions."
+        )
     if jitter > 30:
-        recommendations.append(f"High jitter ({jitter:.1f}ms). Consider network stabilization or jitter buffer tuning.")
+        recommendations.append(
+            f"High jitter ({jitter:.1f}ms). Consider network stabilization or jitter buffer tuning."
+        )
     if packet_loss > 3:
-        recommendations.append(f"High packet loss ({packet_loss:.1f}%). Check for network congestion or bandwidth issues.")
+        recommendations.append(
+            f"High packet loss ({packet_loss:.1f}%). Check for network congestion or bandwidth issues."
+        )
     if latency > 300:
-        recommendations.append(f"High latency ({latency:.0f}ms). May indicate routing issues or geographic distance.")
+        recommendations.append(
+            f"High latency ({latency:.0f}ms). May indicate routing issues or geographic distance."
+        )
 
     return {
         "quality_rating": rating,
