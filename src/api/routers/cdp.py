@@ -22,6 +22,14 @@ async def unify_customer(
     return result
 
 
+@router.get("/customers/search")
+async def search_customers(
+    q: str = Query("", description="Search query"),
+    tenant_id: str = Depends(verify_tenant_access),
+):
+    return await cdp_service.search_customers(tenant_id, q)
+
+
 @router.get("/customers/{customer_id}")
 async def get_unified_profile(
     customer_id: str,
@@ -42,14 +50,6 @@ async def add_tags(
     tags = body.get("tags", [])
     result = await cdp_service.tag_customer(tenant_id, customer_id, tags)
     return result
-
-
-@router.get("/customers/search")
-async def search_customers(
-    q: str = Query("", description="Search query"),
-    tenant_id: str = Depends(verify_tenant_access),
-):
-    return await cdp_service.search_customers(tenant_id, q)
 
 
 @router.get("/segments")
