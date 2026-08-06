@@ -48,7 +48,7 @@ pytest-asyncio>=0.23
 httpx>=0.25
 
 # Playwright (for E2E tests)
-playwright>=1.40
+playwright>=1.62.0
 
 # Utilities
 aiofiles>=23.0
