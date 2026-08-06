@@ -18,7 +18,7 @@ pydantic-settings==2.14.2
 
 # Authentication
 PyJWT[crypto]==2.13.0
-pwdlib[argon2]==0.2.0
+pwdlib[argon2]==0.3.0
 
 # Speech-to-Text
 faster-whisper==0.10.0
