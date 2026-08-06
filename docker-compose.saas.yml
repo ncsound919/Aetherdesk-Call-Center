@@ -1,0 +1,147 @@
+# Aetherdesk — Production SaaS compose (customer deployments)
+# Leaner than docker-compose.yml (dev/observability). Includes TLS reverse
+# proxy, healthchecks, resource limits, named volumes, and restart policies.
+# Usage: cp .env.saas.example .env && docker compose -f docker-compose.saas.yml up -d
+
+services:
+  # Reverse proxy + automatic TLS (Caddy)
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - PUBLIC_DOMAIN=${PUBLIC_DOMAIN:-localhost}
+      - API_UPSTREAM=api-gateway:8000
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [aetherdesk-net]
+    depends_on: [api-gateway]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # Core API
+  api-gateway:
+    image: aetherdesk-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment: &api-env
+      PUBLIC_DOMAIN: ${PUBLIC_DOMAIN:-localhost}
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      USE_POSTGRES: "true"
+      TTS_ENGINE: ${TTS_ENGINE:-chatterbox}
+      CHATTERBOX_API_URL: http://chatterbox:5001
+      STT_ENGINE: ${STT_ENGINE:-deepgram}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY}
+      FONOSTER_API_KEY: ${FONOSTER_API_KEY}
+      FONOSTER_API_SECRET: ${FONOSTER_API_SECRET}
+      FONOSTER_HOST: fonoster
+      FONOSTER_PORT: 50051
+      TENANT_MODE: multi
+      BILLING_PROVIDER: ${BILLING_PROVIDER:-none}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    ports:
+      - "8000:8000"
+    volumes:
+      - recordings:/app/recordings
+    networks: [aetherdesk-net]
+    depends_on: [db, redis, fonoster]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
+  # Async workers (calls, transcriptions, billing)
+  celery-worker:
+    image: aetherdesk-api:latest
+    restart: unless-stopped
+    command: celery -A src.worker worker --loglevel=info
+    environment: *api-env
+    volumes:
+      - recordings:/app/recordings
+    networks: [aetherdesk-net]
+    depends_on: [db, redis, api-gateway]
+    deploy:
+      resources:
+        limits: { cpus: '2', memory: 4G }
+
+  celery-beat:
+    image: aetherdesk-api:latest
+    restart: unless-stopped
+    command: celery -A src.worker beat --loglevel=info
+    environment: *api-env
+    networks: [aetherdesk-net]
+    depends_on: [db, redis]
+
+  # Data layer
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [aetherdesk-net]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    networks: [aetherdesk-net]
+
+  # Call platform
+  fonoster:
+    image: fonoster/fonoster:latest
+    restart: unless-stopped
+    environment:
+      FONOSTER_HTTP_PORT: 5180
+      FONOSTER_TRANSPORT_PORT: 50051
+    ports:
+      - "50051:50051"
+      - "5060:5060/udp"
+    networks: [aetherdesk-net]
+    depends_on: [db, redis]
+
+  # TTS (self-hosted, privacy-friendly)
+  chatterbox:
+    image: ghcr.io/resembleai/chatterbox:latest
+    restart: unless-stopped
+    ports: ["5001:5001"]
+    networks: [aetherdesk-net]
+    deploy:
+      resources:
+        limits: { cpus: '2', memory: 4G }
+
+networks:
+  aetherdesk-net:
+    driver: bridge
+
+volumes:
+  db-data:
+  redis-data:
+  recordings:
+  caddy-data:
+  caddy-config:
