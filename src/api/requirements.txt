@@ -64,7 +64,7 @@ sentry-sdk[fastapi]>=2.0.0
 agentops>=0.3.0
 
 # Billing — Lago usage-based billing
-lago-python-client>=1.0.0
+lago-python-client>=1.50.0
 
 # Authorization — Casbin RBAC
 casbin>=1.36.0
