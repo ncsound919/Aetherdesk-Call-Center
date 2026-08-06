@@ -34,7 +34,7 @@ groq>=0.4
 
 # ASR/TTS Fallbacks
 whisper>=1.0
-edge-tts>=6.1
+edge-tts>=7.2.8
 
 # Struct Logging
 structlog>=23.0
