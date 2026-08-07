@@ -148,6 +148,11 @@ jobs:
           python -m pytest tests/unit/ tests/services/ tests/test_db_refactor.py tests/test_health.py tests/test_verification.py -v --tb=short --cov-fail-under=95 -k "not e2e_ml" --ignore=tests/e2e --ignore=tests/ai --ignore=tests/chaos --ignore=tests/cognitive --ignore=tests/integration
         env:
           USE_POSTGRES: "false"
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: test_db
+          PGUSER: test_user
+          PGPASSWORD: test_password
       - name: Bandit security scan
         run: |
           bandit -r src/ -f json -o bandit_results.json || true

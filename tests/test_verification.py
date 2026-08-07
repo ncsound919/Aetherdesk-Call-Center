@@ -34,6 +34,14 @@ _PORT_FREESWITCH = 5060
 _PORT_POSTGRES = 5432
 _PORT_REDIS = 6379
 
+# Database connection (CI provides postgres service with test_* creds; local
+# deployments use the aetherdesk_admin defaults).
+_DB_HOST = os.environ.get("PGHOST", "localhost")
+_DB_PORT = int(os.environ.get("PGPORT", "5432"))
+_DB_NAME = os.environ.get("PGDATABASE", "aetherdesk")
+_DB_USER = os.environ.get("PGUSER", "aetherdesk_admin")
+_DB_PASS = os.environ.get("PGPASSWORD", "")
+
 
 def _port_open(port: int, host: str = "localhost", timeout: float = 1.0) -> bool:
     """Return True when a TCP connection to ``host:port`` succeeds."""
@@ -100,6 +108,7 @@ class TestInfrastructure:
         """Verify FreeSWITCH SIP server is running on port 5060"""
         assert _port_open(_PORT_FREESWITCH), "FreeSWITCH SIP not running on port 5060"
 
+    @needs_api
     def test_api_server_running(self):
         """Verify API Server is running on port 3000"""
         assert _port_open(_PORT_API), "API Server not running on port 3000"
@@ -137,10 +146,11 @@ class TestAPIBasics:
 
         async def check_schema():
             conn = await asyncpg.connect(
-                host="localhost",
-                port=5432,
-                database="aetherdesk",
-                user="aetherdesk_admin",
+                host=_DB_HOST,
+                port=_DB_PORT,
+                database=_DB_NAME,
+                user=_DB_USER,
+                password=_DB_PASS,
             )
             try:
                 # Check for tables
@@ -218,10 +228,11 @@ class TestCompliance:
 
         async def test_encryption():
             conn = await asyncpg.connect(
-                host="localhost",
-                port=5432,
-                database="aetherdesk",
-                user="aetherdesk_admin",
+                host=_DB_HOST,
+                port=_DB_PORT,
+                database=_DB_NAME,
+                user=_DB_USER,
+                password=_DB_PASS,
             )
             try:
                 # Test encryption
@@ -249,10 +260,11 @@ class TestCompliance:
 
         async def check_rls():
             conn = await asyncpg.connect(
-                host="localhost",
-                port=5432,
-                database="aetherdesk",
-                user="aetherdesk_admin",
+                host=_DB_HOST,
+                port=_DB_PORT,
+                database=_DB_NAME,
+                user=_DB_USER,
+                password=_DB_PASS,
             )
             try:
                 tables = ["agents", "call_sessions", "call_queue",

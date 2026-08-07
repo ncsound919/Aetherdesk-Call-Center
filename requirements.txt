@@ -82,3 +82,7 @@ asgi-lifespan==2.1.0
 agentops==0.4.21
 twilio==7.17.0
 slowapi==0.1.9
+langchain-openai==1.1.13
+presidio-analyzer==2.2.362
+RealtimeTTS==0.6.1
+stripe==15.2.1
