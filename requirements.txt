@@ -74,3 +74,4 @@ mypy==2.0.0
 orjson==3.11.7
 msgpack==1.2.1
 protobuf==5.29.6
+python-multipart==0.0.32
