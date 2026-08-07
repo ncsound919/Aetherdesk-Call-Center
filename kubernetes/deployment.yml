@@ -347,7 +347,7 @@ spec:
         fsGroup: 999
       containers:
         - name: postgres
-          image: postgres:15 @ sha256:abc123def456 # PIN: postgres:15 digest - update via docker pull postgres:15 && docker inspect
+          image: postgres:15@sha256:6eb0add3b77c081df18aa518ce43df58fdcc40f2e6d868a6fd08038dc7acd425
           ports:
             - containerPort: 5432
           env:
@@ -454,7 +454,7 @@ spec:
               drop:
                 - ALL
             readOnlyRootFilesystem: false
-          image: redis:7-alpine @ sha256:abc123def456 # PIN: redis:7-alpine digest - update via docker pull redis:7-alpine && docker inspect
+          image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
           command: ["redis-server"]
           args:
             - "--appendonly"

@@ -59,17 +59,27 @@ services:
     networks: [aetherdesk-net]
     depends_on: [db, redis, fonoster]
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 20s
 
+  # Agent UI (React frontend served by nginx)
+  agent-ui:
+    image: aetherdesk-ui:latest
+    build:
+      context: .
+      dockerfile: agent-ui/Dockerfile
+    restart: unless-stopped
+    networks: [aetherdesk-net]
+    depends_on: [api-gateway]
+
   # Async workers (calls, transcriptions, billing)
   celery-worker:
     image: aetherdesk-api:latest
     restart: unless-stopped
-    command: celery -A src.worker worker --loglevel=info
+    command: celery -A api.services.celery_app:celery_app worker --loglevel=info
     environment: *api-env
     volumes:
       - recordings:/app/recordings
@@ -82,7 +92,7 @@ services:
   celery-beat:
     image: aetherdesk-api:latest
     restart: unless-stopped
-    command: celery -A src.worker beat --loglevel=info
+    command: celery -A api.services.celery_app:celery_app beat --loglevel=info
     environment: *api-env
     networks: [aetherdesk-net]
     depends_on: [db, redis]
