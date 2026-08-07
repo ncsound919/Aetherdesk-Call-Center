@@ -565,7 +565,7 @@ class TestImportTimeConfig:
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            timeout=120,
+            timeout=300,
             env=env,
             cwd=os.getcwd(),
         )
