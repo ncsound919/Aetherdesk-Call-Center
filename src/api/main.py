@@ -19,6 +19,12 @@ import asyncio
 import logging
 import os
 
+# Load .env BEFORE any env validation so fresh deploys (CI/VPS/GKE) start
+# correctly instead of fatal-exiting on missing vars.
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 # Startup env validation
 def _assert_env():
@@ -45,14 +51,10 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import redis.asyncio as redis
-from dotenv import load_dotenv
 from fastapi import (
     FastAPI,
 )
 from fastapi.middleware.cors import CORSMiddleware
-
-load_dotenv()
-
 from fastapi.responses import JSONResponse
 
 from api.middleware.audit import AuditMiddleware
@@ -386,7 +388,7 @@ async def lifespan(app: FastAPI):
                     finally:
                         conn.close()
             except Exception as e:
-                logger.error("retention_cleanup_failed", error=str(e))
+                logger.error("retention_cleanup_failed: %s", e)
 
     retention_task = asyncio.create_task(_retention_cleanup_loop())
 
@@ -486,7 +488,7 @@ if sentry_dsn:
             raise_server_exceptions=False,
         )
     except Exception as e:
-        logger.warning("sentry_fastapi_integration_failed", error=str(e))
+        logger.warning("sentry_fastapi_integration_failed: %s", e)
 
 
 @app.exception_handler(NotFoundError)
@@ -656,8 +658,6 @@ if sentry_dsn:
             integrations=sentry_integrations,
             send_default_pii=False,
         )
-        logger.info(
-            "sentry_initialized", environment=os.getenv("APP_ENV", "development")
-        )
+        logger.info("sentry_initialized environment=%s", os.getenv("APP_ENV", "development"))
     except Exception as e:
-        logger.warning("sentry_init_failed", error=str(e))
+        logger.warning("sentry_init_failed: %s", e)
