@@ -1,3 +1,6 @@
+import sys
+import types
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from api.services.call_session import VoiceSession
@@ -373,3 +376,26 @@ class TestVoiceSessionManagement:
 
         assert qm1 is qm2
         assert qm1 is mock_app.state.qm
+
+    def test_get_queue_manager_creates_when_missing(self):
+        mock_app = MagicMock()
+        mock_state = MagicMock(spec=["redis"])
+        mock_app.state = mock_state
+
+        with patch("api.services.call_session.QueueManager") as mock_qm_cls:
+            mock_qm = MagicMock()
+            mock_qm_cls.return_value = mock_qm
+
+            from api.services.call_session import _get_queue_manager
+            result = _get_queue_manager(mock_app)
+
+        mock_qm_cls.assert_called_once_with(mock_state.redis)
+        assert result is mock_qm
+
+    def test_get_broadcast_transcript_imports_realtime(self):
+        mock_module = types.ModuleType("api.routers.realtime")
+        mock_module.broadcast_transcript = "broadcast_fn"
+
+        with patch.dict(sys.modules, {"api.routers.realtime": mock_module}):
+            from api.services.call_session import _get_broadcast_transcript
+            assert _get_broadcast_transcript() == "broadcast_fn"

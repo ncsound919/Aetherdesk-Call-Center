@@ -159,6 +159,46 @@ class TestDetectPromptInjectionEdgeCases:
         assert confidence == 0.0
 
 
+class TestMaskPhone:
+    def test_mask_phone_full(self):
+        from api.services.security_guard import mask_phone
+
+        assert mask_phone("+1 (555) 123-4567") == "*******4567"
+
+    def test_mask_phone_short(self):
+        from api.services.security_guard import mask_phone
+
+        assert mask_phone("1234") == "****"
+
+    def test_mask_phone_empty(self):
+        from api.services.security_guard import mask_phone
+
+        assert mask_phone("") == ""
+        assert mask_phone(None) == ""
+
+
+class TestMaskEmail:
+    def test_mask_email_long_local(self):
+        from api.services.security_guard import mask_email
+
+        assert mask_email("firstname@example.com") == "fi*******@example.com"
+
+    def test_mask_email_short_local(self):
+        from api.services.security_guard import mask_email
+
+        assert mask_email("jo@example.com") == "j*@example.com"
+
+    def test_mask_email_missing_at(self):
+        from api.services.security_guard import mask_email
+
+        assert mask_email("not-an-email") == "***"
+
+    def test_mask_email_none(self):
+        from api.services.security_guard import mask_email
+
+        assert mask_email(None) == ""
+
+
 class TestRedactPiiWithPresidio:
     def test_presidio_redact_success(self):
         mock_analyzer = MagicMock()

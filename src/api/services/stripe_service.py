@@ -79,6 +79,48 @@ def create_portal_session(customer_id: str, return_url: str) -> dict:
     return {"id": portal.id, "url": portal.url, "mock": False}
 
 
+def create_one_time_checkout(
+    price_id: str,
+    quantity: int,
+    success_url: str,
+    cancel_url: str,
+    metadata: dict | None = None,
+    customer_id: str | None = None,
+    customer_email: str | None = None,
+) -> dict:
+    """Create a one-time Stripe Checkout session (mode='payment').
+
+    Used for prepaid rental purchases and minute top-ups — no subscription.
+    """
+    if not is_stripe_enabled():
+        # Mock response for dev/test
+        return {
+            "id": f"cs_mock_{price_id}_{quantity}",
+            "url": f"{success_url}?mock=true",
+            "payment_intent": "pi_mock_000000",
+            "mock": True,
+        }
+    session_kwargs: dict[str, Any] = {
+        "mode": "payment",
+        "line_items": [{"price": price_id, "quantity": quantity}],
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+        "metadata": metadata or {},
+        "payment_intent_data": {"metadata": metadata or {}},
+    }
+    if customer_id:
+        session_kwargs["customer"] = customer_id
+    elif customer_email:
+        session_kwargs["customer_email"] = customer_email
+    session = _stripe.checkout.Session.create(**session_kwargs)
+    return {
+        "id": session.id,
+        "url": session.url,
+        "payment_intent": getattr(session, "payment_intent", None),
+        "mock": False,
+    }
+
+
 def get_customer(customer_id: str) -> dict:
     """Retrieve Stripe customer details."""
     if not is_stripe_enabled():

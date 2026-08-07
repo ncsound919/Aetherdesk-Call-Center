@@ -4,7 +4,7 @@ Uses a minimal FastAPI app with the router mounted and mocks the DB + Twilio
 dependencies so no live services are contacted.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 import pytest
@@ -70,6 +70,66 @@ class TestVerifyBusinessIdentity:
         payload["business_phone"] = "123"  # under min_length=10
         resp = client.post("/api/v1/verification/business-identity", json=payload)
         assert resp.status_code == 422
+
+    def test_twilio_outbound_call_placed(self, client):
+        with patch.dict(
+            "os.environ",
+            {
+                "TWILIO_ACCOUNT_SID": "AC123",
+                "TWILIO_AUTH_TOKEN": "token",
+                "TWILIO_FROM_NUMBER": "+15551234567",
+            },
+        ), patch("api.routers.verification.create_call_session", new_callable=AsyncMock), patch(
+            "api.routers.verification.log_audit_event", new_callable=AsyncMock
+        ), patch("dotenv.load_dotenv") as mock_load_dotenv, patch(
+            "twilio.rest.Client"
+        ) as mock_client_cls:
+            mock_client = mock_client_cls.return_value
+            mock_client.calls.create = MagicMock()
+
+            resp = client.post(
+                "/api/v1/verification/business-identity",
+                json=_valid_business_payload(),
+            )
+
+            assert resp.status_code == 200
+            assert resp.json()["status"] == "verification_initiated"
+            mock_load_dotenv.assert_called_once_with(override=True)
+            mock_client_cls.assert_called_once_with("AC123", "token")
+            mock_client.calls.create.assert_called_once()
+            create_kwargs = mock_client.calls.create.call_args.kwargs
+            assert create_kwargs["to"] == "5551234567"
+            assert create_kwargs["from_"] == "+15551234567"
+            assert "<Response><Say>" in create_kwargs["twiml"]
+            assert create_kwargs["timeout"] == 30
+
+    def test_twilio_failure_is_swallowed(self, client):
+        with patch.dict(
+            "os.environ",
+            {
+                "TWILIO_ACCOUNT_SID": "AC123",
+                "TWILIO_AUTH_TOKEN": "token",
+                "TWILIO_FROM_NUMBER": "+15551234567",
+            },
+        ), patch("api.routers.verification.create_call_session", new_callable=AsyncMock), patch(
+            "api.routers.verification.log_audit_event", new_callable=AsyncMock
+        ), patch("dotenv.load_dotenv"), patch(
+            "twilio.rest.Client"
+        ) as mock_client_cls, patch(
+            "api.routers.verification.logger.warning"
+        ) as mock_warning:
+            mock_client_cls.side_effect = Exception("Twilio down")
+
+            resp = client.post(
+                "/api/v1/verification/business-identity",
+                json=_valid_business_payload(),
+            )
+
+            # Exception is swallowed; endpoint still returns 200
+            assert resp.status_code == 200
+            assert resp.json()["status"] == "verification_initiated"
+            mock_warning.assert_called_once()
+            assert "Twilio verification call failed" in mock_warning.call_args.args[0]
 
 
 class TestGhostJobAudit:

@@ -333,3 +333,14 @@ class TestFonsterWebhookEndpoint:
                 headers={"content-type": "application/json"},
             )
             assert resp.status_code == 200
+
+    def test_production_without_secret_returns_503(self, client, monkeypatch):
+        """In production, missing FONOSTER_WEBHOOK_SECRET returns 503."""
+        monkeypatch.setenv("APP_ENV", "production")
+        monkeypatch.delenv("FONOSTER_WEBHOOK_SECRET", raising=False)
+
+        resp = client.post(
+            self.WEBHOOK_PATH,
+            json={"event_type": "call.answered", "call_id": "CA-205"},
+        )
+        assert resp.status_code == 503

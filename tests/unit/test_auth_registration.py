@@ -1,6 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from fastapi.testclient import TestClient
+
 
 class TestRegistration:
     @pytest.mark.asyncio
@@ -438,3 +440,319 @@ class TestForgotPasswordExtended:
             result = await forgot_password(ForgotPasswordRequest(email="unknown@test.com"))
             assert "message" in result
             assert "dev_token" not in result
+
+
+class TestLoginMFA:
+    @pytest.mark.asyncio
+    async def test_login_mfa_required_returns_temp_token(self):
+        from api.routers.auth import login, LoginRequest
+
+        with patch("api.routers.auth.os.getenv", return_value="false"), \
+             patch("api.routers.auth.get_user_by_email_db", new_callable=AsyncMock) as mock_db, \
+             patch("api.services.auth.verify_password", return_value=True), \
+             patch("api.routers.auth.is_mfa_required", new_callable=AsyncMock) as mock_mfa, \
+             patch("api.routers.auth.create_mfa_session_token", new_callable=AsyncMock) as mock_temp:
+            mock_db.return_value = {
+                "id": "u1", "tenant_id": "t1", "email": "u@c.com",
+                "password_hash": "hash", "role": "agent",
+            }
+            mock_mfa.return_value = True
+            mock_temp.return_value = "temp-token-xyz"
+
+            result = await login(LoginRequest(email="u@c.com", password="pass"))
+
+            assert result["mfa_required"] is True
+            assert result["temp_token"] == "temp-token-xyz"
+            mock_mfa.assert_called_once_with("u1")
+            mock_temp.assert_called_once_with("u1", "t1", "u@c.com", "agent")
+
+    @pytest.mark.asyncio
+    async def test_login_mfa_not_required_proceeds(self):
+        from api.routers.auth import login, LoginRequest
+
+        with patch("api.routers.auth.os.getenv", return_value="false"), \
+             patch("api.routers.auth.get_user_by_email_db", new_callable=AsyncMock) as mock_db, \
+             patch("api.services.auth.verify_password", return_value=True), \
+             patch("api.routers.auth.is_mfa_required", new_callable=AsyncMock) as mock_mfa, \
+             patch("api.routers.auth.generate_access_token", return_value="full-token"):
+            mock_db.return_value = {
+                "id": "u1", "tenant_id": "t1", "email": "u@c.com",
+                "password_hash": "hash", "role": "agent", "display_name": "Alice",
+            }
+            mock_mfa.return_value = False
+
+            result = await login(LoginRequest(email="u@c.com", password="pass"))
+
+            assert result.access_token == "full-token"
+            assert result.userId == "u1"
+
+
+class TestLogoutExtended:
+    @pytest.mark.asyncio
+    async def test_logout_expired_token_skips_blocklist(self):
+        import sys
+        import time
+        from api.routers.auth import logout
+
+        mock_main = MagicMock()
+        mock_redis = AsyncMock()
+        mock_main.redis_client = mock_redis
+        mock_creds = MagicMock()
+        mock_creds.credentials = "expired_tok"
+
+        with patch.dict("sys.modules", {"api.main": mock_main}), \
+             patch("api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_v:
+            mock_v.return_value = {"jti": "jti-expired", "exp": time.time() - 100}
+            result = await logout(credentials=mock_creds)
+            assert result["message"] == "Logged out successfully"
+            mock_redis.setex.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_logout_payload_without_jti(self):
+        import sys
+        from api.routers.auth import logout
+
+        mock_main = MagicMock()
+        mock_main.redis_client = AsyncMock()
+        mock_creds = MagicMock()
+        mock_creds.credentials = "no-jti-tok"
+
+        with patch.dict("sys.modules", {"api.main": mock_main}), \
+             patch("api.services.auth.verify_access_token", new_callable=AsyncMock) as mock_v:
+            mock_v.return_value = {"sub": "u1"}
+            result = await logout(credentials=mock_creds)
+            assert result["message"] == "Logged out successfully"
+
+
+class TestOverlayTokenUtils:
+    """Direct unit tests for the Overlay 365 token helpers."""
+
+    def test_base64url_encode(self):
+        import base64
+        from api.routers.auth import base64url_encode
+
+        assert base64url_encode("hello world") == base64.urlsafe_b64encode(b"hello world").rstrip(b"=").decode()
+
+    def test_sign_and_verify_overlay_token(self):
+        import time
+        from api.routers.auth import _sign_overlay_token, _verify_overlay_token
+
+        payload = {
+            "sub": "u1", "email": "a@b.com", "tier": "worker",
+            "exp": time.time() + 3600, "iss": "overlay365",
+        }
+        token = _sign_overlay_token(payload, "master-secret")
+        assert len(token.split(".")) == 3
+        assert _verify_overlay_token(token, "master-secret") == payload
+        assert _verify_overlay_token(token, "wrong-secret") is None
+
+    def test_verify_overlay_token_malformed(self):
+        from api.routers.auth import _verify_overlay_token
+
+        assert _verify_overlay_token("one-part", "s") is None
+        assert _verify_overlay_token("a.b.c.d", "s") is None
+        assert _verify_overlay_token("a.b.c", "s") is None  # bad signature
+
+    def test_verify_overlay_token_expired(self):
+        import time
+        from api.routers.auth import _sign_overlay_token, _verify_overlay_token
+
+        payload = {"sub": "u1", "exp": time.time() - 100}
+        token = _sign_overlay_token(payload, "s")
+        assert _verify_overlay_token(token, "s") is None
+
+    def test_verify_overlay_token_bad_payload_json(self):
+        import base64
+        import hashlib
+        import hmac
+        from api.routers.auth import _verify_overlay_token
+
+        header_b64 = base64.urlsafe_b64encode(b'{"alg":"HS256","typ":"OVERLAY"}').rstrip(b"=").decode()
+        payload_b64 = base64.urlsafe_b64encode(b"not-json").rstrip(b"=").decode()
+        body = header_b64 + "." + payload_b64
+        sig = hmac.new(b"s", body.encode(), hashlib.sha256).hexdigest()
+        token = body + "." + sig
+
+        assert _verify_overlay_token(token, "s") is None
+
+    def test_verify_overlay_token_unexpected_error(self):
+        from api.routers.auth import _verify_overlay_token
+
+        # Non-string token -> AttributeError (not in the handled exception tuple)
+        assert _verify_overlay_token(None, "s") is None
+        assert _verify_overlay_token(12345, "s") is None
+
+
+class TestOverlayEndpoints:
+    """TestClient tests for /auth/v1/auth/token and /auth/v1/auth/validate."""
+
+    @staticmethod
+    def _app():
+        from fastapi import FastAPI
+        from api.routers.auth import router
+
+        application = FastAPI()
+        application.include_router(router)
+        return application
+
+    def test_generate_overlay_token_success(self):
+        with patch("api.routers.auth.OVERLAY_MASTER_KEY", "master-secret"):
+            app = self._app()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/auth/v1/auth/token",
+                    json={"user_id": "u1", "email": "a@b.com", "tier": "worker"},
+                    headers={"Authorization": "Bearer master-secret"},
+                )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["token_type"] == "overlay"
+            assert data["tier"] == "worker"
+            assert data["user_id"] == "u1"
+            assert data["access_token"].count(".") == 2
+
+    def test_generate_overlay_token_no_master_key(self):
+        with patch("api.routers.auth.OVERLAY_MASTER_KEY", ""):
+            app = self._app()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/auth/v1/auth/token",
+                    json={"user_id": "u1", "email": "a@b.com", "tier": "worker"},
+                    headers={"Authorization": "Bearer whatever"},
+                )
+            assert resp.status_code == 503
+
+    def test_generate_overlay_token_wrong_key(self):
+        with patch("api.routers.auth.OVERLAY_MASTER_KEY", "real-key"):
+            app = self._app()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/auth/v1/auth/token",
+                    json={"user_id": "u1", "email": "a@b.com", "tier": "worker"},
+                    headers={"Authorization": "Bearer wrong-key"},
+                )
+            assert resp.status_code == 401
+
+    def test_generate_overlay_token_invalid_tier(self):
+        with patch("api.routers.auth.OVERLAY_MASTER_KEY", "real-key"):
+            app = self._app()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/auth/v1/auth/token",
+                    json={"user_id": "u1", "email": "a@b.com", "tier": "superadmin"},
+                    headers={"Authorization": "Bearer real-key"},
+                )
+            assert resp.status_code == 400
+
+    def test_validate_overlay_token_success(self):
+        with patch("api.routers.auth.OVERLAY_MASTER_KEY", "master-secret"):
+            app = self._app()
+            with TestClient(app) as client:
+                gen = client.post(
+                    "/auth/v1/auth/token",
+                    json={"user_id": "u1", "email": "a@b.com", "tier": "business"},
+                    headers={"Authorization": "Bearer master-secret"},
+                )
+                token = gen.json()["access_token"]
+                resp = client.post(
+                    "/auth/v1/auth/validate",
+                    headers={"Authorization": f"Bearer {token}"},
+                )
+            assert resp.status_code == 200
+            data = resp.json()
+            assert data["valid"] is True
+            assert data["user_id"] == "u1"
+            assert data["tier"] == "business"
+
+    def test_validate_overlay_token_no_master_key(self):
+        with patch("api.routers.auth.OVERLAY_MASTER_KEY", ""):
+            app = self._app()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/auth/v1/auth/validate",
+                    headers={"Authorization": "Bearer abc.def.ghi"},
+                )
+            assert resp.status_code == 503
+
+    def test_validate_overlay_token_invalid(self):
+        with patch("api.routers.auth.OVERLAY_MASTER_KEY", "master-secret"):
+            app = self._app()
+            with TestClient(app) as client:
+                resp = client.post(
+                    "/auth/v1/auth/validate",
+                    headers={"Authorization": "Bearer not.a.real.token"},
+                )
+            assert resp.status_code == 401
+
+
+class TestDevUsersModuleState:
+    """Covers the import-time DEV_USERS construction and startup warnings.
+
+    These branches only execute when the module is (re)imported with the
+    relevant env vars set. Each reload is restored to the default env
+    afterwards so the module state is unchanged for the rest of the suite.
+    """
+
+    def test_dev_users_populated_from_env(self):
+        import importlib
+        import os
+        import api.routers.auth as auth_mod
+
+        os.environ["DEV_ADMIN_PASSWORD"] = "admin-pw-123"
+        os.environ["DEV_AGENT_PASSWORD"] = "agent-pw-456"
+        try:
+            reloaded = importlib.reload(auth_mod)
+            assert reloaded.DEV_USERS["admin@aetherdesk.com"]["role"] == "admin"
+            assert reloaded.DEV_USERS["admin@aetherdesk.com"]["password"] == "admin-pw-123"
+            assert reloaded.DEV_USERS["agent@aetherdesk.com"]["role"] == "agent"
+            assert reloaded.DEV_USERS["agent@aetherdesk.com"]["password"] == "agent-pw-456"
+        finally:
+            os.environ.pop("DEV_ADMIN_PASSWORD", None)
+            os.environ.pop("DEV_AGENT_PASSWORD", None)
+            importlib.reload(auth_mod)
+
+    def test_dev_users_enabled_no_passwords_warns(self):
+        import importlib
+        import os
+        import api.routers.auth as auth_mod
+
+        os.environ["ENABLE_DEV_USERS"] = "true"
+        try:
+            reloaded = importlib.reload(auth_mod)
+            assert reloaded._dev_users_enabled() is True
+            assert reloaded.DEV_USERS == {}
+        finally:
+            os.environ.pop("ENABLE_DEV_USERS", None)
+            importlib.reload(auth_mod)
+
+    def test_dev_users_enabled_with_passwords(self):
+        import importlib
+        import os
+        import api.routers.auth as auth_mod
+
+        os.environ["ENABLE_DEV_USERS"] = "true"
+        os.environ["DEV_ADMIN_PASSWORD"] = "pw"
+        try:
+            reloaded = importlib.reload(auth_mod)
+            assert reloaded._dev_users_enabled() is True
+            assert "admin@aetherdesk.com" in reloaded.DEV_USERS
+        finally:
+            os.environ.pop("ENABLE_DEV_USERS", None)
+            os.environ.pop("DEV_ADMIN_PASSWORD", None)
+            importlib.reload(auth_mod)
+
+    def test_dev_users_forced_off_in_production(self):
+        import importlib
+        import os
+        import api.routers.auth as auth_mod
+
+        os.environ["ENABLE_DEV_USERS"] = "true"
+        os.environ["APP_ENV"] = "production"
+        try:
+            reloaded = importlib.reload(auth_mod)
+            assert reloaded._dev_users_enabled() is False
+            assert reloaded.DEV_USERS == {}
+        finally:
+            os.environ["APP_ENV"] = "development"
+            os.environ.pop("ENABLE_DEV_USERS", None)
+            importlib.reload(auth_mod)

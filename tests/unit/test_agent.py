@@ -75,6 +75,24 @@ class TestAgentCache:
         result = await cache.get("test:5")
         assert result is None
 
+    @pytest.mark.asyncio
+    async def test_cache_start_cleanup_loop(self):
+        from api.routers.agent import AgentCache
+
+        cache = AgentCache(default_ttl=300)
+        with patch(
+            "api.routers.agent.asyncio.sleep",
+            new_callable=AsyncMock,
+            side_effect=[None, asyncio.CancelledError()],
+        ) as mock_sleep, patch.object(
+            cache, "cleanup", new_callable=AsyncMock
+        ) as mock_cleanup:
+            with pytest.raises(asyncio.CancelledError):
+                await cache.start_cleanup_loop(interval=5)
+
+        mock_cleanup.assert_called_once()
+        mock_sleep.assert_called()
+
 
 class TestHub:
     """Tests for WebSocket Hub functionality."""

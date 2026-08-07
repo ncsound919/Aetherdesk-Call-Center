@@ -134,6 +134,16 @@ class TestDrStatus:
         assert resp.status_code == 200
         assert mock_restart.call_args.args[0] == "api-gateway"
 
+    def test_run_network_partition(self, client):
+        with patch(
+            "api.routers.reliability.dr_testing_service.test_network_partition",
+            new_callable=AsyncMock,
+            return_value={"partition": "ok"},
+        ) as mock_partition:
+            resp = client.post("/reliability/dr/test", params={"test_type": "network_partition"})
+        assert resp.status_code == 200
+        assert mock_partition.call_args.args[0] == "TENANT-001"
+
     def test_run_unknown_test_type_400(self, client):
         resp = client.post("/reliability/dr/test", params={"test_type": "banana"})
         assert resp.status_code == 400

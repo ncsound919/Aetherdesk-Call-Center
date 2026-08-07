@@ -122,6 +122,19 @@ class TestExperiments:
         resp = client.post("/ai-ops/experiments", json={"name": "", "model_a": "a", "model_b": "b"})
         assert resp.status_code == 422
 
+    def test_create_experiment_failed(self, client):
+        with patch(
+            "api.routers.ai_ops.create_experiment_db",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            resp = client.post(
+                "/ai-ops/experiments",
+                json={"name": "A/B test", "model_a": "v3", "model_b": "v4", "traffic_split": 0.5},
+            )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Failed to create experiment"
+
     def test_list_experiments(self, client):
         with patch(
             "api.routers.ai_ops.list_experiments_db",
@@ -194,6 +207,27 @@ class TestExperiments:
         ):
             resp = client.post("/ai-ops/experiments/missing/stop")
         assert resp.status_code == 404
+
+    def test_stop_experiment_failed(self, client):
+        with patch(
+            "api.routers.ai_ops.get_experiment_db",
+            new_callable=AsyncMock,
+            return_value={"id": "exp-1", "status": "active", "model_a": "v3", "model_b": "v4"},
+        ), patch(
+            "api.routers.ai_ops.list_evaluations_db",
+            new_callable=AsyncMock,
+            return_value=[],
+        ), patch(
+            "api.routers.ai_ops.AIEvaluationService.calculate_accuracy_metrics",
+            return_value={"intents": {}},
+        ), patch(
+            "api.routers.ai_ops.update_experiment_db",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            resp = client.post("/ai-ops/experiments/exp-1/stop")
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Failed to stop experiment"
 
 
 class TestConfidence:

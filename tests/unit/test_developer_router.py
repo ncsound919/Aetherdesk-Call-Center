@@ -220,6 +220,25 @@ class TestWebhooks:
         assert resp.status_code == 200
         assert resp.json() == {"success": True, "log_id": "log-1"}
 
+    def test_test_webhook_delivery_log_failed(self, client):
+        """Test webhook returns success False when the delivery log cannot be created."""
+        with patch(
+            "api.routers.developer.webhook_engine.get_webhook",
+            new_callable=AsyncMock,
+            return_value={"id": "wh-1", "url": "https://x.com", "secret": None},
+        ), patch(
+            "api.services.webhook_engine.create_webhook_delivery_log_db",
+            new_callable=AsyncMock,
+            return_value=None,
+        ), patch(
+            "api.services.webhook_engine._deliver_webhook",
+            new_callable=AsyncMock,
+        ) as mock_deliver:
+            resp = client.post("/developer/webhooks/wh-1/test")
+        assert resp.status_code == 200
+        assert resp.json() == {"success": False}
+        mock_deliver.assert_not_called()
+
     def test_test_webhook_not_found(self, client):
         with patch(
             "api.routers.developer.webhook_engine.get_webhook",

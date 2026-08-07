@@ -2,6 +2,8 @@ import os
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from api.services.router import TwoQuestionRouter
+
 
 class TestTwoQuestionRouter:
     def test_route_hit(self):
@@ -153,3 +155,17 @@ class TestRouterModuleConstants:
     def test_module_router_instantiation(self):
         from api.services.router import router
         assert router is not None
+
+
+class TestRouteTableLoading:
+    def test_route_table_load_failure_falls_back_to_empty(self):
+        """When routes.json can't be read, the module falls back to an empty table."""
+        import importlib
+
+        import api.services.router as router_mod
+
+        with patch("builtins.open", side_effect=FileNotFoundError("nope")):
+            importlib.reload(router_mod)
+
+        assert router_mod.route_table == {}
+        assert isinstance(router_mod.two_question_router, router_mod.TwoQuestionRouter)

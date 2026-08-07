@@ -643,10 +643,10 @@ async def verify_user_email_db(verification_token: str):
         if row:
             cursor.execute(
                 "UPDATE users SET email_verified = 1, verification_token = NULL, updated_at = datetime('now') WHERE id = ?",
-                (row[0],),
+                (row["id"],),
             )
             conn.commit()
-            return row[0]
+            return row["id"]
     return None
 
 
@@ -676,10 +676,10 @@ async def set_password_reset_token_db(email: str):
             expires = (datetime.now(UTC) + timedelta(hours=1)).isoformat()
             cursor.execute(
                 "UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?",
-                (token, expires, row[0]),
+                (token, expires, row["id"]),
             )
             conn.commit()
-            return row[0], token
+            return row["id"], token
     return None, None
 
 
@@ -711,10 +711,10 @@ async def reset_password_db(reset_token: str, new_password_hash: str):
         if row:
             cursor.execute(
                 "UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expires = NULL, updated_at = datetime('now') WHERE id = ?",
-                (new_password_hash, row[0]),
+                (new_password_hash, row["id"]),
             )
             conn.commit()
-            return row[0]
+            return row["id"]
     return None
 
 
@@ -880,7 +880,8 @@ async def count_active_agents_db(tenant_id: str) -> int:
             "SELECT COUNT(*) FROM agents WHERE tenant_id = ? AND is_active = 1",
             (tenant_id,),
         )
-        return cursor.fetchone()[0]
+        val = cursor.fetchone()
+        return int(val["COUNT(*)"]) if val else 0
 
 
 async def count_active_calls_db(tenant_id: str) -> int:
@@ -899,7 +900,8 @@ async def count_active_calls_db(tenant_id: str) -> int:
             "SELECT COUNT(*) FROM call_sessions WHERE tenant_id = ? AND call_status IN ('ringing','in_progress','active')",
             (tenant_id,),
         )
-        return cursor.fetchone()[0]
+        val = cursor.fetchone()
+        return int(val["COUNT(*)"]) if val else 0
 
 
 # --- Leads ---
@@ -1082,10 +1084,13 @@ async def update_lead_db(lead_id: str, tenant_id: str, updates: dict):
                     "SELECT custom_fields FROM leads WHERE id = ? AND tenant_id = ?",
                     (lead_id, tenant_id),
                 ).fetchone()
+                existing_cf_raw = (
+                    existing_row["custom_fields"]
+                    if isinstance(existing_row, dict)
+                    else existing_row[0]
+                ) if existing_row is not None else None
                 existing_cf = (
-                    json.loads(existing_row[0])
-                    if existing_row and existing_row[0]
-                    else {}
+                    json.loads(existing_cf_raw) if existing_cf_raw else {}
                 )
                 merged_cf = {**existing_cf, **value}
                 set_clauses_sqlite.append("custom_fields = ?")
@@ -1167,10 +1172,13 @@ async def bulk_update_leads_db(
                         "SELECT custom_fields FROM leads WHERE id = ? AND tenant_id = ?",
                         (lid, tenant_id),
                     ).fetchone()
+                    existing_cf_raw = (
+                        existing_row["custom_fields"]
+                        if isinstance(existing_row, dict)
+                        else existing_row[0]
+                    ) if existing_row is not None else None
                     existing_cf = (
-                        json.loads(existing_row[0])
-                        if existing_row and existing_row[0]
-                        else {}
+                        json.loads(existing_cf_raw) if existing_cf_raw else {}
                     )
                     merged_cf = {**existing_cf, **value}
                     set_clauses_sqlite.append("custom_fields = ?")

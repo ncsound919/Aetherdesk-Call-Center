@@ -89,6 +89,13 @@ class TestFlush:
         with patch("api.services.langfuse_client.get_langfuse", return_value=None):
             flush()  # Should not raise
 
+    def test_flush_swallows_exceptions(self):
+        from api.services.langfuse_client import flush
+        mock_lf = MagicMock()
+        mock_lf.flush.side_effect = Exception("network down")
+        with patch("api.services.langfuse_client.get_langfuse", return_value=mock_lf):
+            flush()  # Should not raise
+
 
 class TestScoreCall:
     def test_score_call_invokes_langfuse(self):
@@ -106,4 +113,11 @@ class TestScoreCall:
     def test_score_call_noop_when_no_client(self):
         from api.services.langfuse_client import score_call
         with patch("api.services.langfuse_client.get_langfuse", return_value=None):
+            score_call("call-123", "satisfaction", 0.95)  # Should not raise
+
+    def test_score_call_swallows_exceptions(self):
+        from api.services.langfuse_client import score_call
+        mock_lf = MagicMock()
+        mock_lf.score.side_effect = Exception("score failed")
+        with patch("api.services.langfuse_client.get_langfuse", return_value=mock_lf):
             score_call("call-123", "satisfaction", 0.95)  # Should not raise

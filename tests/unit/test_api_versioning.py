@@ -70,6 +70,13 @@ async def test_get_changelog_unknown_version_empty():
 
 
 @pytest.mark.asyncio
+async def test_get_changelog_all_versions():
+    entries = await svc.get_changelog()
+    assert len(entries) == 4
+    assert all(v["version"] in ("v1", "v2", "v3", "v4") for v in entries)
+
+
+@pytest.mark.asyncio
 async def test_validate_version_header_active():
     result = await svc.validate_version_header({"x-api-version": "v4"})
     assert result["valid"] is True

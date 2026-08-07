@@ -223,6 +223,29 @@ class TestLeadGet:
                 await get_lead("lead-1", tenant_id="tenant-1")
             assert exc.value.status_code == 500
 
+    @pytest.mark.asyncio
+    async def test_get_lead_row_like_object(self):
+        from api.routers.leads import get_lead
+
+        mock_row = MagicMock()
+        mock_row.keys.return_value = [
+            "id", "tenant_id", "phone", "company_name", "custom_fields",
+        ]
+        mock_row.__getitem__.side_effect = lambda k: {
+            "id": "lead-1",
+            "tenant_id": "tenant-1",
+            "phone": "+15551234567",
+            "company_name": "Acme",
+            "custom_fields": '{"source": "web"}',
+        }[k]
+
+        with patch("api.services.db_tenants.get_lead_db", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_row
+            result = await get_lead("lead-1", tenant_id="tenant-1")
+        assert result["id"] == "lead-1"
+        assert result["company_name"] == "Acme"
+        assert result["custom_fields"] == {"source": "web"}
+
 
 class TestLeadListExtended:
     @pytest.mark.asyncio
@@ -392,6 +415,44 @@ class TestCSVUploadExtended:
             await upload_leads_csv(file=file, tenant_id="tenant-1")
         assert exc.value.status_code == 400
 
+    @pytest.mark.asyncio
+    async def test_upload_encoding_not_supported(self):
+        from fastapi import HTTPException
+
+        from api.routers.leads import upload_leads_csv
+
+        class _UndecodableContent:
+            def __len__(self):
+                return 8
+
+            def decode(self, encoding, *args, **kwargs):
+                if encoding == "utf-8":
+                    raise UnicodeDecodeError("utf-8", b"\xff\xfe", 0, 2, "invalid start byte")
+                raise ValueError("cannot decode as latin-1")
+
+        file = MagicMock()
+        file.filename = "leads.csv"
+        file.read = AsyncMock(return_value=_UndecodableContent())
+
+        with pytest.raises(HTTPException) as exc:
+            await upload_leads_csv(file=file, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+        assert "encoding" in exc.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_upload_csv_parse_error(self):
+        from fastapi import HTTPException, UploadFile
+
+        from api.routers.leads import upload_leads_csv
+
+        # A single field larger than the CSV field-size limit makes csv parsing raise.
+        content = ("company,phone\nAcme," + "x" * 200000).encode()
+        file = UploadFile(filename="leads.csv", file=io.BytesIO(content))
+        with pytest.raises(HTTPException) as exc:
+            await upload_leads_csv(file=file, tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+        assert "parse" in exc.value.detail.lower()
+
 
 class TestCSVImportExtended:
     @pytest.mark.asyncio
@@ -446,6 +507,62 @@ class TestCSVImportExtended:
             result = await import_leads(req, tenant_id="tenant-1")
             assert result["imported"] == 1
             assert mock_create.call_args.kwargs.get("last_name") == "Smith"
+
+    @pytest.mark.asyncio
+    async def test_import_auto_maps_first_name(self):
+        from api.routers.leads import ImportRequest, import_leads
+
+        req = ImportRequest(
+            mapping={},
+            rows=[{"First Name": "Jane", "Phone": "+15551234567"}],
+        )
+        with patch("api.services.db_tenants.create_lead_db", new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = {"id": "lead-1"}
+            result = await import_leads(req, tenant_id="tenant-1")
+            assert result["imported"] == 1
+            assert mock_create.call_args.kwargs.get("first_name") == "Jane"
+
+    @pytest.mark.asyncio
+    async def test_import_auto_maps_email(self):
+        from api.routers.leads import ImportRequest, import_leads
+
+        req = ImportRequest(
+            mapping={},
+            rows=[{"Email Address": "jane@example.com", "Phone": "+15551234567"}],
+        )
+        with patch("api.services.db_tenants.create_lead_db", new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = {"id": "lead-1"}
+            result = await import_leads(req, tenant_id="tenant-1")
+            assert result["imported"] == 1
+            assert mock_create.call_args.kwargs.get("email") == "jane@example.com"
+
+    @pytest.mark.asyncio
+    async def test_import_auto_maps_industry(self):
+        from api.routers.leads import ImportRequest, import_leads
+
+        req = ImportRequest(
+            mapping={},
+            rows=[{"Industry": "Technology", "Phone": "+15551234567"}],
+        )
+        with patch("api.services.db_tenants.create_lead_db", new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = {"id": "lead-1"}
+            result = await import_leads(req, tenant_id="tenant-1")
+            assert result["imported"] == 1
+            assert mock_create.call_args.kwargs.get("industry") == "Technology"
+
+    @pytest.mark.asyncio
+    async def test_import_auto_maps_sector_to_industry(self):
+        from api.routers.leads import ImportRequest, import_leads
+
+        req = ImportRequest(
+            mapping={},
+            rows=[{"Sector": "Healthcare", "Phone": "+15551234567"}],
+        )
+        with patch("api.services.db_tenants.create_lead_db", new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = {"id": "lead-1"}
+            result = await import_leads(req, tenant_id="tenant-1")
+            assert result["imported"] == 1
+            assert mock_create.call_args.kwargs.get("industry") == "Healthcare"
 
 
 class TestGetTenantId:

@@ -129,12 +129,11 @@ omit = [
 ]
 
 [tool.coverage.report]
-# Interim gate: the CI test set (unit + services + core top-level) is verified
-# passing; local coverage of src/ is ~42% from tests/unit/ alone. The target
-# is 65%; raise this as coverage for untested routers/services (ai_assist,
-# ai_platform, ticketing, training, voice_biometrics, webhook_engine, etc.)
-# is added. See docs/DEPLOYMENT_READINESS.md for the coverage backlog.
-fail_under = 40
+# Coverage gate: the CI test set (unit + services + core top-level) covers
+# 96% of src/. Raised from 40 -> 95 once unit tests were brought to 95.91%
+# and the CI set to 96.00% (all routers, services, middleware and db_* data
+# access modules now have comprehensive unit tests).
+fail_under = 95
 skip_empty = true
 
 [tool.hatch.build.targets.wheel]

@@ -125,6 +125,29 @@ class TestSQLitePool:
         # Clean up
         _sqlite_conn_pool.clear()
 
+    def test_release_sqlite_conn_closes_overflow_conn(self):
+        """_release_sqlite_conn closes the connection when the pool is full."""
+        from api.services.db_pool import (
+            SQLITE_POOL_SIZE,
+            _get_sqlite_conn,
+            _release_sqlite_conn,
+            _sqlite_conn_pool,
+        )
+
+        _sqlite_conn_pool.clear()
+        pooled = [_get_sqlite_conn() for _ in range(SQLITE_POOL_SIZE)]
+        for c in pooled:
+            _release_sqlite_conn(c)
+
+        overflow = MagicMock()
+        _release_sqlite_conn(overflow)
+        overflow.close.assert_called_once()
+        assert overflow not in _sqlite_conn_pool
+
+        for c in pooled:
+            c.close()
+        _sqlite_conn_pool.clear()
+
 
 # ── Async SQLite Connection Tests ───────────────────────────────────────
 
@@ -607,3 +630,97 @@ class TestEncryptionExtra:
 
         result = decrypt_val("not-a-valid-fernet-token")
         assert result == "not-a-valid-fernet-token"
+
+
+# ── Module-Level Setup Tests ────────────────────────────────────────────
+
+class TestDbPoolModuleSetup:
+    """Tests for module-level Fernet / ENCRYPTION_KEY setup in db_pool."""
+
+    def test_fernet_import_error_disables_encryption(self):
+        """When cryptography.fernet is unavailable, _FERNET_AVAILABLE is False."""
+        import importlib
+
+        import api.services.db_pool as dbp
+
+        with patch.dict(
+            os.environ,
+            {"ENCRYPTION_KEY": "dGVzdC1rZXktMTIzNDU2Nzg5MDEyMzQ1Njc4OTA="},
+            clear=False,
+        ), patch.dict("sys.modules", {"cryptography.fernet": None}):
+            importlib.reload(dbp)
+            assert dbp._FERNET_AVAILABLE is False
+
+    def test_missing_encryption_key_development_warns(self):
+        """Missing ENCRYPTION_KEY in dev logs a warning and disables encryption."""
+        import importlib
+
+        import api.services.db_pool as dbp
+
+        mock_logger = MagicMock()
+        with patch.dict(
+            os.environ, {"APP_ENV": "development", "ENCRYPTION_KEY": ""}, clear=False
+        ), patch("structlog.get_logger", return_value=mock_logger):
+            importlib.reload(dbp)
+            assert mock_logger.warning.called
+
+    def test_missing_encryption_key_production_raises(self):
+        """Missing ENCRYPTION_KEY in production raises RuntimeError."""
+        import importlib
+
+        import api.services.db_pool as dbp
+
+        with patch.dict(
+            os.environ, {"APP_ENV": "production", "ENCRYPTION_KEY": ""}, clear=False
+        ):
+            with pytest.raises(RuntimeError, match="ENCRYPTION_KEY"):
+                importlib.reload(dbp)
+
+
+# ── Pool Stats Tests ────────────────────────────────────────────────────
+
+class TestGetPoolStats:
+    """Tests for get_pool_stats."""
+
+    @pytest.mark.asyncio
+    async def test_returns_stats_when_pool_present(self):
+        from api.services.connection_pool import get_pool_stats
+
+        mock_pool = MagicMock()
+        mock_pool._pool.get_size.return_value = 10
+        mock_pool._pool.get_idle_size.return_value = 4
+
+        with patch(
+            "api.services.db_pool.get_pg_pool",
+            new_callable=AsyncMock,
+            return_value=mock_pool,
+        ):
+            stats = await get_pool_stats()
+
+        assert stats == {"size": 10, "free": 4, "used": -1}
+
+    @pytest.mark.asyncio
+    async def test_returns_zeros_when_no_pool(self):
+        from api.services.connection_pool import get_pool_stats
+
+        with patch(
+            "api.services.db_pool.get_pg_pool",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            stats = await get_pool_stats()
+
+        assert stats == {"size": 0, "free": 0, "used": 0}
+
+    @pytest.mark.asyncio
+    async def test_returns_zeros_on_exception(self):
+        from api.services.connection_pool import get_pool_stats
+
+        with patch(
+            "api.services.db_pool.get_pg_pool",
+            new_callable=AsyncMock,
+            side_effect=Exception("pool error"),
+        ):
+            stats = await get_pool_stats()
+
+        assert stats == {"size": 0, "free": 0, "used": 0}

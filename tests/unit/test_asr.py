@@ -144,6 +144,27 @@ class TestASRServiceTranscribe:
         _, kwargs = mock_track.call_args
         assert kwargs.get("engine") == "faster-whisper"
 
+    @pytest.mark.asyncio
+    async def test_transcribe_initializes_when_model_none(self):
+        from api.services.asr import ASRService
+
+        svc = ASRService()
+        assert svc._model is None
+
+        mock_model = MagicMock()
+        mock_segment = MagicMock()
+        mock_segment.text = "init test"
+        mock_model.transcribe.return_value = ([mock_segment], MagicMock())
+
+        def _set_model():
+            svc._model = mock_model
+
+        with patch.object(svc, "initialize", new_callable=AsyncMock, side_effect=_set_model), \
+             patch("api.middleware.metrics.ASR_LATENCY"):
+            result = await svc.transcribe(np.array([100], dtype=np.int16).tobytes())
+
+        assert result == "init test"
+
 
 class TestASRServiceTranscribeStreaming:
     @pytest.mark.asyncio
@@ -246,3 +267,24 @@ class TestASRServiceTranscribeStreaming:
             await svc.transcribe_streaming(audio_data)
 
         mock_track.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_transcribe_streaming_initializes_when_model_none(self):
+        from api.services.asr import ASRService
+
+        svc = ASRService()
+        assert svc._model is None
+
+        mock_model = MagicMock()
+        mock_segment = MagicMock()
+        mock_segment.text = "stream init"
+        mock_model.transcribe.return_value = ([mock_segment], MagicMock())
+
+        def _set_model():
+            svc._model = mock_model
+
+        with patch.object(svc, "initialize", new_callable=AsyncMock, side_effect=_set_model), \
+             patch("api.middleware.metrics.ASR_LATENCY"):
+            result = await svc.transcribe_streaming(np.zeros(32000, dtype=np.int16).tobytes())
+
+        assert result == "stream init"

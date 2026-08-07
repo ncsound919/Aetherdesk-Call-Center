@@ -266,6 +266,31 @@ CREATE TABLE IF NOT EXISTS billing_records (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Rental windows (concurrent agent capacity purchased for a duration)
+CREATE TABLE IF NOT EXISTS tenant_rentals (
+    id TEXT PRIMARY KEY,
+    tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE,
+    period VARCHAR(30),
+    ai_mode VARCHAR(20) DEFAULT 'deepseek',
+    quantity INT DEFAULT 1,
+    included_minutes INT DEFAULT 0,
+    rental_start TIMESTAMPTZ,
+    rental_end TIMESTAMPTZ,
+    stripe_session_id VARCHAR(255),
+    payment_intent_id VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_tenant_rentals_tenant ON tenant_rentals(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_rentals_session ON tenant_rentals(stripe_session_id);
+
+-- Prepaid minute balance (one row per tenant, atomically updated)
+CREATE TABLE IF NOT EXISTS tenant_balances (
+    tenant_id UUID PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+    minute_balance INT DEFAULT 0,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Audit Log
 CREATE TABLE IF NOT EXISTS audit_log (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -1367,6 +1392,23 @@ CREATE TABLE IF NOT EXISTS tenant_settings (
     redact_pii INTEGER DEFAULT 1, require_consent INTEGER DEFAULT 0,
     sync_dnc INTEGER DEFAULT 0, mcp_servers TEXT DEFAULT '{}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Rental windows (concurrent agent capacity purchased for a duration)
+CREATE TABLE IF NOT EXISTS tenant_rentals (
+    id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+    period TEXT, ai_mode TEXT DEFAULT 'deepseek', quantity INTEGER DEFAULT 1,
+    included_minutes INTEGER DEFAULT 0, rental_start TEXT, rental_end TEXT,
+    stripe_session_id TEXT, payment_intent_id TEXT, status TEXT DEFAULT 'active',
+    created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_tenant_rentals_tenant ON tenant_rentals(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_rentals_session ON tenant_rentals(stripe_session_id);
+
+-- Prepaid minute balance (one row per tenant, atomically updated)
+CREATE TABLE IF NOT EXISTS tenant_balances (
+    tenant_id TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
+    minute_balance INTEGER DEFAULT 0, updated_at TEXT DEFAULT (datetime('now'))
 );
 
 -- Action Approvals (for human-in-the-loop)

@@ -14,6 +14,22 @@ class TestMemoryServiceInit:
         assert svc._vectorstore is None
         assert svc._embeddings is None
 
+    def test_document_fallback_when_langchain_missing(self):
+        """When langchain_core is unavailable, the module falls back to a dataclass."""
+        import importlib
+
+        import api.services.memory as mem_mod
+
+        with patch.dict("sys.modules", {"langchain_core.documents": None}):
+            importlib.reload(mem_mod)
+
+        try:
+            doc = mem_mod.Document(page_content="hello", metadata={})
+            assert doc.page_content == "hello"
+            assert doc.metadata == {}
+        finally:
+            importlib.reload(mem_mod)
+
     def test_custom_initialization(self):
         from api.services.memory import MemoryService
 
@@ -250,6 +266,28 @@ class TestMemoryServiceSearchMemories:
             results = await svc.search_memories("query", session_id="session-1", k=5)
             assert len(results) == 1
             assert results[0]["content"] == "from session 1"
+
+    @pytest.mark.asyncio
+    async def test_search_with_user_filter_filters_mismatches(self):
+        from api.services.memory import MemoryService
+
+        svc = MemoryService()
+        svc._vectorstore = MagicMock()
+        mock_doc1 = MagicMock()
+        mock_doc1.page_content = "user u1 content"
+        mock_doc1.metadata = {"memory_id": "mem-1", "session_id": "s1", "user_id": "u1"}
+        mock_doc2 = MagicMock()
+        mock_doc2.page_content = "user u2 content"
+        mock_doc2.metadata = {"memory_id": "mem-2", "session_id": "s1", "user_id": "u2"}
+
+        with patch("asyncio.get_running_loop") as mock_loop:
+            mock_loop.return_value.run_in_executor = AsyncMock(
+                return_value=[(mock_doc1, 0.9), (mock_doc2, 0.8)]
+            )
+
+            results = await svc.search_memories("query", user_id="u1", k=5)
+            assert len(results) == 1
+            assert results[0]["content"] == "user u1 content"
 
     @pytest.mark.asyncio
     async def test_search_no_results(self):

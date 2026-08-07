@@ -137,6 +137,24 @@ class TestContracts:
         resp = client.post("/business-continuity/contracts", json={})
         assert resp.status_code == 422
 
+    def test_create_contract_failed(self, client):
+        with patch(
+            "api.routers.business_continuity.dr_service.manage_contract",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            resp = client.post(
+                "/business-continuity/contracts",
+                json={
+                    "vendor": "AWS",
+                    "terms": "99.9% uptime",
+                    "renewal_date": "2027-01-01",
+                    "cost": 10000,
+                },
+            )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Failed to create contract"
+
     def test_list_contracts(self, client):
         with patch(
             "api.routers.business_continuity.dr_service.list_contracts",
@@ -146,6 +164,20 @@ class TestContracts:
             resp = client.get("/business-continuity/contracts")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
+
+    def test_get_contract_alerts(self, client):
+        with patch(
+            "api.routers.business_continuity.dr_service.get_contract_alerts",
+            new_callable=AsyncMock,
+            return_value=[{"id": "c-1", "days_to_renewal": 5}],
+        ) as mock_alerts:
+            resp = client.get(
+                "/business-continuity/contracts/alerts", params={"days_ahead": 60}
+            )
+        assert resp.status_code == 200
+        assert len(resp.json()) == 1
+        assert mock_alerts.call_args.args[0] == "TENANT-001"
+        assert mock_alerts.call_args.args[1] == 60
 
 
 class TestBackupChannels:
@@ -161,6 +193,19 @@ class TestBackupChannels:
             )
         assert resp.status_code == 200
         assert mock_cfg.call_args.args[1] == "whatsapp"
+
+    def test_configure_backup_channel_failed(self, client):
+        with patch(
+            "api.routers.business_continuity.dr_service.configure_backup_channel",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            resp = client.post(
+                "/business-continuity/backup-channels",
+                json={"channel_type": "whatsapp", "config": {"number": "+1"}},
+            )
+        assert resp.status_code == 400
+        assert resp.json()["detail"] == "Failed to configure backup channel"
 
     def test_test_backup_channel(self, client):
         with patch(

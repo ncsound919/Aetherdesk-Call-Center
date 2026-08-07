@@ -157,12 +157,29 @@ async def handle_call_status(request: Request):
             # Never let a webhook failure break the Twilio flow.
             pass
 
+    # Settlement: debit prepaid minutes for completed calls (rental model).
+    if call_status == "completed":
+        try:
+            from api.services.db_billing import settle_call_minutes_db
+
+            duration = int(form.get("CallDuration", "0") or 0)
+            settlement = await settle_call_minutes_db(call_sid, duration)
+            if settlement["debit"]:
+                logger.info(
+                    "call_minutes_settled",
+                    call_sid=call_sid,
+                    tenant_id=settlement["tenant_id"],
+                    minutes=settlement["minutes"],
+                )
+        except Exception:
+            # Never let a settlement failure break the Twilio flow.
+            pass
+
     # Close the campaign outcome loop: map Twilio call status to a campaign
     # call outcome and advance the lead status, so outreach analytics update
     # in real time without manual entry.
     try:
         from api.services.database import USE_POSTGRES, db_context
-
         outcome_map = {
             "completed": "answered",
             "no-answer": "no_answer",

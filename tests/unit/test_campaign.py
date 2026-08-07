@@ -624,3 +624,407 @@ class TestRunCampaign:
 
             # Budget exhausted -> no HTTP dial should happen.
             mock_http.post.assert_not_called()
+
+
+class TestRunCampaignExtended:
+    """Additional _run_campaign branches: completed-state update and DB cleanup errors."""
+
+    @pytest.mark.asyncio
+    async def test_run_campaign_with_campaign_marks_completed(self):
+        from api.routers.campaign import _run_campaign
+
+        leads = [{"id": "LEAD-1", "phone": "+15551111111", "company_name": "Acme"}]
+        campaign = {"id": "CAMP-1", "budget_cents": 0}
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"call_ref": "CA-999"}
+        mock_http = AsyncMock()
+        mock_http.post.return_value = mock_response
+        mock_http.__aenter__.return_value = mock_http
+
+        with patch("api.routers.campaign._run_query", new_callable=AsyncMock) as mock_run, \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("api.routers.campaign._check_budget", AsyncMock(return_value=True)), \
+             patch("api.routers.campaign.httpx.AsyncClient", return_value=mock_http), \
+             patch("api.routers.campaign.db_context") as mock_db:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            await _run_campaign(leads, "PROF-TEST", 1, 2.0, "tenant-1", campaign)
+
+            mock_http.post.assert_called_once()
+            completed = [
+                c for c in mock_run.call_args_list if "status = 'completed'" in str(c.args[1])
+            ]
+            assert len(completed) == 1
+
+    @pytest.mark.asyncio
+    async def test_run_campaign_db_cleanup_error(self):
+        from api.routers.campaign import _run_campaign
+
+        leads = [{"id": "LEAD-1", "phone": "+15551111111", "company_name": "Acme"}]
+
+        mock_http = AsyncMock()
+        mock_http.post.side_effect = Exception("Voice API unavailable")
+        mock_http.__aenter__.return_value = mock_http
+
+        async def fake_run(conn, query, params=(), fetch=None):
+            if "status = 'failed'" in query:
+                raise Exception("db cleanup failed")
+            return None
+
+        with patch("api.routers.campaign._run_query", side_effect=fake_run), \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("api.routers.campaign._check_budget", AsyncMock(return_value=True)), \
+             patch("api.routers.campaign.httpx.AsyncClient", return_value=mock_http), \
+             patch("api.routers.campaign.db_context") as mock_db, \
+             patch("api.routers.campaign.logger.error") as mock_err:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            await _run_campaign(leads, "PROF-TEST", 1, 2.0, "tenant-1", None)
+
+            cleanup_errors = [
+                c
+                for c in mock_err.call_args_list
+                if c.args and "campaign_call_failed_db_cleanup_error" in str(c.args[0])
+            ]
+            assert len(cleanup_errors) == 1
+
+
+class TestCheckBudget:
+    """Tests for the _check_budget helper."""
+
+    @pytest.mark.asyncio
+    async def test_check_budget_no_campaign(self):
+        from api.routers.campaign import _check_budget
+
+        result = await _check_budget("tenant-1", None)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_check_budget_zero_budget(self):
+        from api.routers.campaign import _check_budget
+
+        result = await _check_budget("tenant-1", {"id": "CAMP-1", "budget_cents": 0})
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_check_budget_under_budget(self):
+        from api.routers.campaign import _check_budget
+
+        with patch_db(return_map={"COALESCE(SUM(cost_usd)": {"spent": 5.0}}), \
+             patch("api.routers.campaign.db_context") as mock_db:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            result = await _check_budget("tenant-1", {"id": "CAMP-1", "budget_cents": 1000})
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_check_budget_exhausted(self):
+        from api.routers.campaign import _check_budget
+
+        with patch_db(return_map={"COALESCE(SUM(cost_usd)": {"spent": 15.0}}), \
+             patch("api.routers.campaign.db_context") as mock_db:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            result = await _check_budget("tenant-1", {"id": "CAMP-1", "budget_cents": 1000})
+            assert result is False
+
+
+class TestRunQuerySQLite:
+    """Tests for the real _run_query sqlite (non-Postgres) execution path."""
+
+    @pytest.mark.asyncio
+    async def test_run_query_fetch_all(self):
+        from api.routers.campaign import _run_query
+
+        conn = MagicMock()
+        cursor = conn.cursor.return_value
+        cursor.fetchall.return_value = [{"id": "1"}, {"id": "2"}]
+
+        result = await _run_query(conn, "SELECT * FROM leads", ("t",), fetch="all")
+        assert result == [{"id": "1"}, {"id": "2"}]
+        cursor.execute.assert_called_once_with("SELECT * FROM leads", ("t",))
+
+    @pytest.mark.asyncio
+    async def test_run_query_fetch_one(self):
+        from api.routers.campaign import _run_query
+
+        conn = MagicMock()
+        cursor = conn.cursor.return_value
+        cursor.fetchone.return_value = {"id": "1"}
+
+        result = await _run_query(conn, "SELECT * FROM leads", ("t",), fetch="one")
+        assert result == {"id": "1"}
+
+    @pytest.mark.asyncio
+    async def test_run_query_fetch_one_empty(self):
+        from api.routers.campaign import _run_query
+
+        conn = MagicMock()
+        cursor = conn.cursor.return_value
+        cursor.fetchone.return_value = None
+
+        result = await _run_query(conn, "SELECT * FROM leads", ("t",), fetch="one")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_run_query_no_fetch_commits(self):
+        from api.routers.campaign import _run_query
+
+        conn = MagicMock()
+        result = await _run_query(conn, "UPDATE leads SET status = ?", ("new",), fetch=None)
+        assert result is None
+        conn.commit.assert_called_once()
+
+
+class TestRunQueryPostgres:
+    """Tests for the _run_query Postgres (asyncpg-style) execution path."""
+
+    @pytest.mark.asyncio
+    async def test_run_query_postgres_fetch_all(self):
+        from api.routers.campaign import _run_query
+
+        conn = MagicMock()
+        conn.fetch = AsyncMock(return_value=[{"id": "1"}, {"id": "2"}])
+
+        with patch("api.routers.campaign.USE_POSTGRES", True):
+            result = await _run_query(conn, "SELECT * FROM leads", ("t",), fetch="all")
+
+        assert result == [{"id": "1"}, {"id": "2"}]
+        conn.fetch.assert_awaited_once_with("SELECT * FROM leads", "t")
+
+    @pytest.mark.asyncio
+    async def test_run_query_postgres_fetch_one(self):
+        from api.routers.campaign import _run_query
+
+        conn = MagicMock()
+        conn.fetchrow = AsyncMock(return_value={"id": "1"})
+
+        with patch("api.routers.campaign.USE_POSTGRES", True):
+            result = await _run_query(conn, "SELECT * FROM leads", ("t",), fetch="one")
+
+        assert result == {"id": "1"}
+        conn.fetchrow.assert_awaited_once_with("SELECT * FROM leads", "t")
+
+    @pytest.mark.asyncio
+    async def test_run_query_postgres_fetch_one_empty(self):
+        from api.routers.campaign import _run_query
+
+        conn = MagicMock()
+        conn.fetchrow = AsyncMock(return_value=None)
+
+        with patch("api.routers.campaign.USE_POSTGRES", True):
+            result = await _run_query(conn, "SELECT * FROM leads", ("t",), fetch="one")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_run_query_postgres_execute(self):
+        from api.routers.campaign import _run_query
+
+        conn = MagicMock()
+        conn.execute = AsyncMock()
+
+        with patch("api.routers.campaign.USE_POSTGRES", True):
+            result = await _run_query(conn, "UPDATE leads SET status = %s", ("new",), fetch=None)
+
+        assert result is None
+        conn.execute.assert_awaited_once_with("UPDATE leads SET status = %s", "new")
+
+
+class TestCampaignCRUDExtended:
+    """list_campaigns, get_campaign success and update_campaign branches."""
+
+    @pytest.mark.asyncio
+    async def test_list_campaigns(self):
+        from api.routers.campaign import list_campaigns
+
+        rows = [
+            {"id": "CAMP-1", "name": "A", "status": "draft"},
+            {"id": "CAMP-2", "name": "B", "status": "active"},
+        ]
+        with patch_db(return_map={"SELECT * FROM campaigns WHERE tenant_id": rows}), \
+             patch("api.routers.campaign.db_context") as mock_db:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            result = await list_campaigns(tenant_id="tenant-1")
+            assert len(result) == 2
+            assert result[0]["id"] == "CAMP-1"
+
+    @pytest.mark.asyncio
+    async def test_get_campaign_success(self):
+        from api.routers.campaign import get_campaign
+
+        row = {"id": "CAMP-1", "name": "Outreach", "status": "draft"}
+        with patch_db(return_map={"SELECT * FROM campaigns WHERE": row}), \
+             patch("api.routers.campaign.db_context") as mock_db:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            result = await get_campaign("CAMP-1", tenant_id="tenant-1")
+            assert result["name"] == "Outreach"
+
+    @pytest.mark.asyncio
+    async def test_update_campaign_empty_fields(self):
+        from api.routers.campaign import update_campaign, CampaignUpdate
+
+        result = await update_campaign("CAMP-1", CampaignUpdate(), tenant_id="tenant-1")
+        assert result == {"updated": "CAMP-1"}
+
+    @pytest.mark.asyncio
+    async def test_update_campaign_invalid_status(self):
+        from api.routers.campaign import update_campaign, CampaignUpdate
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            await update_campaign("CAMP-1", CampaignUpdate(status="bogus"), tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_update_campaign_valid(self):
+        from api.routers.campaign import update_campaign, CampaignUpdate
+
+        with patch_db(), \
+             patch("api.routers.campaign.db_context") as mock_db:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            result = await update_campaign(
+                "CAMP-1", CampaignUpdate(status="active", budget_cents=500), tenant_id="tenant-1"
+            )
+            assert result == {"updated": "CAMP-1"}
+
+    @pytest.mark.asyncio
+    async def test_update_campaign_none_values_return_early(self):
+        from api.routers.campaign import update_campaign, CampaignUpdate
+
+        result = await update_campaign(
+            "CAMP-1", CampaignUpdate(name=None, description=None), tenant_id="tenant-1"
+        )
+        assert result == {"updated": "CAMP-1"}
+
+
+class TestCampaignCallsExtended:
+    @pytest.mark.asyncio
+    async def test_record_call_outcome_invalid(self):
+        from api.routers.campaign import record_call_outcome
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc:
+            await record_call_outcome("CC-1", outcome="garbage", tenant_id="tenant-1")
+        assert exc.value.status_code == 400
+
+
+class TestCampaignLaunchExtended:
+    """launch_campaign with an explicit campaign_id."""
+
+    def _base_campaign(self, **overrides):
+        campaign = {
+            "id": "CAMP-1",
+            "status": "draft",
+            "budget_cents": 1000,
+            "spent_cents": 100,
+            "filter_status": "interested",
+            "profile_id": "PROF-C",
+            "max_concurrent": 2,
+            "delay_between_calls": 4.0,
+        }
+        campaign.update(overrides)
+        return campaign
+
+    @pytest.mark.asyncio
+    async def test_launch_campaign_id_not_found(self):
+        from api.routers.campaign import launch_campaign, CampaignLaunch
+        from fastapi import HTTPException
+
+        with patch_db(return_map={"SELECT * FROM campaigns WHERE": None}), \
+             patch("api.routers.campaign._campaign_running", False), \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("api.routers.campaign.db_context") as mock_db:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc:
+                await launch_campaign(CampaignLaunch(campaign_id="CAMP-X"), tenant_id="tenant-1")
+            assert exc.value.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_launch_campaign_status_budget_exhausted(self):
+        from api.routers.campaign import launch_campaign, CampaignLaunch
+        from fastapi import HTTPException
+
+        campaign = self._base_campaign(status="budget_exhausted")
+        with patch_db(return_map={"SELECT * FROM campaigns WHERE": campaign}), \
+             patch("api.routers.campaign._campaign_running", False), \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("api.routers.campaign.db_context") as mock_db:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc:
+                await launch_campaign(CampaignLaunch(campaign_id="CAMP-1"), tenant_id="tenant-1")
+            assert exc.value.status_code == 400
+            assert "budget exhausted" in exc.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_launch_campaign_spent_over_budget(self):
+        from api.routers.campaign import launch_campaign, CampaignLaunch
+        from fastapi import HTTPException
+
+        campaign = self._base_campaign(status="active", spent_cents=1000)
+        with patch_db(return_map={"SELECT * FROM campaigns WHERE": campaign}), \
+             patch("api.routers.campaign._campaign_running", False), \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("api.routers.campaign.db_context") as mock_db:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            with pytest.raises(HTTPException) as exc:
+                await launch_campaign(CampaignLaunch(campaign_id="CAMP-1"), tenant_id="tenant-1")
+            assert exc.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_launch_existing_campaign_uses_campaign_params(self):
+        from api.routers.campaign import launch_campaign, CampaignLaunch
+
+        campaign = self._base_campaign()
+        leads = [
+            {"id": "LEAD-1", "phone": "+15551111111", "company_name": "Acme", "status": "interested"},
+        ]
+        with patch_db(
+            return_map={
+                "SELECT * FROM campaigns WHERE": campaign,
+                "ORDER BY priority ASC LIMIT 50": leads,
+            }
+        ), \
+             patch("api.routers.campaign._campaign_running", False), \
+             patch("api.routers.campaign._campaign_lock", AsyncMock()), \
+             patch("api.routers.campaign.asyncio.create_task") as mock_create_task, \
+             patch("api.routers.campaign.db_context") as mock_db:
+            mock_db.return_value = mock_db
+            mock_db.__aenter__ = AsyncMock(return_value=MagicMock())
+            mock_db.__aexit__ = AsyncMock(return_value=False)
+
+            result = await launch_campaign(CampaignLaunch(campaign_id="CAMP-1"), tenant_id="tenant-1")
+
+            assert result["status"] == "launched"
+            assert result["campaign_id"] == "CAMP-1"
+            # Campaign-derived parameters win over the request defaults.
+            assert result["profile"] == "PROF-C"
+            assert result["max_concurrent"] == 2
+            mock_create_task.assert_called_once()

@@ -38,6 +38,22 @@ class TestEngineUtils:
         assert "Billing:" in prompt
         assert "Invoice" in prompt
 
+        # Test ask_q2_status
+        state.node = "ask_q2_status"
+        prompt = prompt_for(state)
+        assert "Status:" in prompt
+        assert "Order" in prompt
+        assert "Shipment" in prompt
+        assert "Backorder" in prompt
+
+        # Test ask_q2_tech
+        state.node = "ask_q2_tech"
+        prompt = prompt_for(state)
+        assert "Tech Support:" in prompt
+        assert "Password" in prompt
+        assert "App Error" in prompt
+        assert "Pairing" in prompt
+
         # Test agent_handoff
         state.node = "agent_handoff"
         prompt = prompt_for(state)
@@ -187,6 +203,82 @@ class TestInboundSMS:
         assert saved_state["protocol_id"] == "refill_protocol"
         assert saved_state["node"] == "start"
         assert saved_state["fields"]["queue"] == "refill_queue"
+
+    @pytest.mark.asyncio
+    async def test_inbound_sms_q2_invalid_selection(self):
+        from api.routers.engine import inbound_sms, VMState
+
+        mock_request = MagicMock(spec=Request)
+        mock_redis = MagicMock()
+
+        # Existing state where q1 was answered (billing) and we're at ask_q2_billing
+        existing_state = VMState(
+            protocol_id="bootstrap_q1",
+            node="ask_q2_billing",
+            fields={"phone": "+15551234567", "session_id": "sms:+15551234567", "q1": "billing"},
+            transcript=[]
+        )
+        mock_redis.get.return_value = json.dumps(existing_state.__dict__)
+        mock_request.app.state.redis = mock_redis
+
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class:
+
+            # Invalid q2 selection -> re-ask the same question via prompt_for(state)
+            response = await inbound_sms(mock_request, From="+15551234567", Body="99")
+
+        assert "Billing:" in response.body.decode()
+        assert "Invoice" in response.body.decode()
+        # State must be re-saved unchanged with the same node
+        saved_state = json.loads(mock_redis.setex.call_args[0][2])
+        assert saved_state["node"] == "ask_q2_billing"
+
+    @pytest.mark.asyncio
+    async def test_inbound_sms_node_not_ask_q2(self):
+        from api.routers.engine import inbound_sms, VMState
+
+        mock_request = MagicMock(spec=Request)
+        mock_redis = MagicMock()
+
+        # bootstrap_q1 state whose node doesn't start with ask_q2_ and isn't ask_q1
+        existing_state = VMState(
+            protocol_id="bootstrap_q1",
+            node="agent_handoff",
+            fields={"phone": "+15551234567", "session_id": "sms:+15551234567", "q1": "other"},
+            transcript=[]
+        )
+        mock_redis.get.return_value = json.dumps(existing_state.__dict__)
+        mock_request.app.state.redis = mock_redis
+
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class:
+
+            response = await inbound_sms(mock_request, From="+15551234567", Body="1")
+
+        # else branch -> prompt is "..."
+        assert "...</Message>" in response.body.decode()
+
+    @pytest.mark.asyncio
+    async def test_inbound_sms_redis_save_failure(self):
+        from api.routers.engine import inbound_sms
+
+        mock_request = MagicMock(spec=Request)
+        mock_redis = MagicMock()
+        mock_redis.get.return_value = None
+        mock_redis.setex.side_effect = Exception("Redis down")
+        mock_request.app.state.redis = mock_redis
+
+        with patch("api.routers.engine.ProtocolVM") as mock_vm_class, \
+             patch("api.routers.engine.Actions") as mock_actions_class, \
+             patch("api.routers.engine.logger.warning") as mock_logger:
+
+            response = await inbound_sms(mock_request, From="+15551234567", Body="invalid")
+
+        # session_save_failed is logged but the response is still returned
+        assert isinstance(response, Response)
+        assert response.media_type == "application/xml"
+        assert "What's this about?" in response.body.decode()
+        mock_logger.assert_called_once_with("session_save_failed", error="Redis down")
 
     @pytest.mark.asyncio
     async def test_inbound_sms_non_bootstrap_protocol(self):

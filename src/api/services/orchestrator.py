@@ -403,6 +403,7 @@ class ReActAgent:
                             messages,
                             temperature=0.1,
                             json_mode=True,
+                            tenant_id=tenant_id,
                         )
                         ai_msg = result.text
                         # Track provider for budget/observability.

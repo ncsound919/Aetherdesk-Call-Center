@@ -113,6 +113,36 @@ class TestCreateTenant:
             assert resp.status_code == 201
             assert resp.json()["plan_name"] == "Starter"
 
+    def test_create_tenant_fonster_failure_non_fatal(self, app, client):
+        fonster = AsyncMock()
+        fonster.create_application = AsyncMock(side_effect=Exception("Fonster down"))
+        app.state.fonster_client = fonster
+
+        with patch("api.routers.tenants.create_tenant_db", new_callable=AsyncMock) as mock_create, \
+             patch("api.routers.tenants.logger.warning") as mock_warning:
+            mock_create.return_value = {
+                "id": "tenant-4",
+                "plan_id": None,
+            }
+
+            resp = client.post(
+                "/api/v1/tenants",
+                json={
+                    "name": "Fonster Fail Co",
+                    "email": "fail@co.com",
+                    "gdpr_consent": True,
+                },
+            )
+            assert resp.status_code == 201
+            body = resp.json()
+            assert body["name"] == "Fonster Fail Co"
+            assert body["status"] == "active"
+            assert body["plan_name"] == "Starter"
+            # The exception is logged but does not fail tenant creation
+            mock_warning.assert_called_once()
+            assert "Fonster app creation failed (non-fatal)" in mock_warning.call_args.args[0]
+            fonster.create_application.assert_awaited_once()
+
     def test_create_tenant_validation_error(self, client):
         resp = client.post(
             "/api/v1/tenants",

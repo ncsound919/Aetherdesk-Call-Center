@@ -644,3 +644,253 @@ class TestCallWebSocketEdgeCases:
             await call_websocket(mock_ws, "call-123")
 
         assert mock_send.call_count == 2
+
+
+class TestWebSocketCalls:
+    """Tests for the tenant-scoped /ws/calls/{tenant_id} websocket handler."""
+
+    @pytest.mark.asyncio
+    async def test_websocket_calls_redis_message_then_reconnect_fails(self):
+        from api.routers.realtime import websocket_calls
+
+        mock_ws = AsyncMock(spec=WebSocket)
+        # initial accept succeeds, all 3 reconnection accepts fail
+        mock_ws.accept.side_effect = [None, RuntimeError("closed"), RuntimeError("closed"), RuntimeError("closed")]
+
+        redis = MagicMock()
+        pubsub = MagicMock()
+        pubsub.subscribe = AsyncMock()
+        pubsub.get_message = AsyncMock(
+            side_effect=[
+                {"type": "message", "data": json.dumps({"status": "ringing", "call_sid": "c1"})},
+                WebSocketDisconnect(),
+            ]
+        )
+        pubsub.unsubscribe = AsyncMock()
+        redis.pubsub = MagicMock(return_value=pubsub)
+        mock_ws.app.state.redis = redis
+
+        with patch("api.routers.realtime.asyncio.sleep", new_callable=AsyncMock):
+            await websocket_calls(mock_ws, "tenant-1", _="tenant-1")
+
+        assert mock_ws.accept.await_count == 4
+        mock_ws.send_json.assert_awaited_once_with({"status": "ringing", "call_sid": "c1"})
+        pubsub.subscribe.assert_awaited_once_with("calls:tenant-1")
+        pubsub.unsubscribe.assert_awaited_once_with("calls:tenant-1")
+
+    @pytest.mark.asyncio
+    async def test_websocket_calls_redis_reconnect_succeeds(self):
+        from api.routers.realtime import websocket_calls
+
+        mock_ws = AsyncMock(spec=WebSocket)
+        # initial accept succeeds, reconnection accept succeeds
+        mock_ws.accept.side_effect = [None, None]
+
+        redis = MagicMock()
+        first_pubsub = MagicMock()
+        first_pubsub.subscribe = AsyncMock()
+        first_pubsub.get_message = AsyncMock(side_effect=[WebSocketDisconnect()])
+        first_pubsub.unsubscribe = AsyncMock()
+        second_pubsub = MagicMock()
+        second_pubsub.subscribe = AsyncMock()
+        second_pubsub.unsubscribe = AsyncMock()
+        redis.pubsub = MagicMock(side_effect=[first_pubsub, second_pubsub])
+        mock_ws.app.state.redis = redis
+
+        with patch("api.routers.realtime.asyncio.sleep", new_callable=AsyncMock):
+            await websocket_calls(mock_ws, "tenant-1", _="tenant-1")
+
+        # initial subscribe + reconnected subscribe
+        assert first_pubsub.subscribe.await_count == 1
+        second_pubsub.subscribe.assert_awaited_once_with("calls:tenant-1")
+        # finally block unsubscribes from the latest pubsub
+        second_pubsub.unsubscribe.assert_awaited_once_with("calls:tenant-1")
+
+    @pytest.mark.asyncio
+    async def test_websocket_calls_no_redis_sleeps(self):
+        from api.routers.realtime import websocket_calls
+
+        mock_ws = AsyncMock(spec=WebSocket)
+        mock_ws.app.state.redis = None
+        mock_ws.accept.side_effect = [None, None]
+
+        sleep_calls = {"n": 0}
+
+        async def fake_sleep(secs):
+            sleep_calls["n"] += 1
+            if sleep_calls["n"] == 2:
+                raise WebSocketDisconnect()
+
+        with patch("api.routers.realtime.asyncio.sleep", side_effect=fake_sleep):
+            await websocket_calls(mock_ws, "tenant-1", _="tenant-1")
+
+        # initial accept + reconnect accept (redis is None so reconnect breaks)
+        assert mock_ws.accept.await_count == 4
+        mock_ws.send_json.assert_not_called()
+
+
+class TestWebSocketAgent:
+    """Tests for the /ws/agent/{agent_id} websocket handler."""
+
+    @pytest.mark.asyncio
+    async def test_websocket_agent_no_redis(self):
+        from api.routers.realtime import websocket_agent
+
+        mock_ws = AsyncMock(spec=WebSocket)
+        mock_ws.app.state.redis = None
+        mock_ws.accept.side_effect = [None, None]
+
+        sleep_calls = {"n": 0}
+
+        async def fake_sleep(secs):
+            sleep_calls["n"] += 1
+            if sleep_calls["n"] == 2:
+                raise WebSocketDisconnect()
+
+        with patch("api.routers.realtime.asyncio.sleep", side_effect=fake_sleep):
+            await websocket_agent(mock_ws, "agent-1")
+
+        assert mock_ws.accept.await_count == 4
+
+    @pytest.mark.asyncio
+    async def test_websocket_agent_redis_timeout_and_message(self):
+        from api.routers.realtime import websocket_agent
+
+        mock_ws = AsyncMock(spec=WebSocket)
+        # initial accept succeeds, all 3 reconnection accepts fail
+        mock_ws.accept.side_effect = [None, RuntimeError("closed"), RuntimeError("closed"), RuntimeError("closed")]
+
+        redis = MagicMock()
+        redis.sadd = AsyncMock()
+        redis.srem = AsyncMock()
+        pubsub = MagicMock()
+        pubsub.subscribe = AsyncMock()
+        pubsub.get_message = AsyncMock(
+            side_effect=[
+                TimeoutError(),  # timeout -> continue
+                {"type": "message", "data": json.dumps({"call_sid": "c1", "from": "+1555"})},
+                WebSocketDisconnect(),
+            ]
+        )
+        pubsub.unsubscribe = AsyncMock()
+        pubsub.close = AsyncMock()
+        redis.pubsub = MagicMock(return_value=pubsub)
+        mock_ws.app.state.redis = redis
+
+        with patch("api.routers.realtime.asyncio.sleep", new_callable=AsyncMock):
+            await websocket_agent(mock_ws, "agent-1")
+
+        redis.sadd.assert_awaited_once_with("online_agents", "agent-1")
+        mock_ws.send_json.assert_awaited_once_with(
+            {"type": "call_assignment", "call_sid": "c1", "from": "+1555"}
+        )
+        redis.srem.assert_awaited_once_with("online_agents", "agent-1")
+        pubsub.subscribe.assert_awaited_once_with("agent:agent-1:assignments")
+        pubsub.unsubscribe.assert_awaited_once_with("agent:agent-1:assignments")
+        pubsub.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_websocket_agent_reconnect_succeeds(self):
+        from api.routers.realtime import websocket_agent
+
+        mock_ws = AsyncMock(spec=WebSocket)
+        # initial accept, then after disconnect reconnect accept succeeds
+        mock_ws.accept.side_effect = [None, None]
+
+        redis = MagicMock()
+        redis.sadd = AsyncMock()
+        redis.srem = AsyncMock()
+        pubsub = MagicMock()
+        pubsub.subscribe = AsyncMock()
+        pubsub.get_message = AsyncMock(side_effect=[WebSocketDisconnect()])
+        pubsub.unsubscribe = AsyncMock()
+        pubsub.close = AsyncMock()
+        redis.pubsub = MagicMock(return_value=pubsub)
+        mock_ws.app.state.redis = redis
+
+        with patch("api.routers.realtime.asyncio.sleep", new_callable=AsyncMock):
+            await websocket_agent(mock_ws, "agent-1")
+
+        # sadd called on initial connect + reconnect
+        assert redis.sadd.await_count == 2
+        pubsub.subscribe.await_count == 2
+        redis.srem.assert_awaited_once_with("online_agents", "agent-1")
+
+    @pytest.mark.asyncio
+    async def test_websocket_agent_pubsub_cleanup_error(self):
+        from api.routers.realtime import websocket_agent
+
+        mock_ws = AsyncMock(spec=WebSocket)
+        mock_ws.accept.side_effect = [None, None]
+
+        redis = MagicMock()
+        redis.sadd = AsyncMock()
+        redis.srem = AsyncMock()
+        pubsub = MagicMock()
+        pubsub.subscribe = AsyncMock()
+        pubsub.get_message = AsyncMock(side_effect=[WebSocketDisconnect()])
+        pubsub.unsubscribe = AsyncMock(side_effect=Exception("unsubscribe failed"))
+        pubsub.close = AsyncMock()
+        redis.pubsub = MagicMock(return_value=pubsub)
+        mock_ws.app.state.redis = redis
+
+        with patch("api.routers.realtime.asyncio.sleep", new_callable=AsyncMock), \
+             patch("api.routers.realtime.logger.warning") as mock_warn:
+            await websocket_agent(mock_ws, "agent-1")
+
+        mock_warn.assert_called()
+        redis.srem.assert_awaited_once_with("online_agents", "agent-1")
+
+
+class TestRouteAgentAudioEdgeCases:
+    """Extra edge cases for ConnectionManager.route_agent_audio."""
+
+    @pytest.mark.asyncio
+    async def test_route_agent_audio_invalid_base64_payload(self):
+        from api.routers.realtime import ConnectionManager
+        import base64
+
+        manager = ConnectionManager()
+        mock_ws = AsyncMock(spec=WebSocket)
+        manager.register_voice_ws("call-1", mock_ws, "stream-1")
+
+        with patch("api.routers.realtime.logger.error") as mock_error:
+            await manager.route_agent_audio("call-1", "!!!not-valid-base64!!!")
+
+        mock_ws.send_json.assert_not_called()
+        mock_error.assert_called_once()
+
+
+class TestAgentWebSocketSubscribeReplay:
+    """agent_websocket subscribe_call should replay stored transcripts."""
+
+    @pytest.mark.asyncio
+    async def test_agent_websocket_subscribe_call_replays_transcripts(self):
+        from api.routers.realtime import agent_websocket
+
+        mock_ws = AsyncMock(spec=WebSocket)
+        mock_ws.query_params.get.return_value = "valid-token"
+
+        transcripts = [
+            {"type": "transcript", "text": "Hello", "is_final": True},
+            {"type": "transcript", "text": "World", "is_final": False},
+        ]
+
+        with patch("api.services.auth.verify_websocket_token", new_callable=AsyncMock) as mock_verify, \
+             patch("api.routers.realtime.manager.connect") as mock_connect, \
+             patch("api.routers.realtime.manager.safe_send_json", new_callable=AsyncMock) as mock_send, \
+             patch("api.routers.realtime._default_store.get_or_create") as mock_get_or_create, \
+             patch("api.routers.realtime._default_store.get_transcripts", return_value=transcripts) as mock_get_transcripts:
+
+            mock_verify.return_value = {"agent_id": "agent-1"}
+            mock_ws.receive_text.side_effect = [
+                json.dumps({"type": "subscribe_call", "call_sid": "call-123"}),
+                WebSocketDisconnect(),
+            ]
+
+            await agent_websocket(mock_ws, "agent-1")
+
+        mock_get_or_create.assert_called_once_with("call-123")
+        mock_send.assert_any_call(mock_ws, {"type": "subscribed", "call_sid": "call-123"})
+        mock_send.assert_any_call(mock_ws, {"type": "transcript", "text": "Hello", "is_final": True})
+        mock_send.assert_any_call(mock_ws, {"type": "transcript", "text": "World", "is_final": False})

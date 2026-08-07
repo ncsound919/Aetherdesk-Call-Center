@@ -352,6 +352,44 @@ class TestDynamicAgent:
         assert result.needs_agent is True
 
     @pytest.mark.asyncio
+    async def test_step_missing_response_or_tool_retries(self):
+        from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
+
+        mock_actions = MagicMock()
+        agent = DynamicAgent(mock_actions)
+
+        mock_chat = AsyncMock(side_effect=[
+            LlmResult(text=json.dumps({"thought": "thinking", "extra": "no action key"}), provider="deepseek", model="deepseek-v4-flash"),
+            LlmResult(text=json.dumps({"thought": "fixed", "response": "Here is the answer."}), provider="deepseek", model="deepseek-v4-flash"),
+        ])
+
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await agent.step([], "Hello")
+
+        assert result.text == "Here is the answer."
+        assert result.needs_agent is False
+        assert mock_chat.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_step_missing_response_or_tool_fails_after_retry(self):
+        from api.services.agent import DynamicAgent
+        from api.services.llm_client import LlmResult
+
+        mock_actions = MagicMock()
+        agent = DynamicAgent(mock_actions)
+
+        mock_chat = AsyncMock(return_value=LlmResult(
+            text=json.dumps({"thought": "thinking", "extra": "still no action key"}), provider="deepseek", model="deepseek-v4-flash"
+        ))
+
+        with patch("api.services.agent.llm_client.chat", mock_chat):
+            result = await agent.step([], "Hello")
+
+        assert "error processing" in result.text
+        assert result.needs_agent is True
+
+    @pytest.mark.asyncio
     async def test_step_http_error(self):
         from api.services.agent import DynamicAgent
 

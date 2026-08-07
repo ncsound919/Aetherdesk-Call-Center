@@ -288,6 +288,114 @@ class LLMClient:
 
     # --- Public API ----------------------------------------------------------
 
+    # BYOK (bring-your-own-key) providers, all OpenAI-compatible.
+    BYOK_PROVIDER_URLS = {
+        "openai": "https://api.openai.com/v1",
+        "deepseek": "https://api.deepseek.com",
+        "groq": "https://api.groq.com/openai/v1",
+        "openrouter": "https://openrouter.ai/api/v1",
+    }
+
+    async def _resolve_byok_config(self, tenant_id: str | None) -> dict | None:
+        """Return the tenant's BYOK LLM config, or None when not in BYOK mode."""
+        if not tenant_id:
+            return None
+        try:
+            from api.services.db_billing import get_tenant_billing_settings_db
+
+            settings = await get_tenant_billing_settings_db(tenant_id)
+        except Exception:
+            return None
+        if settings.get("ai_mode") != "byok":
+            return None
+        keys = settings.get("byok_keys") or {}
+        if not keys:
+            return None
+        provider = next(iter(keys))
+        from api.services.db_pool import decrypt_val
+
+        api_key = decrypt_val(keys[provider])
+        if not api_key:
+            return None
+        base_url = (
+            settings.get("byok_base_url")
+            or self.BYOK_PROVIDER_URLS.get(provider, "https://api.openai.com/v1")
+        )
+        model = settings.get("byok_model") or "deepseek-chat"
+        return {
+            "provider": provider,
+            "base_url": str(base_url).rstrip("/"),
+            "api_key": api_key,
+            "model": model,
+        }
+
+    async def _openai_compatible_chat(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float,
+        json_mode: bool,
+        base_url: str,
+        api_key: str,
+        model: str,
+    ) -> dict[str, Any] | None:
+        """Call any OpenAI-compatible chat.completions endpoint (BYOK)."""
+        client = self._get_client()
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": messages,
+            "temperature": temperature,
+            "max_tokens": 500,
+        }
+        attempts: list[tuple[dict, str]] = []
+        if json_mode:
+            attempts.append(
+                (
+                    {**body, "response_format": {"type": "json_object"}},
+                    "json_object",
+                )
+            )
+            attempts.append(({**body, "messages": messages}, "plain-json"))
+        else:
+            attempts.append((body, "default"))
+
+        last_error = ""
+        for b, label in attempts:
+            try:
+                resp = await client.post(
+                    f"{base_url}/chat/completions",
+                    headers={
+                        "Content-Type": "application/json",
+                        "Authorization": f"Bearer {api_key}",
+                    },
+                    json=b,
+                )
+                if resp.status_code != 200:
+                    last_error = f"BYOK HTTP {resp.status_code}: {resp.text[:200]}"
+                    logger.warning("byok_http_error", label=label, status=resp.status_code)
+                    continue
+                data = resp.json()
+                content = (
+                    ((data.get("choices") or [{}])[0].get("message") or {}).get(
+                        "content"
+                    )
+                    or ""
+                )
+                if not content.strip():
+                    last_error = "BYOK empty content"
+                    logger.warning("byok_empty_content", label=label)
+                    continue
+                return {
+                    "content": content,
+                    "usage": data.get("usage") or {},
+                    "model": model,
+                }
+            except (TimeoutError, httpx.HTTPError) as e:
+                last_error = str(e)
+                logger.warning("byok_request_error", label=label, error=last_error)
+
+        logger.warning("byok_all_attempts_failed", error=last_error)
+        return None
+
     async def chat(
         self,
         messages: list[dict[str, str]],
@@ -295,13 +403,38 @@ class LLMClient:
         json_mode: bool = False,
         model: str | None = None,
         force_provider: str | None = None,
+        tenant_id: str | None = None,
     ) -> LlmResult:
         """Primary entry point for all LLM calls.
 
         provider order: deepseek -> ollama (fallback) unless force_provider.
+        When ``tenant_id`` is given and the tenant is in BYOK mode, the
+        customer's own OpenAI-compatible key is tried first, then the
+        platform stack as fallback.
         Returns the first non-None result; raises LlmClientError if all fail.
         """
         start = asyncio.get_event_loop().time()
+
+        byok = await self._resolve_byok_config(tenant_id)
+        if byok and not force_provider:
+            result = await self._openai_compatible_chat(
+                messages,
+                temperature,
+                json_mode,
+                byok["base_url"],
+                byok["api_key"],
+                byok["model"],
+            )
+            if result:
+                latency_ms = (asyncio.get_event_loop().time() - start) * 1000
+                return LlmResult(
+                    text=result["content"],
+                    provider="byok",
+                    model=result["model"],
+                    usage=result.get("usage"),
+                    latency_ms=latency_ms,
+                )
+            logger.warning("byok_failed_falling_back", provider=byok["provider"])
 
         preferred = force_provider or "deepseek"
         if preferred == "deepseek":

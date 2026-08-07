@@ -339,6 +339,93 @@ class TestActionsWebhook:
         result = await actions._is_url_safe("http:///path")
         assert result is False
 
+    @pytest.mark.asyncio
+    async def test_is_url_safe_no_addrinfos(self):
+        from api.services.actions import Actions
+
+        mock_redis = MagicMock()
+        actions = Actions(mock_redis)
+
+        with patch("socket.getaddrinfo", return_value=[]):
+            result = await actions._is_url_safe("http://example.com")
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_is_url_safe_ipv6_allowed(self):
+        from api.services.actions import Actions
+
+        mock_redis = MagicMock()
+        actions = Actions(mock_redis)
+        import socket
+
+        ipv6 = ("2606:2800:220:1:248:1893:25c8:1946", 80)
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.side_effect = [
+                [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ipv6)],
+                [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ipv6)],
+            ]
+            result = await actions._is_url_safe("http://example.com")
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_is_url_safe_unsupported_family(self):
+        from api.services.actions import Actions
+
+        mock_redis = MagicMock()
+        actions = Actions(mock_redis)
+        import socket
+
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.side_effect = [
+                [(99, socket.SOCK_STREAM, 6, "", ("sockaddr", 80))],
+                [(99, socket.SOCK_STREAM, 6, "", ("sockaddr", 80))],
+            ]
+            result = await actions._is_url_safe("http://example.com")
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_is_url_safe_invalid_ip_value(self):
+        from api.services.actions import Actions
+
+        mock_redis = MagicMock()
+        actions = Actions(mock_redis)
+        import socket
+
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.side_effect = [
+                [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("not-an-ip", 80))],
+                [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("not-an-ip", 80))],
+            ]
+            result = await actions._is_url_safe("http://example.com")
+            assert result is True
+
+    @pytest.mark.asyncio
+    async def test_is_url_safe_second_resolution_failure(self):
+        from api.services.actions import Actions
+
+        mock_redis = MagicMock()
+        actions = Actions(mock_redis)
+        import socket
+
+        with patch("socket.getaddrinfo") as mock_gai:
+            mock_gai.side_effect = [
+                [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 80))],
+                socket.gaierror("nxdomain"),
+            ]
+            result = await actions._is_url_safe("http://example.com")
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_is_url_safe_unexpected_exception(self):
+        from api.services.actions import Actions
+
+        mock_redis = MagicMock()
+        actions = Actions(mock_redis)
+
+        with patch("socket.getaddrinfo", side_effect=RuntimeError("boom")):
+            result = await actions._is_url_safe("http://example.com")
+            assert result is False
+
 
 class TestActionsPreview:
     def test_preview_with_keys(self):

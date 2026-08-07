@@ -2,6 +2,7 @@
 
 import sys
 import types
+from pathlib import Path
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -161,6 +162,54 @@ class TestGetPrivateKey:
             result = get_private_key()
             mock_ensure.assert_called_once()
             assert result == "dev-generated-key"
+
+
+class TestLoadKey:
+    """Tests for the private _load_key() helper."""
+
+    def test_returns_inline_env_value(self):
+        from api.services.jwt_utils import _load_key
+
+        with patch("api.services.jwt_utils.os.getenv", return_value="inline-key"):
+            result = _load_key("JWT_PRIVATE_KEY", "JWT_PRIVATE_KEY_PATH")
+            assert result == "inline-key"
+
+    def test_loads_from_file_path(self, tmp_path):
+        from api.services.jwt_utils import _load_key
+
+        key_file = tmp_path / "key.pem"
+        key_file.write_text("file-key-content\n")
+
+        def _fake_getenv(name, default=None):
+            if name == "JWT_PRIVATE_KEY":
+                return None
+            if name == "JWT_PRIVATE_KEY_PATH":
+                return str(key_file)
+            return default
+
+        with patch("api.services.jwt_utils.os.getenv", side_effect=_fake_getenv):
+            result = _load_key("JWT_PRIVATE_KEY", "JWT_PRIVATE_KEY_PATH")
+            assert result == "file-key-content"
+
+    def test_warns_when_file_missing(self):
+        from api.services.jwt_utils import _load_key
+
+        with patch(
+            "api.services.jwt_utils.os.getenv",
+            side_effect=lambda name, default=None: (
+                None if name == "JWT_PRIVATE_KEY" else str(Path("/nonexistent/key.pem"))
+            ),
+        ), patch("api.services.jwt_utils.logger") as mock_logger:
+            result = _load_key("JWT_PRIVATE_KEY", "JWT_PRIVATE_KEY_PATH")
+            assert result is None
+            mock_logger.warning.assert_called_once()
+
+    def test_returns_none_when_unset(self):
+        from api.services.jwt_utils import _load_key
+
+        with patch("api.services.jwt_utils.os.getenv", return_value=None):
+            result = _load_key("JWT_PRIVATE_KEY", "JWT_PRIVATE_KEY_PATH")
+            assert result is None
 
 
 class TestGetPublicKey:

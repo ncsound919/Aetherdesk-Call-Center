@@ -26,6 +26,18 @@ async def create_call(
     request: Request, call: CallCreate, tenant_id: str = Depends(verify_tenant_access)
 ):
     """Create and initiate a call via Fonster"""
+    # Rental capacity + prepaid-minute gate: no active rental or empty balance
+    # means the tenant cannot place calls (paywall protection).
+    from api.services.db_billing import has_call_capacity_db
+
+    has_capacity, capacity_info = await has_call_capacity_db(tenant_id)
+    if not has_capacity:
+        raise HTTPException(
+            status_code=402,
+            detail="No active rental or insufficient prepaid minutes. Rent agents or top up minutes.",
+            headers={"X-Aetherdesk-Reason": capacity_info.get("reason", "blocked")},
+        )
+
     call_id = str(uuid.uuid4())
 
     # Find available agent or queue

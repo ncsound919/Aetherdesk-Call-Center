@@ -115,7 +115,10 @@ async def test_orchestrator_step_fallback_when_langchain_disabled(orch_no_init, 
             model="qwen3:1.7b",
         )
 
-    monkeypatch.setattr("api.services.orchestrator.llm_client.chat", mock_chat)
+    # llm_client is imported lazily inside Orchestrator.step, so the chat
+    # method must be patched on the llm_client module singleton, not on
+    # the orchestrator module.
+    monkeypatch.setattr("api.services.llm_client.llm_client.chat", mock_chat)
     # Patch security and escalation
     monkeypatch.setattr("api.services.orchestrator.detect_prompt_injection", lambda t: (False, 0.0))
     monkeypatch.setattr("api.routers.campaign.push_escalation_alert", AsyncMock())

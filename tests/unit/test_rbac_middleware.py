@@ -85,6 +85,11 @@ class TestResourceResolution:
         from api.middleware.rbac import _resolve_resource
         assert _resolve_resource("/") == "root"
 
+    def test_resolve_resource_version_only(self):
+        from api.middleware.rbac import _resolve_resource
+        assert _resolve_resource("/api/v1") == "root"
+        assert _resolve_resource("/v2") == "root"
+
 
 class TestMethodActionMap:
     def test_get_maps_to_read(self):
@@ -159,3 +164,83 @@ class TestRBACMiddlewareInit:
         app = FastAPI()
         middleware = RBACMiddleware(app, exclude_paths=["/custom"])
         assert "/custom" in middleware.exclude_paths
+
+
+class TestRBACDispatchPaths:
+    def test_custom_exclude_path_bypasses(self):
+        """Paths listed in exclude_paths bypass RBAC even with a role set."""
+        from starlette.middleware.base import BaseHTTPMiddleware
+
+        from api.middleware.rbac import RBACMiddleware
+
+        class SetRoleMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                request.state.user_role = "agent"
+                return await call_next(request)
+
+        app = FastAPI()
+
+        @app.get("/custom/endpoint")
+        async def custom():
+            return {"ok": True}
+
+        app.add_middleware(RBACMiddleware, exclude_paths=["/custom"])
+        app.add_middleware(SetRoleMiddleware)
+
+        with patch("api.services.authorization.check_permission") as mock_check:
+            with TestClient(app) as c:
+                resp = c.get("/custom/endpoint")
+                assert resp.status_code == 200
+            mock_check.assert_not_called()
+
+    def test_internal_role_bypasses_rbac(self):
+        """The internal service role bypasses RBAC."""
+        from starlette.middleware.base import BaseHTTPMiddleware
+
+        from api.middleware.rbac import RBACMiddleware
+
+        class SetRoleMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                request.state.user_role = "internal"
+                return await call_next(request)
+
+        app = FastAPI()
+
+        @app.get("/api/v1/agents")
+        async def agents():
+            return {"ok": True}
+
+        app.add_middleware(RBACMiddleware)
+        app.add_middleware(SetRoleMiddleware)
+
+        with patch("api.services.authorization.check_permission") as mock_check:
+            with TestClient(app) as c:
+                resp = c.get("/api/v1/agents")
+                assert resp.status_code == 200
+            mock_check.assert_not_called()
+
+    def test_permitted_role_allows_request(self):
+        """When check_permission returns True the request proceeds."""
+        from starlette.middleware.base import BaseHTTPMiddleware
+
+        from api.middleware.rbac import RBACMiddleware
+
+        class SetRoleMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                request.state.user_role = "admin"
+                return await call_next(request)
+
+        app = FastAPI()
+
+        @app.get("/api/v1/calls")
+        async def calls():
+            return {"calls": []}
+
+        app.add_middleware(RBACMiddleware)
+        app.add_middleware(SetRoleMiddleware)
+
+        with patch("api.services.authorization.check_permission", return_value=True) as mock_check:
+            with TestClient(app) as c:
+                resp = c.get("/api/v1/calls")
+                assert resp.status_code == 200
+            mock_check.assert_called_once()
