@@ -36,7 +36,7 @@ groq==0.4.0
 
 # Data Processing
 numpy==1.26.0
-pandas==2.0.0
+pandas==3.0.2
 
 # Real-Time Communication
 websockets==12.0
