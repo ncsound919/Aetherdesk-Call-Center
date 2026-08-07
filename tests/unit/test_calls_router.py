@@ -52,6 +52,21 @@ import pytest
 from api.services.auth import verify_tenant_access
 
 
+@pytest.fixture(autouse=True)
+def _mock_call_capacity():
+    """Isolate call-create router tests from the rental/paywall DB.
+
+    create_call now gates on has_call_capacity_db (rental + prepaid minutes).
+    Router tests mock it open so they test routing logic, not billing state.
+    """
+    with patch(
+        "api.services.db_billing.has_call_capacity_db",
+        new_callable=AsyncMock,
+        return_value=(True, {"active_rental": True, "minute_balance": 100, "reason": None}),
+    ):
+        yield
+
+
 @pytest.fixture
 def app():
     """Create a minimal FastAPI app with just the calls router."""
@@ -532,6 +547,42 @@ class TestCallAction:
             json={"action": "unknown_action"},
         )
         assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_call_action_unknown_action_returns_400(self):
+        """Unhandled action hits the else branch and returns 400.
+
+        The CallAction pydantic model restricts the action to a fixed set via
+        regex, so the router's 400 branch is unreachable through the HTTP API
+        (validation rejects it with 422 first). We call the endpoint function
+        directly with a bypassed action object to cover the final else branch.
+        """
+        from fastapi import HTTPException
+
+        from api.routers.calls import call_action
+
+        request = MagicMock()
+        request.app.state.fonster_client = MagicMock()
+        action = MagicMock()
+        action.action = "nonexistent_action"
+        action.target = None
+        action.data = None
+
+        with patch(
+            "api.routers.calls.get_call_session", new_callable=AsyncMock
+        ) as mock_get, patch(
+            "api.routers.calls.log_audit_event", new_callable=AsyncMock
+        ):
+            mock_get.return_value = {
+                "id": "call-1",
+                "tenant_id": "tenant-1",
+                "caller_number": "+1",
+            }
+
+            with pytest.raises(HTTPException) as exc:
+                await call_action(request, "call-1", action, tenant_id="tenant-1")
+            assert exc.value.status_code == 400
+            assert exc.value.detail == "Unknown action: nonexistent_action"
 
     def test_call_action_without_fonster(self, app, client):
         """Action returns success note when fonster_client is None (dev mode)."""
