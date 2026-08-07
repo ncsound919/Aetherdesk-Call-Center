@@ -1085,13 +1085,15 @@ async def update_lead_db(lead_id: str, tenant_id: str, updates: dict):
                     (lead_id, tenant_id),
                 ).fetchone()
                 existing_cf_raw = (
-                    existing_row["custom_fields"]
-                    if isinstance(existing_row, dict)
-                    else existing_row[0]
-                ) if existing_row is not None else None
-                existing_cf = (
-                    json.loads(existing_cf_raw) if existing_cf_raw else {}
+                    (
+                        existing_row["custom_fields"]
+                        if isinstance(existing_row, dict)
+                        else existing_row[0]
+                    )
+                    if existing_row is not None
+                    else None
                 )
+                existing_cf = json.loads(existing_cf_raw) if existing_cf_raw else {}
                 merged_cf = {**existing_cf, **value}
                 set_clauses_sqlite.append("custom_fields = ?")
                 values_sqlite.append(json.dumps(merged_cf))
@@ -1173,13 +1175,15 @@ async def bulk_update_leads_db(
                         (lid, tenant_id),
                     ).fetchone()
                     existing_cf_raw = (
-                        existing_row["custom_fields"]
-                        if isinstance(existing_row, dict)
-                        else existing_row[0]
-                    ) if existing_row is not None else None
-                    existing_cf = (
-                        json.loads(existing_cf_raw) if existing_cf_raw else {}
+                        (
+                            existing_row["custom_fields"]
+                            if isinstance(existing_row, dict)
+                            else existing_row[0]
+                        )
+                        if existing_row is not None
+                        else None
                     )
+                    existing_cf = json.loads(existing_cf_raw) if existing_cf_raw else {}
                     merged_cf = {**existing_cf, **value}
                     set_clauses_sqlite.append("custom_fields = ?")
                     values_sqlite.append(json.dumps(merged_cf))

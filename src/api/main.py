@@ -660,6 +660,8 @@ if sentry_dsn:
             integrations=sentry_integrations,
             send_default_pii=False,
         )
-        logger.info("sentry_initialized environment=%s", os.getenv("APP_ENV", "development"))
+        logger.info(
+            "sentry_initialized environment=%s", os.getenv("APP_ENV", "development")
+        )
     except Exception as e:
         logger.warning("sentry_init_failed: %s", e)

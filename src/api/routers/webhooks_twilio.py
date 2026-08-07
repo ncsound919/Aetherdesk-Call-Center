@@ -180,6 +180,7 @@ async def handle_call_status(request: Request):
     # in real time without manual entry.
     try:
         from api.services.database import USE_POSTGRES, db_context
+
         outcome_map = {
             "completed": "answered",
             "no-answer": "no_answer",

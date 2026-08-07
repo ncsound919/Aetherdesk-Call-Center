@@ -317,9 +317,8 @@ class LLMClient:
         api_key = decrypt_val(keys[provider])
         if not api_key:
             return None
-        base_url = (
-            settings.get("byok_base_url")
-            or self.BYOK_PROVIDER_URLS.get(provider, "https://api.openai.com/v1")
+        base_url = settings.get("byok_base_url") or self.BYOK_PROVIDER_URLS.get(
+            provider, "https://api.openai.com/v1"
         )
         model = settings.get("byok_model") or "deepseek-chat"
         return {
@@ -371,15 +370,14 @@ class LLMClient:
                 )
                 if resp.status_code != 200:
                     last_error = f"BYOK HTTP {resp.status_code}: {resp.text[:200]}"
-                    logger.warning("byok_http_error", label=label, status=resp.status_code)
+                    logger.warning(
+                        "byok_http_error", label=label, status=resp.status_code
+                    )
                     continue
                 data = resp.json()
-                content = (
-                    ((data.get("choices") or [{}])[0].get("message") or {}).get(
-                        "content"
-                    )
-                    or ""
-                )
+                content = ((data.get("choices") or [{}])[0].get("message") or {}).get(
+                    "content"
+                ) or ""
                 if not content.strip():
                     last_error = "BYOK empty content"
                     logger.warning("byok_empty_content", label=label)

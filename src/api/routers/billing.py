@@ -24,7 +24,6 @@ from api.services.db_tenants import (
     create_tenant,
     get_tenant_by_stripe_customer_db,
     get_tenant_db,
-    get_tenant_plan_db,
     record_usage_db,
     update_tenant_subscription_db,
 )
@@ -38,10 +37,8 @@ from api.services.pricing import (
     topup_price_env,
 )
 from api.services.stripe_service import (
-    create_checkout_session,
     create_one_time_checkout,
     create_portal_session,
-    get_price_id,
     verify_webhook_signature,
 )
 
@@ -244,7 +241,6 @@ async def get_subscription(
         raise HTTPException(status_code=401, detail="Authentication required")
 
     tenant_id = credentials["tenant_id"]
-    tenant = await get_tenant_db(tenant_id)
     rental = await get_active_rental_db(tenant_id)
     balance = await get_minute_balance_db(tenant_id)
     settings = await get_tenant_billing_settings_db(tenant_id)
@@ -383,7 +379,9 @@ async def _handle_rental_completed(
                 gdpr_consent=True,
             )
             if new_tenant:
-                await set_tenant_billing_settings_db(new_tenant["id"], {"ai_mode": mode})
+                await set_tenant_billing_settings_db(
+                    new_tenant["id"], {"ai_mode": mode}
+                )
                 tenant = new_tenant
                 tenant_id = new_tenant["id"]
         except Exception as e:

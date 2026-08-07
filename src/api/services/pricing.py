@@ -12,7 +12,7 @@ unconfigured the checkout service falls back to mock mode.
 """
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta, UTC
+from datetime import UTC, datetime, timedelta
 
 # Per-minute prepaid rates (USD) by AI mode.
 RATE_PER_MINUTE = {

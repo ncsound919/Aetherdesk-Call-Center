@@ -319,7 +319,12 @@ async def settle_call_minutes_db(call_sid: str, duration_seconds: int) -> dict:
     """
     tenant_id = await _tenant_id_for_sip_call(call_sid)
     if not tenant_id:
-        return {"debit": False, "tenant_id": None, "minutes": 0, "reason": "call_not_found"}
+        return {
+            "debit": False,
+            "tenant_id": None,
+            "minutes": 0,
+            "reason": "call_not_found",
+        }
     minutes = max(1, (int(duration_seconds) + 59) // 60)
     ok = await debit_minutes_db(tenant_id, minutes)
     return {"debit": ok, "tenant_id": tenant_id, "minutes": minutes}
