@@ -96,7 +96,7 @@ class TestReActAgentStepHappy:
         db = _db_ctx(conn)
         agent = ReActAgent("TestAgent", "You are helpful", ["lookup_invoice"], mock_actions)
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             return _chat_ok(json.dumps({"response": "Hello!"}))
 
         with patch("api.services.orchestrator._ensure_agentops"), \
@@ -122,7 +122,7 @@ class TestReActAgentStepHappy:
 
         captured = {}
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             captured["messages"] = messages
             return _chat_ok(json.dumps({"response": "ok"}))
 
@@ -167,7 +167,7 @@ class TestReActAgentStepRetryAndTools:
         responses = ["this is not json", json.dumps({"response": "recovered"})]
         calls = []
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             calls.append(messages)
             return _chat_ok(responses.pop(0))
 
@@ -199,7 +199,7 @@ class TestReActAgentStepRetryAndTools:
             json.dumps({"response": "invoice handled"}),
         ]
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             return _chat_ok(responses.pop(0))
 
         with patch("api.services.orchestrator._ensure_agentops"), \
@@ -232,7 +232,7 @@ class TestReActAgentStepRetryAndTools:
             json.dumps({"response": "transferred"}),
         ]
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             return _chat_ok(responses.pop(0))
 
         ctx, tasks = _capture_tasks()
@@ -264,7 +264,7 @@ class TestReActAgentStepRetryAndTools:
         db = _db_ctx(conn)
         agent = ReActAgent("TestAgent", "p", ["escalate_to_supervisor"], mock_actions)
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             return _chat_ok(json.dumps({"tool": "escalate_to_supervisor", "tool_input": "refund $5000"}))
 
         with patch("api.services.orchestrator._ensure_agentops"), \
@@ -291,7 +291,7 @@ class TestReActAgentStepRetryAndTools:
         db = _db_ctx(conn)
         agent = ReActAgent("TestAgent", "p", ["escalate_to_supervisor"], mock_actions)
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             return _chat_ok(json.dumps({"tool": "escalate_to_supervisor", "tool_input": "x"}))
 
         with patch("api.services.orchestrator._ensure_agentops"), \
@@ -323,7 +323,7 @@ class TestReActAgentStepErrors:
 
         calls = []
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             calls.append(1)
             if len(calls) == 1:
                 raise RuntimeError("provider timeout")
@@ -348,7 +348,7 @@ class TestReActAgentStepErrors:
         db = _db_ctx(conn)
         agent = ReActAgent("TestAgent", "p", [], mock_actions)
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             raise RuntimeError("fatal failure")
 
         ctx, tasks = _capture_tasks()
@@ -380,7 +380,7 @@ class TestReActAgentStepErrors:
             json.dumps({"tool": "search_knowledge_base", "tool_input": "q2"}),
         ]
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             return _chat_ok(responses.pop(0))
 
         ctx, tasks = _capture_tasks()
@@ -426,7 +426,7 @@ class TestReActAgentStepObservability:
         lf.generation.return_value = generation
         ao_session = MagicMock()
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             return _chat_ok(json.dumps({"response": "hi"}))
 
         with patch("api.services.orchestrator._ensure_agentops"), \
@@ -463,7 +463,7 @@ class TestReActAgentStepObservability:
         generation.update.side_effect = Exception("update failed")
         lf.generation.return_value = generation
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             return _chat_ok(json.dumps({"response": "hi"}))
 
         with patch("api.services.orchestrator._ensure_agentops"), \
@@ -485,7 +485,7 @@ class TestReActAgentStepObservability:
         db = _db_ctx(conn)
         agent = ReActAgent("TestAgent", "p", [], mock_actions)
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             return _chat_ok(json.dumps({"response": "hi"}))
 
         with patch("api.services.orchestrator._ensure_agentops"), \
@@ -510,7 +510,7 @@ class TestReActAgentStepObservability:
 
         ao_session = MagicMock()
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             raise RuntimeError("boom")
 
         with patch("api.services.orchestrator._ensure_agentops"), \
@@ -538,7 +538,7 @@ class TestReActAgentStepObservability:
         ao_session = MagicMock()
         ao_session.end_session.side_effect = Exception("end failed")
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             return _chat_ok(json.dumps({"response": "hi"}))
 
         with patch("api.services.orchestrator._ensure_agentops"), \
@@ -565,7 +565,7 @@ class TestReActAgentStepObservability:
         ao_session = MagicMock()
         ao_session.end_session.side_effect = Exception("end failed")
 
-        async def fake_chat(messages, temperature=0.1, json_mode=True):
+        async def fake_chat(messages, temperature=0.1, json_mode=True, tenant_id=None):
             raise RuntimeError("boom")
 
         with patch("api.services.orchestrator._ensure_agentops"), \

@@ -17,9 +17,7 @@ from api.services.db_billing import (
 
 
 def _fake_tenant_row(settings_json='{"ai_mode":"deepseek"}'):
-    row = MagicMock()
-    row["settings"] = settings_json
-    return row
+    return {"settings": settings_json}
 
 
 class TestMinuteBalance:
@@ -150,7 +148,7 @@ class TestTenantBillingSettings:
     @pytest.mark.asyncio
     async def test_set_persists_settings(self):
         with patch("api.services.db_tenants.get_tenant_db", new_callable=AsyncMock,
-                   return_value=_fake_tenant_row('{}')), \
+                   side_effect=[_fake_tenant_row('{}'), _fake_tenant_row('{"ai_mode":"byok"}')]), \
              patch("api.services.db_billing.USE_POSTGRES", False), \
              patch("api.services.db_billing._get_sqlite_conn"):
             result = await set_tenant_billing_settings_db("T-1", {"ai_mode": "byok"})
