@@ -22,7 +22,7 @@ pwdlib[argon2]==0.3.0
 
 # Speech-to-Text
 faster-whisper==1.2.0
-deepgram-sdk==7.1.1
+deepgram-sdk==7.6.0
 
 # Text-to-Speech
 gtts==2.5.4
