@@ -110,6 +110,7 @@ addopts = "-v --cov=src --cov-report=term-missing --cov-report=html"
 markers = [
     "e2e_core: Core E2E tests that gate every PR (no ML dependencies, deterministic)",
     "e2e_ml: ML-dependent E2E tests run nightly with pinned scientific deps",
+    "anyio: Tests run via anyio's async backend plugin",
 ]
 
 [tool.coverage.run]
