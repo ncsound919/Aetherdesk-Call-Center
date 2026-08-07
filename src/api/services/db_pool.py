@@ -88,7 +88,7 @@ _pg_pool: asyncpg.Pool | None = None
 
 async def get_pg_pool() -> asyncpg.Pool | None:
     global _pg_pool
-    if _pg_pool is None or _pg_pool.is_closed():
+    if _pg_pool is None or not _pool_is_open(_pg_pool):
         try:
             _pg_pool = await asyncpg.create_pool(
                 DATABASE_URL,
@@ -106,9 +106,21 @@ async def get_pg_pool() -> asyncpg.Pool | None:
 
 async def close_pg_pool():
     global _pg_pool
-    if _pg_pool and not _pg_pool.is_closed():
+    if _pg_pool and _pool_is_open(_pg_pool):
         await _pg_pool.close()
         logger.info("PostgreSQL pool closed")
+
+
+def _pool_is_open(pool) -> bool:
+    """Version-agnostic check for whether an asyncpg pool is open.
+
+    asyncpg < 0.31 exposes ``is_closed()``; 0.31+ renamed it to the private
+    ``_closed`` flag. Support both so the app is not tied to a pin.
+    """
+    is_closed = getattr(pool, "is_closed", None)
+    if callable(is_closed):
+        return not is_closed()
+    return not getattr(pool, "_closed", False)
 
 
 # ── SQLite Fallback (Local Development) ─────────────────────────

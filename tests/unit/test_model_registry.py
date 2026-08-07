@@ -1,9 +1,9 @@
 """Unit tests for src/api/services/model_registry.py."""
 
 import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from api.services import model_registry
 from api.services.model_registry import (
@@ -87,6 +87,10 @@ class TestRegisterModel:
             "api.services.model_registry.create_model_db",
             new_callable=AsyncMock,
             return_value={"id": "m1", "version": "2.0.0", "name": "n"},
+        ), patch(
+            "api.services.model_registry.list_models_db",
+            new_callable=AsyncMock,
+            return_value=[],
         ):
             await ModelRegistry.register_model(
                 "t1", "n", version="  2.0.0  ", model_type="classifier"
