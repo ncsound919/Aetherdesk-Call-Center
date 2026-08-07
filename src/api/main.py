@@ -20,10 +20,12 @@ import logging
 import os
 
 # Load .env BEFORE any env validation so fresh deploys (CI/VPS/GKE) start
-# correctly instead of fatal-exiting on missing vars.
+# correctly instead of fatal-exiting on missing vars. Tests that exercise the
+# env guard directly set AETHERDESK_DOTENV_DISABLED=1 to isolate from .env.
 from dotenv import load_dotenv
 
-load_dotenv()
+if os.getenv("AETHERDESK_DOTENV_DISABLED", "").lower() != "1":
+    load_dotenv()
 
 
 # Startup env validation
