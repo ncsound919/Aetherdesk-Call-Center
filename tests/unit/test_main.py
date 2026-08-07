@@ -291,11 +291,23 @@ class TestLifespan:
             "api.services.database.init_sqlite_schema", lambda: None
         )
 
+        sleeps = []
+        _real_sleep = asyncio.sleep
+
+        async def _fake_sleep(t):
+            if t <= 8:
+                sleeps.append(t)
+                return
+            await _real_sleep(t)
+
+        monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
+
         async def _run():
             async with main.lifespan(main.app):
                 assert main.app.state.redis is not None
 
         asyncio.run(_run())
+        assert sleeps == [1]
 
     def test_lifespan_survives_redis_connect_error(self, monkeypatch):
         def _boom_from_url(*a, **k):
@@ -435,11 +447,23 @@ class TestLifespan:
             "api.services.database._get_sqlite_conn", lambda: FakeConn()
         )
 
+        sleeps = []
+        _real_sleep = asyncio.sleep
+
+        async def _fake_sleep(t):
+            if t <= 8:
+                sleeps.append(t)
+                return
+            await _real_sleep(t)
+
+        monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
+
         async def _run():
             async with main.lifespan(main.app):
                 assert main.app.state.fonster_client is not None
 
         asyncio.run(_run())
+        assert sleeps == [1, 2, 4, 8]
 
     def test_lifespan_pg_db_init_branch(self, monkeypatch):
         class FakePGPool:
