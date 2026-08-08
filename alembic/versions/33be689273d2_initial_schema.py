@@ -47,7 +47,7 @@ CREATE EXTENSION IF NOT EXISTS "citext";
 -- Plans
 CREATE TABLE IF NOT EXISTS plans (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    name VARCHAR(100) NOT NULL,
+    name VARCHAR(100) NOT NULL UNIQUE,
     description TEXT,
     price_per_hour DECIMAL(10, 2) NOT NULL DEFAULT 0,
     price_per_day DECIMAL(10, 2) NOT NULL DEFAULT 0,
