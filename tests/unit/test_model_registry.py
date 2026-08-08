@@ -91,6 +91,9 @@ class TestRegisterModel:
             "api.services.model_registry.list_models_db",
             new_callable=AsyncMock,
             return_value=[],
+        ), patch(
+            "api.services.model_registry.create_model_audit_log_db",
+            new_callable=AsyncMock,
         ):
             await ModelRegistry.register_model(
                 "t1", "n", version="  2.0.0  ", model_type="classifier"

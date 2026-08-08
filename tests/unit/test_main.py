@@ -66,6 +66,10 @@ class FakeVoiceClient:
 
 
 def _patch_lifespan_deps(monkeypatch):
+    # Reset global clients so each lifespan test starts clean; a previous test
+    # in the suite may have left redis/fonster bound to a closed event loop.
+    monkeypatch.setattr(main, "redis_client", None)
+    monkeypatch.setattr(main, "fonster_client", None)
     monkeypatch.setattr(main.redis, "from_url", lambda *a, **k: FakeRedis())
     monkeypatch.setattr(main.agent_cache, "start_cleanup_loop", _fake_loop_task)
     monkeypatch.setattr(
