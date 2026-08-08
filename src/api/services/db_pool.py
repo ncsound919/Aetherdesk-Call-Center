@@ -106,9 +106,13 @@ async def get_pg_pool() -> asyncpg.Pool | None:
 
 async def close_pg_pool():
     global _pg_pool
-    if _pg_pool and _pool_is_open(_pg_pool):
-        await _pg_pool.close()
-        logger.info("PostgreSQL pool closed")
+    pool, _pg_pool = _pg_pool, None
+    if pool and _pool_is_open(pool):
+        try:
+            await pool.close()
+            logger.info("PostgreSQL pool closed")
+        except Exception:
+            logger.warning("postgres_pool_close_failed", exc_info=True)
 
 
 def _pool_is_open(pool) -> bool:
