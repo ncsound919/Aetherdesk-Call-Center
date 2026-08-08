@@ -196,13 +196,19 @@ jobs:
       - name: Start API server
         run: |
           uvicorn src.api.main:app --host 127.0.0.1 --port 8000 --log-level warning &
-          sleep 5
-          curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/api/v1/health
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8000/api/v1/health || true)
+            if [ "$code" = "200" ] || [ "$code" = "503" ]; then echo "API up (HTTP $code)"; exit 0; fi
+            sleep 1
+          done
+          echo "API did not become ready" >&2
+          exit 1
         env:
           JWT_SECRET: ci-test-secret
           INTERNAL_API_KEY: ci-test-api-key
           ENCRYPTION_KEY: rqSRQd2JssHG3nhORTRC3CBaeUjqOqZ3D2BH2FX0l0k=
           USE_POSTGRES: "false"
+          REDIS_URL: redis://localhost:6379/0
       - name: Run HTTP Load Test
         run: |
           python tests/load_test_api.py -c 20 -n 200 -u http://127.0.0.1:8000 --max-failure-rate 20 2>&1
@@ -210,6 +216,7 @@ jobs:
           JWT_SECRET: ci-test-secret
           INTERNAL_API_KEY: ci-test-api-key
           ENCRYPTION_KEY: rqSRQd2JssHG3nhORTRC3CBaeUjqOqZ3D2BH2FX0l0k=
+          REDIS_URL: redis://localhost:6379/0
 
   # ============================================
   # Build Docker Images
